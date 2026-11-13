@@ -376,7 +376,7 @@ def _tricky_html(tricky, mine=None):
                else f'<b>{who}</b> finds this one tricky') + f'<small>{where}</small>'
         out += (f'<div class="dc-flag"><span>{say}</span>'
                 f'<a href="#" title="One line; it shows when the card comes up for them" '
-                f'onclick="{_pycmd(cmd)}">Hook</a></div>')
+                f'onclick="{_pycmd(cmd)}">Tip</a></div>')
     mine = (mine or [])[:6]
     if mine:
         out += '<div class="dc-flag-h">Your asks</div>'
@@ -385,7 +385,7 @@ def _tricky_html(tricky, mine=None):
         who = [_html.escape(str(w)) for w in a.get("who") or []]
         if a.get("state") == "answered":
             said = f'{who[0] if who else "A crewmate"} answered'
-            tag = f'<span class="dc-ask-st on">{len(who) or 1} hook{"" if len(who) <= 1 else "s"}</span>'
+            tag = f'<span class="dc-ask-st on">{len(who) or 1} tip{"" if len(who) <= 1 else "s"}</span>'
         else:
             said = (f'{", ".join(who[:2])}{" and more" if len(who) > 2 else ""} '
                     f'{"knows" if len(who) == 1 else "know"} this') if who else "Nobody's answered yet"

@@ -1733,7 +1733,7 @@ def test_close_sync_light_v391():
     import due_crew as dc
     from due_crew.app import _state
     src = srcs.glue_src()
-    check("close sync: Anki's sync hook lands in _on_anki_sync",
+    check("close sync: Anki's sync tip lands in _on_anki_sync",
           "sync_did_finish.append(_on_anki_sync)" in src and "sync_did_finish.append(_on_sync_done)" not in src)
     col = make_user_col([TODAY - datetime.timedelta(days=i) for i in range(3)])
     col.mod = 111
@@ -1892,9 +1892,9 @@ def test_asks_and_tips_v390():
     knows = K.chip_view({"knows": ["dre"], "tips": []}, [], names, pips=pips)
     note = K.remark_view([{"name": "Block 1", "doc": {"remarks": [{"card": ["guid000001", 0], "text": "the second cloze"}]}}], "guid000001", 0)
     check("fold: a tip says who left it, with the Pip peeking in; Pip off, the same bubble with the bulb; the words wait",
-          tip["fold"] == "Dre left a hook" and tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"}
+          tip["fold"] == "Dre left a tip" and tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"}
           and tip["pip"] == pips["dre"] and tip["text"] == "\U0001F4A1 Dre: think loops"
-          and tip_off["fold"] == "\U0001F4A1 Dre left a hook" and tip_off["peek"]["uids"] == [] and "pip" not in tip_off, (tip, tip_off))
+          and tip_off["fold"] == "\U0001F4A1 Dre left a tip" and tip_off["peek"]["uids"] == [] and "pip" not in tip_off, (tip, tip_off))
     check("fold: an ask's line and a plan's note fold too; an ask with no line, and who knows it, don't (nothing to give away)",
           asked["fold"] == "Dre asked about this card" and asked["text"] == "Dre: \u201cwhy axillary?\u201d"
           and "fold" not in bare and "fold" not in knows and note["fold"] == "\U0001F4CC A note from Block 1", (asked, note))
@@ -2425,7 +2425,7 @@ def test_who_knows_v32():
           both["more"] == 1 and both["actcmd"] == "knowshelped:dre" and both["act"] == "\u2713 Helped", str(both))
     check("chip: nobody I can name, nothing", K.chip_view({"knows": ["zed"], "tips": []}, [], names) is None)
     asked = K.chip_view(None, [], names, asks=[("dre", 1)])
-    check("chip: a crewmate's ask on a card I have, with Tip", asked["cmd"] == "knowsreply:dre:1" and asked["act"] == "Hook")
+    check("chip: a crewmate's ask on a card I have, with Tip", asked["cmd"] == "knowsreply:dre:1" and asked["act"] == "Tip")
     asked_q = K.chip_view(None, [], names, asks=[("dre", 1, "why axillary?")])
     check("chip: a crewmate's ask shows their line, and a short form for a narrow bar",
           asked_q["text"] == "\U0001F419 Dre: \u201cwhy axillary?\u201d" and asked_q["short"] == "\U0001F419 Dre asked"
@@ -2434,7 +2434,7 @@ def test_who_knows_v32():
           K.chip_view({"knows": ["dre"]}, [], names, mine=True)["act"] == "Asked" and v["act"] == "Ask"
           and v["short"] == "\U0001F419 Dre +1")
     check("chip: a tip's short form names whose tip it is",
-          K.chip_view(cardsin["guid000003"], [], names)["short"] == "\U0001F4A1 Dre's hook")
+          K.chip_view(cardsin["guid000003"], [], names)["short"] == "\U0001F4A1 Dre's tip")
     js = K.chip_js({"text": "</span><script>x</script>", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
     check("chip: text goes in as text (3.8.22: the one markup is a Pip's own drawing)", "textContent" in js and js.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in js)
     acked(sam, sam.fetch_board(labels))  # Dre's tip is read, and the next refresh
@@ -2634,7 +2634,7 @@ def test_knows_peek_v390():
           and one["text"] == "Dre knows this" and one["act"] == "Ask", (one.get("peek"), two.get("peek")))
     tip = K.chip_view({"knows": ["dre"], "tips": [{"from": "dre", "text": "think loops"}]}, [], names, pips=pips)
     check("peek: a tip peeks in with its tipper's Pip (Sam's note on \"Asks and tips\"); an ask keeps its card",
-          tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"} and tip["fold"] == "Dre left a hook"
+          tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"} and tip["fold"] == "Dre left a tip"
           and "peek" not in K.chip_view(None, [], names, asks=[("dre", 1, "why?")], pips=pips), tip.get("peek"))
     shown, saved = [], (K._bottom, K._review_web, K._show, K.client, dict(_state))
     store = world({"sam": "Sam"})

@@ -910,20 +910,20 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 ### 3.9.12: current and consistent
 
 - [ ] Squads: under the table, one line: "+ Create / join a squad" at the left, Copy invite · Lock · Leave at the right.
-- [ ] Crew › Decks, Asked of you: the button says Hook; an answered ask says "1 hook". Insights › Leeches: "Dre's hook" opens its words with OK only.
+- [ ] Crew › Decks, Asked of you: the button says Tip; an answered ask says "1 hook". Insights › Leeches: "Dre's hook" opens its words with OK only.
 - [ ] Sign-in, Welcome, Friends, Squads, Open a study room: buttons and headings in sentence case; Friends lists "Name · waiting".
 - [ ] duecrew.com: no medal or #2 on a phone; six features; the board picture matches Anki in light and dark. /classes and a new plan's empty page say Tools › Due Crew › Plans › New plan…
 
-### 3.9.11: hooks, Magic search's Recent
+### 3.9.11: tips (called hooks then), Magic search's Recent
 
 - [ ] Magic search, typing a topic: the box says "N cards · about M min" on its right; as each new answer lands the count rolls up, the bar grows and the star twinkles (more for 100 cards or more). A long line of words, or a narrow window: no answer in the box, nothing covered.
 - [ ] Type a topic two letters off: "No tag or card says …", then "Did you mean <Topic>? N cards"; a tap puts that word right and finds it. Type nonsense: "Waiting today" with Missed today, Due today, Leeches (the ones with any); each chip finds them.
 - [ ] Schedule ahead: each day you pick gets a "+N" that drops in, and its due count goes up by it; unpick and both go. Put on days: a sparkle off each. With Reduce motion on, none of it moves.
 
-- [ ] Hooks: on a card you've lapsed on twice, press Again, and when it comes back show the answer: "Add a hook for next time" beside Edit (nothing over the card). Click it: a window with one line, "Share with my crew" ticked, Save. Miss it again: the corner card says "You left a hook" and Show; only then the words, with Edit. Edit › Take it off: gone. More › "Due Crew: add a hook…" works on any card.
-- [ ] Shared: a crewmate (mutual) who misses that card sees "<you> left a hook" coming up on the right after their next sync, Show, then This helped. Your next refresh says "Your hook on a … card helped <them>." once, and the scrapbook keeps the line. Untick Share and save: after their next sync it's gone for them, still yours.
-- [ ] On a crewmate's hook, the chip's list (click it) has "Hide this hook": it never shows on that card again.
-- [ ] A card a crewmate has down, with no hook of yours on it, still shows "… knows this" coming up on the right with Ask.
+- [ ] Tips: on a card you've lapsed on twice, press Again, and when it comes back show the answer: "Add a tip for next time" beside Edit (nothing over the card). Click it: a window with one line, "Share with my crew" ticked, Save. Miss it again: the corner card says "You left a tip" and Show; only then the words, with Edit. Edit › Take it off: gone. More › "Due Crew: add a tip…" works on any card.
+- [ ] Shared: a crewmate (mutual) who misses that card sees "<you> left a tip" coming up on the right after their next sync, Show, then This helped. Your next refresh says "Your tip on a … card helped <them>." once, and the scrapbook keeps the line. Untick Share and save: after their next sync it's gone for them, still yours.
+- [ ] On a crewmate's tip, the chip's list (click it) has "Hide this tip": it never shows on that card again.
+- [ ] A card a crewmate has down, with no tip of yours on it, still shows "… knows this" coming up on the right with Ask.
 - [ ] A card you lapsed three times and have since got right three times running: once, "This one stuck. What made it click?"; never again on that card, twice a day at most.
 - [ ] Magic search: paste a long list of card ids, Study or Browse them, reopen: no Recent for it. A long Recent from before is gone; a short one ("pv loop") is there and types itself on a click.
 

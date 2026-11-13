@@ -2259,7 +2259,7 @@ def test_together_v210():
                                    {"text": "Digoxin", "state": "answered", "who": ["Priya <b>"]}])
     check("your asks (K3): where each stands, escaped, no Asked of you when nobody asked",
           "Your asks" in mine and "Asked of you" not in mine and "Dre knows this" in mine and "waiting" in mine
-          and "Priya &lt;b&gt; answered" in mine and "1 hook" in mine and "<i>" not in mine)
+          and "Priya &lt;b&gt; answered" in mine and "1 tip" in mine and "<i>" not in mine)
     check("flags: a cloze shows as [...], never its answer",
           together._plain("<b>S3</b>&nbsp;is heard in {{c1::Kentucky::rhythm}}") == "S3 is heard in [\u2026]")
 

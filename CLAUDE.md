@@ -248,7 +248,8 @@ clean `main` does the migrations, the API, then the site, then
 - Words (3.9.12; `test_copy_rules_v3912` checks them): buttons, headings and
   menu items are sentence case; nothing a person reads says rank, rival,
   compete or leaderboard. One name a thing, and the code's older name for it:
-  a **hook** is `tip` in code, routes and tables (`tips`, `/tips/helped`);
+  a **tip** is a tip (3.9.11 called it a hook for two days; my own tips live in `hooks.py`,
+  `hooks.json` and `PUT /hooks`, names kept from then: a person never reads "hook");
   **Pip** is `sev`; **Pip Party** is `gamenight` (its tab says Party); the
   **scrapbook** took Wrapped's place (`wrapped*` is the year's numbers);
   **unsuspended**, never unlocked; a plan's **set** on the site is a date in

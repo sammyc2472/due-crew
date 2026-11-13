@@ -1135,15 +1135,15 @@ def test_the_hook_button_reaches_its_window_v3912():
     CC.hook_edit = lambda: got.append("edit")
     try:
         view, _asked = H.view(None, False, True, False, False)
-        check("the chip that offers a hook sends hookadd", view["cmd"] == "hookadd" and view["kind"] == "hookadd")
+        check("the chip that offers a tip sends hookadd", view["cmd"] == "hookadd" and view["kind"] == "hookadd")
         dc._on_js(False, "duecrew:" + view["cmd"], Bar())
-        check("Add a hook, from the review screen's bottom bar: the hook's window", got == ["edit"])
+        check("Add a tip, from the review screen's bottom bar: the tip's window", got == ["edit"])
         dc._on_js(False, f"duecrew:hookadd|{rm.CMD_KEY}", type("Reviewer2", (), {})())
         check("…and from the card above the bar (keyed)", got == ["edit", "edit"])
         dc._on_js(False, "duecrew:hookadd", type("Previewer", (), {})())
         check("a card's own script, no key: nothing", got == ["edit", "edit"])
         mine, _ = H.view({"text": "loops"}, True, False, False, False)
-        check("my hook's Edit is the same command", mine["cmd"] == "hookadd" and mine["act"] == "Edit")
+        check("my tip's Edit is the same command", mine["cmd"] == "hookadd" and mine["act"] == "Edit")
         src = srcs.glue_src()
         check("every command the chip can send is one the glue passes to cards.on_message",
               all(c.startswith("knows") or c == "hookadd" for c in ("knowsask", "knowstip", "knowsbar", "knowshelped", "hookadd"))

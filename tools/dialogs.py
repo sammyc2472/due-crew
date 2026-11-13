@@ -994,27 +994,27 @@ def main(out):
         dlg = HookDialog(None)
         settle()
         if dlg.save_btn.isEnabled() or not dlg.remove_btn.isHidden() or not dlg.share.isChecked():
-            raise RuntimeError("hook: a new one starts empty, shared, nothing to take off")
+            raise RuntimeError("tip: a new one starts empty, shared, nothing to take off")
         shoot(dlg, os.path.join(out, "hook-new.png"))
         dlg = HookDialog(None, "LOOP = thick ascending loop <b>", shared=False)
         dlg.show()
         settle()
         if dlg.text.text() != "LOOP = thick ascending loop <b>" or dlg.share.isChecked() or dlg.remove_btn.isHidden():
-            raise RuntimeError("hook: the one there, its tick, Take it off")
+            raise RuntimeError("tip: the one there, its tick, Take it off")
         shoot(dlg, os.path.join(out, "hook-mine.png"))
         dlg.share.setChecked(True)
         dlg.save_btn.click()
         if (dlg.result_words, dlg.result_shared) != ("LOOP = thick ascending loop <b>", True):
-            raise RuntimeError(f"hook: saved {dlg.result_words!r} {dlg.result_shared!r}")
+            raise RuntimeError(f"tip: saved {dlg.result_words!r} {dlg.result_shared!r}")
         dlg = HookDialog(None, "mine", signed_in=False)
         dlg.show()
         settle()
         if dlg.share.isEnabled() or dlg.share.isChecked():
-            raise RuntimeError("hook: signed out, nothing to share with")
+            raise RuntimeError("tip: signed out, nothing to share with")
         shoot(dlg, os.path.join(out, "hook-signed-out.png"))
         dlg.remove_btn.click()
         if dlg.result_words != "":
-            raise RuntimeError("hook: Take it off")
+            raise RuntimeError("tip: Take it off")
 
     def remark():
         # 3.8.1: Browse › note for the plan's followers: only plans I write; the note on this

@@ -178,13 +178,13 @@ def view(hook, stuck, offer, has_turned, can_ask):
     if hook:
         if not stuck:
             return None, False  # a card I have down doesn't need its hook read to me
-        return {"kind": "hook", "text": f"Your hook: {hook}", "short": "Your hook", "title": hook,
-                "fold": "You left a hook", "cmd": "hookadd", "act": "Edit"}, False
+        return {"kind": "hook", "text": f"Your tip: {hook}", "short": "Your tip", "title": hook,
+                "fold": "You left a tip", "cmd": "hookadd", "act": "Edit"}, False
     if has_turned and can_ask:
         return {"kind": "hookask", "text": "This one stuck. What made it click?", "short": "What made it click?",
-                "cmd": "hookadd", "act": "Add a hook"}, True
+                "cmd": "hookadd", "act": "Add a tip"}, True
     if offer:
-        return {"kind": "hookadd", "text": "Add a hook for next time", "short": "+ Hook", "cmd": "hookadd", "bar": True}, False
+        return {"kind": "hookadd", "text": "Add a tip for next time", "short": "+ Tip", "cmd": "hookadd", "bar": True}, False
     return None, False
 
 
@@ -213,5 +213,5 @@ def thanks_lines(thanks, names, part_of):
         said = first + (f" and {rest} more" if rest > 0 else "")
         part = str(part_of(guid) or "")
         on = f"on a {part} card" if part else "on a card"
-        out.append(f"Your hook {on} helped {said}.")
+        out.append(f"Your tip {on} helped {said}.")
     return out

@@ -32,10 +32,10 @@ CHIP = {
     "bar": bool,          # it stays in the bar, never over the card
     "accent": (str, list, tuple),
     "pip": dict,          # a Pip to draw beside it
-    "peek": dict,         # who peeks in from the corner: {uids, head, act, pips, pop}
+    "peek": dict,         # who peeks in from the corner: {uids, head, act, pips, pop, side}
     "sevcss": str,        # Pip's sheet, sent once a page
 }
-PEEK = {"uids": list, "head": str, "act": str, "pips": list, "pop": bool}
+PEEK = {"uids": list, "head": str, "act": str, "pips": list, "pop": bool, "side": str}  # side: "left" for what's mine (3.9.12)
 
 # 3.9.12, Stage D's first three: the plan card, Insights and the dance floor. Written from every one the
 # suites and the preview draw, with every key their drawing reads; a value may always be None. One level:

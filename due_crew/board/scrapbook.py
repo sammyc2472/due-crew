@@ -150,7 +150,7 @@ def _keepsake(x, people, pip, my_look):
                 f'<div class="q">{e(x["n"])}</div>{_who(x, person, pip)}{_acts(x)}</figure>')
     if k == "tip":
         part = f' &middot; on a card in {e(x["part"])}' if x.get("part") else ""
-        return (f'<figure class="sb-k sb-tip" style="{tone}"><div class="kk">A hook that helped{part}</div>'
+        return (f'<figure class="sb-k sb-tip" style="{tone}"><div class="kk">A tip that helped{part}</div>'
                 f'<div class="q">{e(x["n"])}</div>{_who(x, person, pip)}{_acts(x)}</figure>')
     if k == "cheer":
         emoji = e(x.get("e") or "") or "&#127881;"
@@ -206,7 +206,7 @@ def scrapbook_html(view, cfg, people=None, my_look=None):
                    + (f'<div class="sb-pin">{pin}</div>' if pin else "") + '</div>')
     if not n:
         months += ('<div class="sb-none">Nothing kept yet this year. A drawing or a sign you take down from your Decks screen comes here, '
-                   'with good-luck cards, hooks that helped, cheers that came with words, and what you finish.</div>')
+                   'with good-luck cards, tips that helped, cheers that came with words, and what you finish.</div>')
     foot = ('<div class="sb-foot"><span>Kept on this computer. Never sent.</span>'
             + (f'<a href="#" onclick="{_pycmd("scrapempty")}">Empty the scrapbook&hellip;</a>' if view.get("any") else "") + '</div>')
     return (f'<div id="due-crew" class="dc-frame dc-sb">{_css(cfg)}<style>{_sev.CSS}{SCRAP_CSS}{_scrap_theme(cfg)}</style>'

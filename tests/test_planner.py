@@ -1992,7 +1992,7 @@ def test_ai_jobs():
           planned == PR.for_plan(doc, tree, "MS2 Block 2", "2026-10-21").replace(
               "(edit this part):\n\n", "(edit this part):\nMy syllabus: week 1 is shock.\n", 1) and "My syllabus" in planned)
     src = {f: open(os.path.join(REPO, "due_crew", "planner", f)).read() for f in ("ai.py", "mcp.py", "mcp_shim.py")}
-    check("ai: the AI hooks and the AI app's server import no aqt, and the hooks send nothing",
+    check("ai: the AI tips and the AI app's server import no aqt, and the tips send nothing",
           not [f for f, t in src.items() if re.search(r"^\s*(from aqt|import aqt)", t, re.M)]
           and not re.search(r"^\s*(?:from|import)\s+(?:requests|urllib|http|socket|anthropic)\b", src["ai.py"], re.M))
 

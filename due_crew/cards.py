@@ -263,6 +263,19 @@ def chip_people(info, local_tips, names, asks=()):
     return out
 
 
+ME = "me"  # a peek of my own (my hook, the way to add one): my Pip, from the left
+
+
+def my_peek_pip():
+    """3.9.12: my own Pip waving as it peeks in (my look, my colour), or None with Pip off."""
+    c = app.cfg()
+    if not c.get("sev", True):
+        return None
+    from . import sev
+    from .board import accent_pair, my_look
+    return {"svg": sev.slot(sev.svg("peek", look=my_look(c), label="Your Pip"), PEEK_PIP), "a": list(accent_pair(c.get("accent")))}
+
+
 def peek_pip(uid):
     """3.9.0: a crewmate's Pip waving as it peeks in (sev.py's own markup,
     their look; a name only in its label, escaped), or None."""
@@ -329,7 +342,7 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None, hidden=No
         who = who_of(asks[0][0])
         q = str(asks[0][2]) if len(asks[0]) > 2 and asks[0][2] else ""
         view = {"kind": "asked", "text": f"{who}: \u201c{q}\u201d" if q else f"{who} asked about this",
-                "short": f"{who} asked", "ask": False, "cmd": f"knowsreply:{asks[0][0]}:{int(asks[0][1])}", "act": "Hook"}
+                "short": f"{who} asked", "ask": False, "cmd": f"knowsreply:{asks[0][0]}:{int(asks[0][1])}", "act": "Tip"}
         if q:
             view["title"] = q
             view["fold"] = f"{who} asked about this card"  # the line can give the answer away
@@ -340,7 +353,7 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None, hidden=No
         first = tips[0]
         who = first["name"].split(" ")[0]
         # 3.9.11: on the card a tip is a hook (the same line, now left without being asked)
-        view = {"kind": "tip", "text": f"\U0001F4A1 {who}: {first['text']}", "short": f"\U0001F4A1 {who}'s hook",
+        view = {"kind": "tip", "text": f"\U0001F4A1 {who}: {first['text']}", "short": f"\U0001F4A1 {who}'s tip",
                 "title": first["text"], "cmd": "knowstip"}
         if len(tips) > 1:
             view["more"] = len(tips) - 1
@@ -350,7 +363,7 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None, hidden=No
         # 3.9.0 (Sam's note on "Asks and tips"): the tipper's Pip peeks in with it, as who knows it
         # does (the same bubble without it, Pip off); its words folded till Show
         own = first["from"] in pips
-        view["fold"] = f"{who} left a hook" if own else f"\U0001F4A1 {who} left a hook"
+        view["fold"] = f"{who} left a tip" if own else f"\U0001F4A1 {who} left a tip"
         view["peek"] = {"uids": [first["from"]] if own else [], "head": f"{who}: {first['text']}" if own else view["text"],
                         "act": view.get("act")}
         return with_pip(view, first["from"]) if own else view
@@ -488,7 +501,11 @@ _FLOAT_JS = """(function () {
   var peek = D.peek || null, withPip = !!(peek && peek.pips && peek.pips.length);
   var font = 'font:12.5px/1.35 -apple-system,Segoe UI,sans-serif;text-align:left;';
   var card = 'border:1px solid ' + c.line + ';background:' + c.bg + ';color:' + c.ink + ';box-shadow:0 6px 18px rgba(0,0,0,.22);';
-  var box = peek ? el('div', 'position:fixed;right:16px;bottom:' + (withPip ? '0' : '14px') + ';display:flex;align-items:flex-end;gap:8px;z-index:60;' + font)
+  // 3.9.12 (SC: "add a tip come up with your pip on the bottom left like how the friends who know it pop up
+  // on the right"): what's mine (my tip, the way to add one) peeks in from the left with my own Pip
+  var left = !!(peek && peek.side === 'left');
+  var box = peek ? el('div', 'position:fixed;' + (left ? 'left' : 'right') + ':16px;bottom:' + (withPip ? '0' : '14px') + ';display:flex;' +
+      (left ? 'flex-direction:row-reverse;' : '') + 'align-items:flex-end;gap:8px;z-index:60;' + font)
     : el('div', 'position:fixed;right:12px;bottom:12px;max-width:260px;box-sizing:border-box;display:grid;gap:6px;padding:9px 12px;' +
       'border-radius:12px;' + card + font + 'z-index:60;');
   box.id = 'dc-knows-card';
@@ -539,7 +556,7 @@ _FLOAT_JS = """(function () {
     // round its edge, their Pip's (mine with Pip off); who knows it keeps the plain line
     var edge = D.kind === 'tip' ? 'border:2px solid ' + (withPip ? peek.pips[0].a[night ? 1 : 0] : acc) + ';' : '';
     bub = el('div', 'margin-bottom:' + (withPip ? '26px' : '0') + ';max-width:220px;display:grid;gap:4px;padding:8px 11px;' +
-      'border-radius:' + (withPip ? '12px 12px 4px 12px' : '12px') + ';transform-origin:100% 100%;' + card + edge);
+      'border-radius:' + (withPip ? (left ? '12px 12px 12px 4px' : '12px 12px 4px 12px') : '12px') + ';transform-origin:' + (left ? '0' : '100%') + ' 100%;' + card + edge);
     bub.appendChild(head); bub.appendChild(acts);
     box.appendChild(bub);
   }
@@ -744,7 +761,10 @@ def on_answer(card, opened=False):
             peek = dict(view["peek"])
             # each Pip waving, in their look and colour; none (Pip off): the bubble alone
             from .sev import blink
-            drawn = [{"svg": peek_pip(u), "a": pips[u]["a"]} for u in peek.pop("uids", None) or [] if u in pips]
+            uids = peek.pop("uids", None) or []
+            drawn = [{"svg": peek_pip(u), "a": pips[u]["a"]} for u in uids if u in pips]
+            if uids == [ME]:  # 3.9.12: what's mine peeks in with my own Pip, in my colour and look
+                drawn = [p for p in [my_peek_pip()] if p]
             # each blinking on its own clock, as a room's seats (Sam: side by side they blinked as one)
             peek["pips"] = [dict(p, b=blink(i)[0], d=blink(i)[1]) for i, p in enumerate(p for p in drawn if p["svg"])]
             view["peek"] = peek
@@ -786,6 +806,11 @@ def _with_hook(view, card, guid):
             hooks.note_asked(guid, day)
         if got is None or (view is not None and got.get("kind") != "hook"):
             return view  # who knows it (or a plan's note) gives way to my hook alone, never to an offer
+        # 3.9.12 (SC): mine peeks in from the bottom left with my own Pip, as who knows it does from the right
+        got = dict(got)
+        got.pop("bar", None)
+        got["peek"] = {"uids": [ME], "head": got["text"], "act": got.get("act") or "Add a tip", "side": "left"}
+        got.setdefault("act", "Add a tip")
         return got
     except Exception:
         from .errs import oops
@@ -809,8 +834,8 @@ def hook_edit(card=None):
     if dlg.result_words is None:
         return
     now = hooks.put(guid, dlg.result_words, log_today(mw.col), share=dlg.result_shared and client().signed_in)
-    tooltip(("Hook saved, for you and your crew." if hooks.shared(guid) else "Hook saved.") if now
-            else ("Hook removed." if have else "Nothing saved."))
+    tooltip(("Tip saved, for you and your crew." if hooks.shared(guid) else "Tip saved.") if now
+            else ("Tip removed." if have else "Nothing saved."))
     flush_hooks()
     if _card() is card and getattr(mw.reviewer, "state", "") == "answer":
         on_answer(card, opened=True)
@@ -965,7 +990,7 @@ def show_tips():
         if t["from"]:
             act = menu.addAction("    \u2713 This helped" if t["helped"] else "    This helped")
             act.triggered.connect(lambda _c=False, t=t: helped(guid, t["from"], not t["helped"]))
-            hide = menu.addAction("    Hide this hook")  # 3.9.11: it never shows here again
+            hide = menu.addAction("    Hide this tip")  # 3.9.11: it never shows here again
             hide.triggered.connect(lambda _c=False, t=t: hide_hook(guid, t["from"]))
     if not menu.actions():
         return
@@ -986,7 +1011,7 @@ def helped(guid, from_uid, on=True):
         from .together import mark_helped
         mark_helped(guid, from_uid, on)
         if on:
-            tooltip("Thanks. The hooks that help most show first.")
+            tooltip("Thanks. The tips that help most show first.")
         card = _card()
         if card is not None and card.note().guid == guid and getattr(mw.reviewer, "state", "") == "answer":
             on_answer(card, opened=True)
@@ -1025,7 +1050,7 @@ def on_message(cmd, parts=(), from_card_page=False):
             # the review screen runs the card's script too: a thanks is sent only on a yes
             from .ui import confirm  # in the board's colours (3.9.1); the review screen has no board for a sheet
             tip = _tip_from(parts[2])
-            if tip is None or (not tip["helped"] and not confirm(mw, "This helped", f"Tell {tip['name'].split(' ')[0]} this hook helped?", "Tell them")):
+            if tip is None or (not tip["helped"] and not confirm(mw, "This helped", f"Tell {tip['name'].split(' ')[0]} this tip helped?", "Tell them")):
                 return True
         helped_toggle(parts[2])
     elif cmd == "knowsreply" and len(parts) > 3:

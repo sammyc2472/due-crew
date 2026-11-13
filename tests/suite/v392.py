@@ -2275,14 +2275,14 @@ def test_browse_due_says_when_a_plan_opens_v395():
         PF.followed = broken
         PF.opens_reset()
         PF._OPENS["said"] = False
-        check("opens: never raises (Anki drops a row hook that does), and says so once", due(10) == "(New #39026)" and PF._OPENS["said"])
+        check("opens: never raises (Anki drops a row tip that does), and says so once", due(10) == "(New #39026)" and PF._OPENS["said"])
     finally:
         PF.followed, PF._state_cfg, PF._deck_ok, P.DeckIndex, PF._today, PF.mw.col, P.own_pace = saved
         PF.opens_reset()
         PF._OPENS["said"] = False
     src = srcs.glue_src()
     flow = srcs.flow_src()
-    check("opens: Browse's rows ask the hook; Browse opening works the days out again; so does the morning's open",
+    check("opens: Browse's rows ask the tip; Browse opening works the days out again; so does the morning's open",
           "gui_hooks.browser_did_fetch_row.append(plan_flow.browser_row)" in src and "plan_flow.opens_reset()" in src
           and "    opens_reset()  # 3.9.5" in flow[flow.index("def run(col, plan_list"):flow.index("def run(col, plan_list") + 2500])
 

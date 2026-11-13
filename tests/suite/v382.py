@@ -925,7 +925,7 @@ def test_hooks_v3911():
     from due_crew import hooks as H, cards as K, room_model as rm, scrapbook as S
     _patched_due_crew()
     H._STORE.update(path=None, data=None, disk=None)
-    check("a hook is one line a card, cleaned as a note is; no words takes it off",
+    check("a tip is one line a card, cleaned as a note is; no words takes it off",
           H.put("g1", "  LOOP = thick <b>ascending</b> loop\n of Henle ", "2026-11-13") == H.get("g1") and "\n" not in H.get("g1")
           and "<b>" in H.get("g1") and H.count() == 1 and H.put("g1", "   ", "2026-11-13") == "" and H.get("g1") == "" and H.count() == 0)
     H._STORE.update(path=None, data=None, disk=None)
@@ -936,13 +936,13 @@ def test_hooks_v3911():
           disk["by"]["g1"] == {"t": "think loops", "at": "2026-11-13", "s": True, "up": False} and H.waiting() == [("g1", "think loops")]
           and H.shared("g1") and "hook" not in open(os.path.join(REPO, "due_crew", "account.py")).read())
     H.sent("g1", "think loops")
-    check("sent: nothing waits, and the hook knows it's up", H.waiting() == [] and json.load(open(H._path()))["by"]["g1"]["up"] is True)
+    check("sent: nothing waits, and the tip knows it's up", H.waiting() == [] and json.load(open(H._path()))["by"]["g1"]["up"] is True)
     H.put("g1", "think loops", "2026-11-13", share=False)
     check("made private: it comes down from the server; the next one starts unticked (what I chose last)",
           H.waiting() == [("g1", "")] and not H.shared("g1") and not H.shared("never"))
     H.sent("g1", "")
     H.put("g2", "mine alone", "2026-11-13", share=False)
-    check("a private hook is never sent, and taking one off that never went up sends nothing",
+    check("a private tip is never sent, and taking one off that never went up sends nothing",
           H.waiting() == [] and H.put("g2", "", "2026-11-13") == "" and H.waiting() == [])
     H.put("g1", "think loops", "2026-11-13", share=True)
     H.put("g1", "think LOOPS", "2026-11-13", share=True)
@@ -956,14 +956,14 @@ def test_hooks_v3911():
           H.turned(3, [3, 2, 4]) and not H.turned(2, [3, 3, 3]) and not H.turned(5, [3, 1, 3]) and not H.turned(5, [3, 3])
           and (H.TURNED_LAPSES, H.TURNED_RIGHT, H.ASKS_A_DAY) == (3, 3, 2))
     v, asked = H.view("think loops", True, False, False, False)
-    check("stuck on a card with my hook: folded till Show (a one-by-one's answer isn't given away), Edit beside it; a card I have down says nothing",
-          v["text"] == "Your hook: think loops" and v["fold"] == "You left a hook" and "think" not in v["fold"]
+    check("stuck on a card with my tip: folded till Show (a one-by-one's answer isn't given away), Edit beside it; a card I have down says nothing",
+          v["text"] == "Your tip: think loops" and v["fold"] == "You left a tip" and "think" not in v["fold"]
           and v["cmd"] == "hookadd" and v["act"] == "Edit" and not asked
           and H.view("think loops", False, False, True, True) == (None, False))
     add, _a = H.view("", True, True, False, False)
     ask, was = H.view("", False, False, True, True)
-    check("no hook: a second miss offers one beside Edit (never over the card); a card that stuck asks what made it click, once",
-          add["text"] == "Add a hook for next time" and add["bar"] is True and "act" not in add
+    check("no tip: a second miss offers one beside Edit (never over the card); a card that stuck asks what made it click, once",
+          add["text"] == "Add a tip for next time" and add["bar"] is True and "act" not in add
           and ask["text"] == "This one stuck. What made it click?" and was and "bar" not in ask
           and H.view("", True, False, False, False) == (None, False) and H.view("", False, False, True, False) == (None, False))
     check("what made it click: never twice on a card, twice a day at most",
@@ -971,21 +971,21 @@ def test_hooks_v3911():
           and not H.may_ask("c", "2026-11-13") and H.may_ask("c", "2026-11-14"))
     knows = {"kind": "knows", "text": "Dre knows this", "cmd": "knowsask", "act": "Ask",
              "peek": {"uids": ["dre"], "head": "I know this one", "act": "Ask Dre"}}
-    check("my hook takes the place of nothing, of who knows it, of a plan's note; an ask or a crewmate's hook stays",
+    check("my tip takes the place of nothing, of who knows it, of a plan's note; an ask or a crewmate's tip stays",
           H.over(None) and H.over(knows) and H.over({"kind": "remark"}) and not H.over({"kind": "tip"}) and not H.over({"kind": "ask"}))
-    check("hiding a crewmate's hook: theirs on that card alone, for good",
+    check("hiding a crewmate's tip: theirs on that card alone, for good",
           not H.hidden("g3", "dre") and (H.hide("g3", "dre"), H.hidden("g3", "dre"))[1] and not H.hidden("g3", "mo") and not H.hidden("g4", "dre"))
     names = {"dre": ("Dre Ng", ""), "mo": ("Mo", "")}
     info = {"knows": [], "tips": [{"from": "dre", "text": "theirs", "helped": False}, {"from": "mo", "text": "mo's", "helped": False}]}
-    check("a hidden hook is off the chip and its list; the next one takes its place; all hidden, who knows it is what's left",
+    check("a hidden tip is off the chip and its list; the next one takes its place; all hidden, who knows it is what's left",
           [t["from"] for t in K.tip_list(info, [], names, hidden=lambda u: u == "dre")] == ["mo"]
           and K.chip_view(info, [], names, hidden=lambda u: u == "dre")["actcmd"] == "knowshelped:mo"
           and K.chip_view(info, [{"from": "dre", "name": "Dre", "note": "kept here"}], names, hidden=lambda u: True) is None
-          and "Hide this hook" in open(os.path.join(REPO, "due_crew", "cards.py")).read())
+          and "Hide this tip" in open(os.path.join(REPO, "due_crew", "cards.py")).read())
     lines = H.thanks_lines([("g1", "dre"), ("g1", "mo"), ("g1", "dre"), ("g5", "zed")], {"dre": "Dre", "mo": "Mo"},
                            lambda g: "Renal" if g == "g1" else "")
     check("thanks: a line a card, named by its deck part (never its words), the rest counted; someone I can't name is a crewmate",
-          lines == ["Your hook on a Renal card helped Dre and 1 more.", "Your hook on a card helped a crewmate."] and "hook" in S.WHATS, lines)
+          lines == ["Your tip on a Renal card helped Dre and 1 more.", "Your tip on a card helped a crewmate."] and "hook" in S.WHATS, lines)
 
     # on the card: the chip, and the click
     conn = sqlite3.connect(":memory:")
@@ -1009,10 +1009,10 @@ def test_hooks_v3911():
         tip_stays = K._with_hook({"kind": "tip", "text": "x"}, mk(8, "g1", 2), "g1")
     finally:
         K.mw.col, K.log_today = saved
-    check("on the card: my hook when I'm stuck; the offer on a second miss today; what made it click once, then nothing; a fresh card, nothing",
+    check("on the card: my tip when I'm stuck; the offer on a second miss today; what made it click once, then nothing; a fresh card, nothing",
           stuck_view["kind"] == "hook" and stuck_view["fold"] and offer["kind"] == "hookadd" and turned["kind"] == "hookask"
           and again is None and quiet is None, (stuck_view, offer, turned, again, quiet))
-    check("who knows it comes up as ever on a card I've no hook on (an offer never takes its place); my hook goes in its place; a crewmate's hook stays",
+    check("who knows it comes up as ever on a card I've no tip on (an offer never takes its place); my tip goes in its place; a crewmate's tip stays",
           knows_stays["kind"] == "knows" and knows_stays["peek"]["head"] == "I know this one" and over_knows["kind"] == "hook"
           and tip_stays == {"kind": "tip", "text": "x"}, (knows_stays, over_knows))
     src = open(os.path.join(REPO, "due_crew", "cards.py")).read()
@@ -1020,7 +1020,7 @@ def test_hooks_v3911():
           "the More menu has it on any card",
           "hookadd" in rm.CARD_PAGE_CMDS and 'if view and page is not None and not view.get("bar"):' in src
           and 'elif cmd == "hookadd":\n        hook_edit()' in src
-          and "Due Crew: add a hook…" in open(os.path.join(REPO, "due_crew", "together.py")).read())
+          and "Due Crew: add a tip…" in open(os.path.join(REPO, "due_crew", "together.py")).read())
 
     # the window's answer is kept, and a shared one goes to the server; a crewmate stuck on the card reads it; helped comes back once
     labels = [_day(-i) for i in range(8)]
@@ -1079,14 +1079,14 @@ def test_hooks_v3911():
             sys.modules.pop('due_crew.ui.hook_dialog', None)
         else:
             sys.modules['due_crew.ui.hook_dialog'] = had_hd
-    check("the click: the window (the hook and tick it has, each time), kept, the chip drawn again opened",
+    check("the click: the window (the tip and tick it has, each time), kept, the chip drawn again opened",
           handled is True and opened == [("", True, True), ("renal: think loops", True, True), ("renal: think loops", False, True)]
-          and shown == [True, True, True] and said[0] == "Hook saved, for you and your crew." and said[-1] == "Hook removed.", (opened, shown, said))
+          and shown == [True, True, True] and said[0] == "Tip saved, for you and your crew." and said[-1] == "Tip removed.", (opened, shown, said))
     check("shared: it's my tip on the card on the server; a mutual friend stuck on it reads it, a stranger doesn't",
           up and up["text"] == "renal: think loops" and read[0] == {"knows": [], "tips": [{"from": "sam", "text": "renal: think loops", "helped": False}]}
           and read[1] is None, (up, read))
     check("This helped reaches me with a refresh, once: said, and a keepsake; made private it comes down, and stays mine here",
-          board["thanks"] == [("g20", "dre")] and twice == [] and "Your hook on a card helped Dre." in said and down and H.get("g20") == ""
+          board["thanks"] == [("g20", "dre")] and twice == [] and "Your tip on a card helped Dre." in said and down and H.get("g20") == ""
           , (board["thanks"], twice, said))
     check("a send that didn't get out waits and goes with the next flush", waited and H.waiting() == [] and store.tips[("g21", "sam")]["text"] == "later")
     check("one the server refuses for good (no room) isn't sent again at every refresh: it stays, mine alone", refused)
@@ -1187,7 +1187,7 @@ def test_view_shapes_v3912():
             H.view("think loops", True, False, False, False)[0], H.view("", True, True, False, False)[0], H.view("", False, False, True, True)[0],
             None]
     bad = [(v.get("kind"), V.chip_wrong(v)) for v in made if V.chip_wrong(v)]
-    check("shapes: every view the chip's makers build fits the chip's shape (who knows it, a hook, an ask, my hook, its offers)",
+    check("shapes: every view the chip's makers build fits the chip's shape (who knows it, a tip, an ask, my tip, its offers)",
           bad == [] and all(v is None or v["kind"] in V.CHIP_KINDS for v in made), bad)
     check("shapes: a key the page doesn't know, a wrong type, an unknown kind and a peek's slip are each said",
           V.chip_wrong({"kind": "knows", "text": "x", "txet": "y"}) == ["txet: not in the shape"]
@@ -1296,12 +1296,13 @@ def test_copy_rules_v3912():
         text = files[os.path.join(*parts)]
         text = re.sub(r'''"""[\s\S]*?"""''', '""', text)       # a docstring or a comment may still say tip: the code does
         text = re.sub(r"(?m)(^\s*#.*$|\s{2}# .*$|^\s*//.*$)", "", text)
-        for m in re.finditer(r"""(?:"|>|')([^"'<>\n]*?(?:\ba tip\b|s tip\b|\btips that\b|\bSend a tip\b|\bTips from\b|>Tip<)[^"'<>\n]*)""", text):
+        for m in re.finditer(r"""(?:"|>|')([^"'<>\n]*?(?:\ba hook\b|s hook\b|\bhooks that\b|\bSend a hook\b|\bHooks from\b|>Hook<|\bour hook\b|\bHook (?:saved|removed)\b)[^"'<>\n]*)""", text):
             src = text.split("\n")[text[:m.start()].count("\n")]
             before = src[:src.find(m.group(1))] if m.group(1) in src else src
             if not ("#" in before or "//" in before or src.strip().startswith(("#", "//", "*"))):  # a comment may still say tip: the code does
                 tips.append((os.path.join(*parts), m.group(1)[:60]))
-    check("copy: what a crewmate leaves on a card is a hook wherever a person reads it", tips == [], tips[:6])
+    # 3.9.12, later the same day (SC: "let's call hooks tips again sorry"): a tip, never a hook
+    check("copy: a line left on a card is a tip wherever a person reads it, never a hook", tips == [], tips[:6])
     banned = []
     pages = dict(files)
     for f in ("index.html", "classes.html", "privacy.html", "app.js", "table.js"):
@@ -2291,11 +2292,11 @@ def test_two_buttons_v391():
     finally:
         appmod.cfg = saved_cfg
         _state["room_break"] = False
-    check("the hooks, called as Anki calls them: on, 2/3/4 land as Good and 1 as Again; off, nothing changes",
+    check("the tips, called as Anki calls them: on, 2/3/4 land as Good and 1 as Again; off, nothing changes",
           on == [(True, 1), (True, 3), (True, 3), (True, 3)] and off == [(True, 1), (True, 2), (True, 3), (True, 4)]
           and bar_on == ((1, "Again"), (3, "Good")) and bar_off == four, (on, off))
     check("a room's break still holds the answer, whatever two buttons does with it", held == (False, 3), held)
-    check("it's registered on both hooks", "two_buttons.will_answer" in srcs.glue_src()
+    check("it's registered on both tips", "two_buttons.will_answer" in srcs.glue_src()
           and "reviewer_will_init_answer_buttons.append(two_buttons.will_init_buttons)" in srcs.glue_src())
     # the setting: a person's, so an account key; a switch on Settings; off by default; Reset board leaves it
     check("the setting: an account key, a bool, off unless set; Settings' switch sets it; Reset board leaves it",
@@ -3184,7 +3185,7 @@ def test_sheets_v391():
                                        ("__init__.py", 'sheets.confirm("Sign out?"'), ("__init__.py", 'sheets.confirm("Delete account?"'),
                                        ("due_flow.py", 'sheets.ask_text("Edit to-do"'), ("team_flow.py", 'sheets.confirm("Join this plan'),
                                        ("team_flow.py", 'sheets.ask_text("Reply"'), ("team_flow.py", 'sheets.ask_text("Ask the squad"'),
-                                       ("together.py", 'sheets.ask_text("Good-luck card"'), ("together.py", 'sheets.ask_text("Send a hook"'),
+                                       ("together.py", 'sheets.ask_text("Good-luck card"'), ("together.py", 'sheets.ask_text("Send a tip"'),
                                        ("plan_flow.py", "sheets.confirm(title, text, yes"), ("plan_flow.py", 'sheets.confirm("Reset to default?"'),
                                        ("plan_flow.py", 'sheets.ask_item("Change deck"'), ("plan_flow.py", "sheets.confirm_check(title, text, \"Stop\""),
                                        ("squads.py", 'sheets.confirm("Block?"'), ("squads.py", 'sheets.confirm("Remove?"')))
@@ -3847,7 +3848,7 @@ def test_leeches_392():
               and "Bring all" not in html and "insleech:10:back" not in html and "duecrew:insleech:10:browse:0" in html
               and "&lt;i&gt;Spanish" in html and "<i>Spanish" not in html, html[:1500])
         check("board: one button a card: the tip, else Ask who has it down, else Bring back; a near card's is a tip or nothing",
-              "duecrew:insleech:10:tip:102" in html and "Dre&rsquo;s hook" in html and "Ask Maya" in html
+              "duecrew:insleech:10:tip:102" in html and "Dre&rsquo;s tip" in html and "Ask Maya" in html
               and "slow: 44 s a try" in html and "back in 3 days" in html, html)
         check("board: behind ⋯: Learn it fresh, Edit, Leave it out (and Bring back where the button's a tip)",
               not any(f"insleech:10:{a}:" in html for a in ("fresh", "edit", "out", "back")) and "hidden>" not in html
@@ -3858,8 +3859,8 @@ def test_leeches_392():
         q = lambda cid: conn.execute("SELECT queue, lapses, type FROM cards WHERE id = ?", (cid,)).fetchone()  # noqa: E731
         tags = lambda nid: conn.execute("SELECT tags FROM notes WHERE id = ?", (nid,)).fetchone()[0]  # noqa: E731
         was = q(102)
-        check("glue: the hook in a sheet, its words alone (3.9.12: Insights is data only, nothing to bring back from here); the card as it was",
-              sheets_asked[-1] == ("Dre's hook", "Dre: fiesta takes ser: it's an event", "OK") and q(102) == was and was[0] == -1, (sheets_asked[-1], was))
+        check("glue: the tip in a sheet, its words alone (3.9.12: Insights is data only, nothing to bring back from here); the card as it was",
+              sheets_asked[-1] == ("Dre's tip", "Dre: fiesta takes ser: it's an event", "OK") and q(102) == was and was[0] == -1, (sheets_asked[-1], was))
         LF.bring_back(10, [102])
         check("glue: bring back: unsuspended, schedule kept, the leech tag off, one undo step",
               q(102) == (2, 8, 2)
