@@ -4874,6 +4874,32 @@ every release that changes how something works.
   what it does and Turn new cards back on, so nobody is stuck with one;
   `ahead_flow.stop_new` and `insaheadoff` stay for it, with no way to
   start one from the board now.
+- 3.9.11, hooks, step one (Sam, 13 Nov, on the mock "Tips Become
+  Hooks": "I like the way you've put tips together but I really liked
+  also the current implementation of these folks know this coming up on
+  the right. Give it a build for me to test out"). A hook is my own line
+  on a card I keep missing (`hooks.py`; `hooks.json` beside wrap.json,
+  by note guid, never the card's text, never sent). On the answer side:
+  stuck on a card with my hook and nothing from my crew, the chip says
+  it ("Your hook: …", Edit); a card missed twice or more and again today
+  offers one, quietly beside Edit and never over the card ("Add a hook
+  for next time", the view's `bar`); once a card and twice a day at
+  most, a card I kept missing whose last three answers were right asks
+  "This one stuck. What made it click?" (`hooks.turned`, `may_ask`).
+  Who knows it keeps its bubble and its Ask, my hook said after it
+  (`hooks.beside`); an ask or a crewmate's tip is left as it is. The
+  reviewer's More menu has "add a hook…" on any card. One click
+  (`hookadd`, a card-page command: it opens a window for its line).
+  Not built: sharing a hook with my crew, "helped" back to its author
+  and the scrapbook line (step two: a table, a migration, Sam's answers
+  on shared by default and whether Ask stays). The name is "hook" till
+  Sam says otherwise.
+- 3.9.11, Magic search's Recent (Sam's screenshot: a pasted list of card
+  ids ran off the window). A recent is something to type again: pasted
+  ids and anything over 60 characters aren't kept (they were, cut at 200
+  characters, mid-id) nor shown if an older build kept them
+  (`magic_flow._recent_ok`); a chip is cut to the window with an
+  ellipsis and types its own words, not what's left on the button.
 - 3.9.10, Insights is data only (Sam, 12 Nov: "we shouldn't be adjusting
   cards from insights... consider it a data only zone. The study now for
   areas of weakness don't change card visibility / plan"). Gone from it:

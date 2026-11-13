@@ -665,7 +665,7 @@ def _show(view):
             _put(bar, "bar", None if shown else view)
         except Exception:
             pass
-    if view and page is not None:
+    if view and page is not None and not view.get("bar"):  # (3.9.11: a quiet offer stays beside Edit)
         try:
             _put(page, "page", view, to_bar)
             return
@@ -730,6 +730,7 @@ def on_answer(card, opened=False):
         view = chip_view(info, tips, names, asks, mine, pips)
         if view is None or view.get("kind") == "knows":
             view = remark_view(client().session.get("plans"), guid, card.ord) or view  # 3.8.1
+        view = _with_hook(view, card, guid)  # 3.9.11: my own hook, or the way to add one
         if view and view.get("peek"):
             peek = dict(view["peek"])
             # each Pip waving, in their look and colour; none (Pip off): the bubble alone
@@ -745,6 +746,60 @@ def on_answer(card, opened=False):
         if opened:
             view["open"] = True
     _show(view)
+
+
+def _with_hook(view, card, guid):
+    """3.9.11, hooks (hooks.py): with nothing from my crew on the card, my
+    own hook when I'm stuck on it, or the way to add one (and, once a card,
+    "What made it click?" when one I kept missing has stuck). Who knows it
+    keeps its bubble, my hook said after it. Never in the chip's way."""
+    try:
+        from . import hooks
+        hook = hooks.get(guid)
+        if view is not None:
+            return hooks.beside(view, hook)
+        col = mw.col
+        if col is None:
+            return view
+        stuck = stuck_now(col, card, col.sched.day_cutoff)
+        # a card that has stuck (its last answers right) still has its lapses, so it's "stuck" by the list's rule:
+        # looked at apart, to ask what made it click, and so a hook isn't read to me on a card I have down again
+        has_turned = hooks.turned(card.lapses, col.db.list(
+            "SELECT ease FROM revlog WHERE cid = ? ORDER BY id DESC LIMIT ?", int(card.id), hooks.TURNED_RIGHT))
+        stuck = stuck and not has_turned
+        has_turned = has_turned and not hook
+        day = log_today(col)
+        offer = (not hook and int(card.lapses or 0) >= STUCK_LAPSES and bool(col.db.scalar(
+            "SELECT 1 FROM revlog WHERE cid = ? AND id >= ? AND ease = 1 LIMIT 1", int(card.id), (int(col.sched.day_cutoff) - 86400) * 1000)))
+        got, asked = hooks.view(hook, stuck, offer, has_turned, has_turned and hooks.may_ask(guid, day))
+        if asked:
+            hooks.note_asked(guid, day)
+        return got
+    except Exception:
+        from .errs import oops
+        oops()
+        return view
+
+
+def hook_edit(card=None):
+    """Add or change my hook on the card up now (the chip, or the reviewer's
+    More menu): one line; none takes it off. Kept on this computer."""
+    card = card or _card()
+    if card is None:
+        return
+    from . import hooks
+    from .ui import ask_text
+    guid = card.note().guid
+    have = hooks.get(guid)
+    line, ok = ask_text(mw, "Your hook" if have else "Add a hook",
+                        "What makes this card stick? One line, shown when you miss it. Kept on this computer."
+                        + (" Clear it to take it off." if have else ""), have)
+    if not ok:
+        return
+    now = hooks.put(guid, line, log_today(mw.col))
+    tooltip("Hook saved." if now else ("Hook removed." if have else "Nothing saved."))
+    if _card() is card and getattr(mw.reviewer, "state", "") == "answer":
+        on_answer(card, opened=True)
 
 
 def on_question(card):
@@ -882,6 +937,8 @@ def on_message(cmd, parts=(), from_card_page=False):
         show_tips()
     elif cmd == "knowsbar":
         to_bar(len(parts) > 2 and parts[2] == "open")
+    elif cmd == "hookadd":
+        hook_edit()  # (opens its own window: nothing a card's script could do with it but ask)
     elif cmd == "knowshelped" and len(parts) > 2:
         if from_card_page:
             # the review screen runs the card's script too: a thanks is sent only on a yes

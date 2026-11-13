@@ -15588,6 +15588,95 @@ def test_crew_tabs_hold_still_v3910():
           and "a[data-t] { display: inline-block; padding-bottom: 2px; }" in css, sw[:200])
 
 
+def test_hooks_v3911():
+    """3.9.11, hooks, step one (Sam: "I like the way you've put tips together
+    but I really liked also the current implementation of these folks know
+    this coming up on the right. Give it a build"): my own line on a card I
+    keep missing, shown when I'm stuck on it; offered quietly beside Edit on
+    a second miss, and once when a card I kept missing has stuck. Who knows
+    it keeps its bubble. Kept on this computer, never sent."""
+    from due_crew import hooks as H, cards as K, room_model as rm
+    _patched_due_crew()
+    H._STORE.update(path=None, data=None, disk=None)
+    check("a hook is one line a card, cleaned as a note is; no words takes it off",
+          H.put("g1", "  LOOP = thick <b>ascending</b> loop\n of Henle ", "2026-11-13") == H.get("g1") and "\n" not in H.get("g1")
+          and "<b>" in H.get("g1") and H.count() == 1 and H.put("g1", "   ", "2026-11-13") == "" and H.get("g1") == "" and H.count() == 0)
+    H.put("g1", "think loops", "2026-11-13")
+    disk = json.load(open(H._path()))
+    check("kept in hooks.json beside wrap.json; nothing of it in the client or the account's keys",
+          disk["by"]["g1"]["t"] == "think loops" and "hook" not in open(os.path.join(REPO, "due_crew", "backend", "api.py")).read()
+          and "hook" not in open(os.path.join(REPO, "due_crew", "account.py")).read())
+    check("a card has stuck: three lapses or more and its last three answers right, no fewer",
+          H.turned(3, [3, 2, 4]) and not H.turned(2, [3, 3, 3]) and not H.turned(5, [3, 1, 3]) and not H.turned(5, [3, 3])
+          and (H.TURNED_LAPSES, H.TURNED_RIGHT, H.ASKS_A_DAY) == (3, 3, 2))
+    v, asked = H.view("think loops", True, False, False, False)
+    check("stuck on a card with my hook: it says it, Edit beside it; a card I have down says nothing",
+          v["text"] == "Your hook: think loops" and v["cmd"] == "hookadd" and v["act"] == "Edit" and not asked
+          and H.view("think loops", False, False, True, True) == (None, False))
+    add, _a = H.view("", True, True, False, False)
+    ask, was = H.view("", False, False, True, True)
+    check("no hook: a second miss offers one beside Edit (never over the card); a card that stuck asks what made it click, once",
+          add["text"] == "Add a hook for next time" and add["bar"] is True and "act" not in add
+          and ask["text"] == "This one stuck. What made it click?" and was and "bar" not in ask
+          and H.view("", True, False, False, False) == (None, False) and H.view("", False, False, True, False) == (None, False))
+    check("what made it click: never twice on a card, twice a day at most",
+          H.may_ask("a", "2026-11-13") and (H.note_asked("a", "2026-11-13"), H.note_asked("b", "2026-11-13")) and not H.may_ask("a", "2026-11-14")
+          and not H.may_ask("c", "2026-11-13") and H.may_ask("c", "2026-11-14"))
+    knows = {"kind": "knows", "text": "Dre knows this", "cmd": "knowsask", "act": "Ask",
+             "peek": {"uids": ["dre"], "head": "I know this one", "act": "Ask Dre"}}
+    both = H.beside(knows, "think loops")
+    check("who knows it keeps its bubble and its Ask; my hook is said after it; a tip or an ask is left as it is",
+          both["peek"]["head"] == "I know this one · Your hook: think loops" and both["peek"]["uids"] == ["dre"] and both["cmd"] == "knowsask"
+          and H.beside(knows, "") is knows and H.beside({"kind": "tip", "text": "x"}, "think loops") == {"kind": "tip", "text": "x"}
+          and H.beside(None, "think loops") is None)
+
+    # on the card: the chip, and the click
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    now_ms = (col.sched.day_cutoff - 3600) * 1000
+    for i, ease in enumerate((3, 3, 3)):
+        fakes.add_review(conn, now_ms - 86400000 * (i + 2), ease=ease, cid=7)
+    fakes.add_review(conn, now_ms, ease=1, cid=8)
+    mk = lambda cid, guid, lapses: types.SimpleNamespace(id=cid, lapses=lapses, ord=0, note=lambda: types.SimpleNamespace(guid=guid))  # noqa: E731
+    saved = (K.mw.col, K.log_today)
+    K.mw.col, K.log_today = col, (lambda c: "2026-11-15")
+    try:
+        stuck_view = K._with_hook(None, mk(8, "g1", 2), "g1")
+        offer = K._with_hook(None, mk(8, "g8", 2), "g8")
+        turned = K._with_hook(None, mk(7, "g7", 4), "g7")
+        again = K._with_hook(None, mk(7, "g7", 4), "g7")
+        quiet = K._with_hook(None, mk(9, "g9", 0), "g9")
+        beside = K._with_hook(dict(knows), mk(8, "g1", 2), "g1")
+    finally:
+        K.mw.col, K.log_today = saved
+    check("on the card: my hook when I'm stuck; the offer on a second miss today; what made it click once, then nothing; a fresh card, nothing",
+          stuck_view["kind"] == "hook" and offer["kind"] == "hookadd" and turned["kind"] == "hookask" and again is None and quiet is None
+          and beside["peek"]["head"].endswith("Your hook: think loops"), (stuck_view, offer, turned, again, quiet))
+    src = open(os.path.join(REPO, "due_crew", "cards.py")).read()
+    check("its click is one of the card page's keyed commands (it opens a window, nothing more); the quiet offer stays in the bar; "
+          "the More menu has it on any card",
+          "hookadd" in rm.CARD_PAGE_CMDS and 'if view and page is not None and not view.get("bar"):' in src
+          and 'elif cmd == "hookadd":\n        hook_edit()' in src
+          and "Due Crew: add a hook…" in open(os.path.join(REPO, "due_crew", "together.py")).read())
+    asked_for, shown = [], []
+    import due_crew.ui as U
+    keep = (K._card, U.ask_text, K.on_answer, K.mw.col, K.log_today, K.tooltip, getattr(K.mw, "reviewer", None))
+    card = mk(8, "g20", 2)
+    K._card, K.on_answer, K.mw.col, K.log_today, K.tooltip = (lambda: card), (lambda c, opened=False: shown.append(opened)), col, (lambda c: "2026-11-15"), (lambda *a, **k: None)
+    K.mw.reviewer = types.SimpleNamespace(state="answer")
+    U.ask_text = lambda parent, title, label, text="": (asked_for.append((title, text)), ("renal: think loops", True))[1]
+    try:
+        handled = K.on_message("hookadd", ["duecrew", "hookadd"], from_card_page=True)
+        K.on_message("hookadd", ["duecrew", "hookadd"], from_card_page=True)
+    finally:
+        K._card, U.ask_text, K.on_answer, K.mw.col, K.log_today, K.tooltip = keep[:6]
+        K.mw.reviewer = keep[6]
+        H._STORE.update(path=None, data=None, disk=None)
+    check("the click: asks for its one line (the hook it has, the second time), keeps it, and draws the chip again opened",
+          handled is True and asked_for == [("Add a hook", ""), ("Your hook", "renal: think loops")] and shown == [True, True], (asked_for, shown))
+
+
 def test_scrapbook_v3910():
     """3.9.10, the scrapbook (Sam: "a combo wrapped and home for polaroids /
     notes, etc. that are ephemeral at the moment or deleted permanently

@@ -896,6 +896,13 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 - [ ] On a card with a tip, press Show in the corner: the bubble grows to fit the words, which fade in; the chip beside Edit fades its words in too.
 - [ ] Reduce motion (system setting): nothing slides, grows or turns; the banner only fades.
 
+### 3.9.11: hooks, Magic search's Recent
+
+- [ ] Hooks: on a card you've lapsed on twice, press Again, and when it comes back show the answer: "Add a hook for next time" beside Edit (nothing over the card). Click it, type a line, save. Miss it again: the corner card says "Your hook: …" with Edit. Edit and clear it: gone. More › "Due Crew: add a hook…" works on any card.
+- [ ] A card a crewmate has down still shows "… knows this" coming up on the right with Ask; with your hook on it, the same bubble ends "· Your hook: …". A crewmate's tip or ask shows as before.
+- [ ] A card you lapsed three times and have since got right three times running: once, "This one stuck. What made it click?"; never again on that card, twice a day at most.
+- [ ] Magic search: paste a long list of card ids, Study or Browse them, reopen: no Recent for it. A long Recent from before is gone; a short one ("pv loop") is there and types itself on a click.
+
 ### 3.9.10: the foot, the dot, the scrapbook (Wrapped's place)
 
 - [ ] The board's foot: Friends (the Friends window), Scrapbook, Share my stats (the share menu). No I'm studying pill, no Crew menu. Crew › Decks ends with "Share a deck…". The top bar's ▶ Fifteen? has a ▾: Start a Fifteen, Open a room.

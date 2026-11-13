@@ -351,6 +351,10 @@ def reviewer_menu(reviewer, menu):
         from . import cards as crew_cards
         action = menu.addAction("Due Crew: ask my crew about this…")
         action.triggered.connect(lambda: crew_cards.ask(card))
+    # 3.9.11: my own hook on this card (hooks.py), on any card
+    from . import hooks
+    hk = menu.addAction("Due Crew: your hook…" if hooks.get(card.note().guid) else "Due Crew: add a hook…")
+    hk.triggered.connect(lambda: __import__("due_crew.cards", fromlist=["hook_edit"]).hook_edit(card))
     # 3.7.3: a card in a plan whose team I'm on can go to the team too
     from . import team_flow
     if team_flow.plan_for_card(card):

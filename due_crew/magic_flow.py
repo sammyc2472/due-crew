@@ -36,6 +36,14 @@ from .backend.shapes import TransportError
 from .errs import oops
 
 RECENT = 5           # finds kept for the empty box, on this computer
+RECENT_MAX = 60      # characters: longer isn't something to type again
+_IDS = re.compile(r"(?:[cn]id:)?[\d,\s;]+")
+
+
+def _recent_ok(t):
+    """A find worth offering again: short, and not a pasted list of ids."""
+    return len(t) <= RECENT_MAX and not (_IDS.fullmatch(t) and sum(ch.isdigit() for ch in t) >= 8)
+
 DAYS = 14            # the day picker: two weeks from today
 FILL_SPAN = 90       # the fill-in: how far out it reaches, in days
 FILL_MAX = 60        # and how many study days (a set a day on the plan)
@@ -661,11 +669,14 @@ class Ops:
                 save_cfg(c)
 
     def recent(self):
-        return [str(x) for x in cfg().get("magic_recent") or [] if isinstance(x, str)][:RECENT]
+        # (3.9.11: one kept by an older build that's a list of ids, or long, isn't shown: see note_recent)
+        return [str(x) for x in cfg().get("magic_recent") or [] if isinstance(x, str) and _recent_ok(x)][:RECENT]
 
     def note_recent(self, text):
-        t = " ".join(str(text or "").split())[:200]
-        if not t or "\n" in str(text):
+        t = " ".join(str(text or "").split())
+        # 3.9.11 (Sam's screenshot: a pasted list of card ids ran off the window as a Recent): a recent is something
+        # to type again, so pasted ids and anything long aren't kept (they were, cut at 200 characters, mid-id)
+        if not t or "\n" in str(text) or not _recent_ok(t):
             return
         c = cfg()
         c["magic_recent"] = ([t] + [x for x in c.get("magic_recent") or [] if x != t])[:RECENT]

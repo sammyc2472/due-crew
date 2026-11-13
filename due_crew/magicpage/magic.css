@@ -78,7 +78,8 @@ body .dcm select.deck { flex: 0 1 auto; max-width: 46%; border: 0; background-co
 .dcm .chip:hover { border-color: var(--dc-accent) !important; }
 .dcm .chip.on { background: var(--dc-accent) !important; border-color: var(--dc-accent) !important; color: var(--dc-accent-ink); font-weight: 600; }
 .dcm .chip.on::before { content: "\2713"; font-weight: 800; }
-.dcm .recent { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dcm .recent { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.dcm .recent .chip { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dcm .recent .lab { color: var(--dc-muted); font-size: 12px; margin-right: 2px; }
 
 /* what it found */

@@ -234,9 +234,9 @@ var dcMagic = (function () {
     clear(els.recent);
     if ((V.recent || []).length) {
       els.recent.appendChild(h('span', { cls: 'lab', text: 'Recent' }));
-      V.recent.forEach(function (t) { els.recent.appendChild(btn('chip', t, 'type', { text: t }, { onclick: null })); });
-      Array.prototype.forEach.call(els.recent.querySelectorAll('button'), function (b) {
-        b.onclick = function () { els.q.value = b.textContent; fit(); send('type', { text: b.textContent }); };
+      V.recent.forEach(function (t) {
+        // its words are its own (never what's on the button: that's cut to fit, magic.css)
+        els.recent.appendChild(btn('chip', t, 'type', { text: t }, { title: t, onclick: function () { els.q.value = t; fit(); send('type', { text: t }); } }));
       });
     }
     els.recent.hidden = !(V.recent || []).length;

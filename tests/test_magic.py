@@ -966,6 +966,21 @@ def test_everyday_phrasings_v399():
     check("a word a letter off one that 3,000 tags share is read in well under a second", took < 1.5, f"{took:.2f} s")
 
 
+def test_recents_are_short_v3911():
+    """3.9.11 (Sam's screenshot: a pasted list of card ids ran off the window
+    as a Recent): a recent is something to type again, so pasted ids and
+    anything long aren't kept or shown, and a chip can't outgrow the window."""
+    from due_crew import magic_flow as F
+    check("recents: a topic is kept; a pasted list of ids, or anything long, isn't (and one an older build kept isn't shown)",
+          F._recent_ok("pv loop") and F._recent_ok("20 new from chapter 3") and not F._recent_ok("cid:1784123991226,1784123991260,1784123991264")
+          and not F._recent_ok("1784123991226 1784123991260") and not F._recent_ok("x" * 61) and F._recent_ok("chapter 12") and F.RECENT_MAX == 60)
+    css = open(os.path.join(REPO, "due_crew", "magicpage", "magic.css")).read()
+    js = open(os.path.join(REPO, "due_crew", "magicpage", "magic.js")).read()
+    check("recents: a chip is cut to the window with an ellipsis, and types its own words (not what's left on the button)",
+          ".dcm .recent .chip { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
+          and "els.q.value = t; fit(); send('type', { text: t });" in js and "b.textContent" not in js)
+
+
 def test_quotes_mean_text_v399():
     """3.9.9 (Sam: "build quotes mean text"): words in quotes are looked for
     in the cards themselves, a tag by that name or not; beside a topic, a
