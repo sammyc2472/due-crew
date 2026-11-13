@@ -18230,8 +18230,12 @@ def test_leeches_392():
         dc._on_js(False, as_board("duecrew:insleech:10:tip:102"), DeckBrowser())
         q = lambda cid: conn.execute("SELECT queue, lapses, type FROM cards WHERE id = ?", (cid,)).fetchone()  # noqa: E731
         tags = lambda nid: conn.execute("SELECT tags FROM notes WHERE id = ?", (nid,)).fetchone()[0]  # noqa: E731
-        check("glue: the tip in a sheet, Bring it back from there: unsuspended, schedule kept, the leech tag off, one undo step",
-              sheets_asked[-1] == ("Dre's hook", "Dre: fiesta takes ser: it's an event", "Bring it back") and q(102) == (2, 8, 2)
+        was = q(102)
+        check("glue: the hook in a sheet, its words alone (3.9.12: Insights is data only, nothing to bring back from here); the card as it was",
+              sheets_asked[-1] == ("Dre's hook", "Dre: fiesta takes ser: it's an event", "OK") and q(102) == was and was[0] == -1, (sheets_asked[-1], was))
+        LF.bring_back(10, [102])
+        check("glue: bring back: unsuspended, schedule kept, the leech tag off, one undo step",
+              q(102) == (2, 8, 2)
               and "leech" not in tags(102) and col.undo_steps[-1] == ("Due Crew: bring back", [102]) and said[-1] == "Back in your reviews.",
               (sheets_asked, q(102), col.undo_steps[-1:]))
         dc._on_js(False, as_board("duecrew:insleech:10:ask:103"), DeckBrowser())

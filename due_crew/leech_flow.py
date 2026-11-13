@@ -359,18 +359,15 @@ def _listed(v):
 
 
 def show_tip(did, cid):
-    """A crewmate's tip on it, in a sheet: Bring back from there when it's
-    suspended."""
+    """A crewmate's hook on it, in a sheet. Words only (3.9.12: Insights is
+    data only, so Bring it back isn't offered from here either)."""
     c = _card_of(did, cid)
     if not c or not c.get("tip"):
         return
     from . import sheets
     words = "\n\n".join(f"{t['name']}: {t['text']}" for t in c["tip"])
     head = f"{c['tip'][0]['name']}'s hook" if len(c["tip"]) == 1 else "Hooks from your crew"
-    if c["susp"]:
-        sheets.confirm(head, words, "Bring it back", lambda: bring_back(did, [c["cid"]]))
-    else:
-        sheets.confirm(head, words, "OK", lambda: None)
+    sheets.confirm(head, words, "OK", lambda: None)
 
 
 def ask(did, cid):
