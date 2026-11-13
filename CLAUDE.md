@@ -231,6 +231,9 @@ version (`docs/history.md` is its index). Read a feature's entry there before ch
 5. Sam updates AnkiWeb by hand: listing 2035408484, update Branch 1 with the
    new file, re-paste README if it changed. The listing can lag releases.
 
+`tools/gate.sh` runs the whole gate here, one line a check (`--quick`: pyflakes and the suites;
+`ANKI_PY=<a Python with aqt>` adds the dialogs and the click test, last and alone), and
+`tools/ship.sh` writes `ship/` (the package, the AnkiWeb README, the deploy block).
 `tools/release.sh` does 3–4 from a clean `main` (`--tag` tags and pushes);
 `tools/check_prod.sh` checks the live API and site after the deploy
 (no sign-in, no mail). The tags' deploy job stands down until the GitHub

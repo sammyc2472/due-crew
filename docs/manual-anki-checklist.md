@@ -731,6 +731,11 @@ In Anki (as a follower):
 - [ ] A plan of more than 16 sets: You › Plans' path folds the runs done ("22 done") and far ahead ("26 to come") into one piece each, its count under it; sets behind, today's, the two before and the next four stay their own; a click on a fold opens its day. A plan of 16 or fewer: a segment a set. Light and dark.
 - [ ] You › Plans' week, click today: its details have one Study at the top right (no Study on each set, none on the card's line); it opens "Due Crew::<plan> · Today" on Anki's Study screen with today's new cards and the plan's reviews due today, nothing due tomorrow; the tooltip says how many of each. Click a past day behind: its Study builds "Due Crew::<plan> · <day>" with that day's cards not seen yet and its reviews due today. Today's set (B): its own deck loses those cards and keeps the rest. A day ahead: no Study. Tomorrow morning both decks are empty and gone.
 
+### 3.9.12: deck counts, and a quiet board (about 5 minutes)
+- [ ] A deck with "bury new siblings" and "bury review siblings" on, with notes that have two cards due. Settings › Study › Reviewing › Deck counts leave out buried siblings: off, the deck list is Anki's. On: New and Due drop to about half; point at one: "Anki counts 12. 6 are siblings it will bury as you go." Open the deck: Anki's own count at the top matches ours.
+- [ ] A deck with burying off: its numbers don't change. Turn the switch off: Anki's numbers are back.
+- [ ] Leave the Decks screen open with a menu or a fold open on the board for a few minutes: when a refresh comes back with nothing new, it stays open and nothing flickers.
+
 ### 3.9.12: the soundtrack's floor (about 5 minutes)
 - [ ] Point at the floor: one round button, ⌄ (fold). No ×.
 - [ ] Tap "+N" or the folded chip: the song list ends with "Turn off the dance floor". Click it: the floor goes, "Dance floor off · Undo" in the corner for a few seconds; Undo brings it back. Left alone, Settings › Board › Dance floor brings it back. My own song's card has the same line.
