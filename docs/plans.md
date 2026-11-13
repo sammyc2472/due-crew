@@ -2,7 +2,7 @@
 
 The one current description of study plans: what a plan is, what a
 follow is, what each side keeps, and what happens each morning. The why
-of each piece, by version, is in `docs/history.md` (search for the
+of each piece, by version, is in `docs/history/` (search for the
 feature); `docs/plans-design.md` is the 3.1–3.5 design notes, kept for
 their reasoning. The plan text format (what Text and an AI write) is
 `site/public/plan-text.html`, served at duecrew.com/plan-text.
