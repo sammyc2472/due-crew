@@ -5524,3 +5524,37 @@ every release that changes how something works.
   site's (requests' JSON has spaces), so a card-heavy plan meets the body
   ceiling near 1.4 MB of doc from Anki; compact JSON in `api._call` would
   fix it and is left for its own change.
+- 3.9.12, current and consistent (Sam, 13 Nov: "make a plan to hit all
+  the things to get them current and consistent", then "Go for all of
+  it... I trust you"; no mocks this round, his call). An audit of every
+  window and board part against the week's decisions (one grid, no hover
+  growth, terse copy, page actions as small pills, questions in sheets,
+  words folded till Show, Insights data only, one name a thing), then
+  what it found:
+  One word: what a crewmate leaves on a card is a hook wherever it's
+  read (the asks list's Hook and "1 hook", Send a hook, "left a hook on
+  a card you flagged", a leech's "Dre's hook", the scrapbook's "A hook
+  that helped", the privacy page). The routes, tables and code keep tip.
+  Insights is data only, the last corner: a leech's hook sheet shows its
+  words and OK; Bring it back went from it.
+  Qt windows: they already wore the board's look; their buttons and
+  headings are sentence case now, as the board's are (Send code, Sign
+  in, Copy invite, New code, Add back, Look up, Open room, Join a
+  squad…, Shared decks, Your emoji, Open a study room); the Friends
+  list says "Name · waiting", no tick or hourglass.
+  Squads: the shown squad's own actions (Copy invite, Lock, Leave) sit
+  on the "+ Create / join a squad" line, at its right: one row under the
+  table where there were two (`squads._squad_add(acts)`). The asks list
+  lost its emoji marks.
+  Outside: the landing page's small board had a medal and #2, #3 (no
+  ranking anywhere: gone), its features say Magic search, Hooks and Pip
+  Party, a cheer is "a little show"; its pictures and the README's are
+  rendered from the board as it is (`tools/readme_images.py` and `.js`
+  write the site's `board.png` and `board-dark.png` too now). The README
+  says hooks, Insights as it is (it only shows), catching up, Pip Party.
+  The site named a menu item that went in 3.9.3 ("Make a plan from a
+  deck") in four places: Tools › Due Crew › Plans › New plan… now.
+  Looked at and left: bingo, the closet, How you study, the Fifteen,
+  rooms, the share cards and the map card, the plan windows, Your AI
+  app: already in step. Pip Party keeps its name on the TV and phones;
+  the tab says Party (3.9.10).

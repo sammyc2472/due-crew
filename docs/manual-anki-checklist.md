@@ -896,6 +896,13 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 - [ ] On a card with a tip, press Show in the corner: the bubble grows to fit the words, which fade in; the chip beside Edit fades its words in too.
 - [ ] Reduce motion (system setting): nothing slides, grows or turns; the banner only fades.
 
+### 3.9.12: current and consistent
+
+- [ ] Squads: under the table, one line: "+ Create / join a squad" at the left, Copy invite · Lock · Leave at the right.
+- [ ] Crew › Decks, Asked of you: the button says Hook; an answered ask says "1 hook". Insights › Leeches: "Dre's hook" opens its words with OK only.
+- [ ] Sign-in, Welcome, Friends, Squads, Open a study room: buttons and headings in sentence case; Friends lists "Name · waiting".
+- [ ] duecrew.com: no medal or #2 on a phone; six features; the board picture matches Anki in light and dark. /classes and a new plan's empty page say Tools › Due Crew › Plans › New plan…
+
 ### 3.9.11: hooks, Magic search's Recent
 
 - [ ] Magic search, typing a topic: the box says "N cards · about M min" on its right; as each new answer lands the count rolls up, the bar grows and the star twinkles (more for 100 cards or more). A long line of words, or a narrow window: no answer in the box, nothing covered.

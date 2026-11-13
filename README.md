@@ -120,7 +120,7 @@ you: each day you owe has **Study** and **Ignore**, and its dates don't move.
   on a video or a card, go in your calendar app, and be shared in the
   library.
 
-## Party
+## Pip Party
 
 Party games on your own cards: Trivia, Imposter and Links. Pick what
 they're about in You › Party and press Host. The TV is a window of
