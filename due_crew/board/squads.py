@@ -10,8 +10,10 @@ from datetime import datetime
 from ..logo import board_mark
 from .. import sev as _sev
 
+from ..words import t as _t, tn as _tn
+
 from .base import (HEADERS, QUIET_FOLD_DAYS, _NW_ROOM, _by_theme, _cell, _even_rows, _fmt_time,
-    _label, _pycmd, _quiet_fold, _reviews_cell, _week_span, face, sort_key)
+    _label, _pycmd, _quiet_fold, _reviews_cell, _week_span, face, headers, sort_key)
 from .style import _css
 from .pip import BINGO_PIP_CSS, squad_pip, stamp_pip
 from .crew import _corner, _scroll
@@ -26,15 +28,16 @@ def _plan_squad_html(pid, tabs, people=None, cfg=None):
     st, v = tabs.get("team_state"), tabs.get("team")
     if v is None:
         if st == "failed":
-            return (f'<div class="tq0">Couldn&rsquo;t reach Due Crew. '
-                    f'<a href="#" onclick="{_pycmd(f"planteamretry:{pid}")}">Try again</a></div>')
-        return '<div class="tq0 dc-wait">Fetching&hellip;</div>'
+            return (f'<div class="tq0">{_t("Couldn&rsquo;t reach Due Crew.")} '
+                    f'<a href="#" onclick="{_pycmd(f"planteamretry:{pid}")}">{_t("Try again")}</a></div>')
+        return f'<div class="tq0 dc-wait">{_t("Fetching&hellip;")}</div>'
     if not v.get("on"):
         n = int(v.get("count") or 0)
-        return (f'<div class="tjoin"><b>{f"{n} in its squad" if n else "No one in its squad yet"}</b>'
-                '<span class="k">The squad sees that you showed up today, and your questions and answers; '
-                'your progress counts for the plan&rsquo;s authors. Never your numbers.</span>'
-                f'<a class="bt" href="#" onclick="{_pycmd(f"planteamjoin:{pid}")}">Join its squad</a></div>')
+        says = _t("The squad sees that you showed up today, and your questions and answers; "
+                  "your progress counts for the plan&rsquo;s authors. Never your numbers.")
+        return (f'<div class="tjoin"><b>{_t("{n} in its squad", n=n) if n else _t("No one in its squad yet")}</b>'
+                f'<span class="k">{says}</span>'
+                f'<a class="bt" href="#" onclick="{_pycmd(f"planteamjoin:{pid}")}">{_t("Join its squad")}</a></div>')
     me = tabs.get("me")
 
     def who_face(x, size=None, small=False):  # 3.8.21: their Pip, as on the squad's table; Pip off, the emoji
@@ -42,15 +45,15 @@ def _plan_squad_html(pid, tabs, people=None, cfg=None):
         return pip or face(x.get("emoji"), x.get("name"), small=small)
     faces = ""
     for f in v.get("faces") or []:
-        name = "You" if f.get("uid") == me else str(f.get("name") or "?")
+        name = _t("You") if f.get("uid") == me else str(f.get("name") or "?")
         faces += (f'<div class="face{"" if f.get("shown") else " away"}"><span class="e">{who_face(f, 40)}</span>'
                   f'<b>{e(name)}</b></div>')
     if int(v.get("more") or 0):
         more = int(v["more"])
-        faces += f'<div class="face more"><span class="e">+</span><b>{more:,} more</b></div>'
-    head = f'Showed up today &middot; {int(v.get("shown") or 0)} of {int(v.get("count") or 0)}'
+        faces += f'<div class="face more"><span class="e">+</span><b>{_t("{n} more", n=f"{more:,}")}</b></div>'
+    head = f'{_t("Showed up today")} &middot; {_t("{n} of {of}", n=int(v.get("shown") or 0), of=int(v.get("count") or 0))}'
     if int(v.get("streak") or 0) > 1:
-        head += f' &middot; {int(v["streak"])} days running'
+        head += f' &middot; {_t("{n} days running", n=int(v["streak"]))}'
     out = f'<div class="tg">{head}</div><div class="faces">{faces}</div>'
     b = v.get("bingo")
     if b:
@@ -59,23 +62,22 @@ def _plan_squad_html(pid, tabs, people=None, cfg=None):
         cells = "".join(f'<i class="{"on" if (ev["middle"]["done"] if c == 4 else ev["squares"][CELLS_BINGO.index(c)]["done"]) else ""}"></i>'
                         for c in range(9))
         out += (f'<style>{BINGO_CSS}</style><div class="bg-card" style="margin-top:8px"><span class="bg-mini">{cells}</span>'
-                f'<span class="bg-t"><b>Squad bingo</b><span>{e(bingo_line(ev))}</span></span>'
-                f'<a href="#" onclick="{_pycmd(f"planteambingo:{pid}")}">Open</a></div>')
+                f'<span class="bg-t"><b>{_t("Squad bingo")}</b><span>{e(bingo_line(ev))}</span></span>'
+                f'<a href="#" onclick="{_pycmd(f"planteambingo:{pid}")}">{_t("Open")}</a></div>')
     draft = e(str(tabs.get("draft") or ""), quote=True)
     send = (f"var v=document.getElementById('dc-tqa-{_re.sub(r'[^A-Za-z0-9]', '', pid)}').value;"
             f"if(v.trim())pycmd('duecrew:planteamask:{pid}:'+encodeURIComponent(v.slice(0,280))+'|'+window.dcBK);return false;")
     iid = f"dc-tqa-{_re.sub(r'[^A-Za-z0-9]', '', pid)}"
-    out += (f'<div class="tg">Ask the squad</div><div class="tqa"><input id="{iid}" maxlength="280" '
-            f'placeholder="Ask anything&hellip;" value="{draft}" onkeydown="if(event.key===\'Enter\'){{{send}}}">'
-            f'<a href="#" onclick="{send}">Ask</a></div>')
+    out += (f'<div class="tg">{_t("Ask the squad")}</div><div class="tqa"><input id="{iid}" maxlength="280" '
+            f'placeholder="{_t("Ask anything&hellip;")}" value="{draft}" onkeydown="if(event.key===\'Enter\'){{{send}}}">'
+            f'<a href="#" onclick="{send}">{_t("Ask")}</a></div>')
     known = tabs.get("known") or {}
     down, have = set(known.get("down") or []), set(known.get("have") or [])
     for a in v.get("asks") or []:
         aid = int(a["id"])
-        who = "You" if a.get("mine") else f'{who_face(a, small=True)} <b>{e(str(a.get("name") or "?"))}</b>'
+        who = _t("You") if a.get("mine") else f'{who_face(a, small=True)} <b>{e(str(a.get("name") or "?"))}</b>'
         if a.get("guid"):
-            on = " on a card you have down" if a["guid"] in down else " on a card"
-            head = f'<span>{who}{on}</span>'
+            head = f'<span>{_t("{who} on a card you have down", who=who) if a["guid"] in down else _t("{who} on a card", who=who)}</span>'
             body = f'<div>&ldquo;{e(str(a.get("text") or ""))}&rdquo;</div>'
         else:
             head = f'<span>{who}: {e(str(a.get("text") or ""))}</span>'
@@ -83,35 +85,35 @@ def _plan_squad_html(pid, tabs, people=None, cfg=None):
         reps = ""
         for r in a.get("replies") or []:
             rid = int(r["id"])
-            rn = "You" if r.get("mine") else e(str(r.get("name") or "?"))
+            rn = _t("You") if r.get("mine") else e(str(r.get("name") or "?"))
             extra = ""
             if a.get("mine") and not r.get("mine"):
-                extra = f'<a href="#" onclick="{_pycmd(f"planteamhelped:{pid}:{rid}")}">{"Helped &#10003;" if r.get("helped") else "That helped"}</a>'
+                extra = f'<a href="#" onclick="{_pycmd(f"planteamhelped:{pid}:{rid}")}">{_t("Helped") + " &#10003;" if r.get("helped") else _t("That helped")}</a>'
             elif r.get("helped"):
-                extra = '<span class="ok"> &#10003; helped</span>'
+                extra = f'<span class="ok"> &#10003; {_t("helped")}</span>'
             if r.get("remove"):
-                extra += f'<a href="#" onclick="{_pycmd(f"planteamremove:{pid}:{rid}")}">Remove</a>'
+                extra += f'<a href="#" onclick="{_pycmd(f"planteamremove:{pid}:{rid}")}">{_t("Remove")}</a>'
             elif not r.get("mine"):
-                extra += f'<a class="q" href="#" onclick="{_pycmd(f"planteamreport:{pid}:{rid}")}">Report</a>'
-            reps += (f'<div class="rep"><b>{rn}</b>{" (author)" if r.get("author") else ""}: '
+                extra += f'<a class="q" href="#" onclick="{_pycmd(f"planteamreport:{pid}:{rid}")}">{_t("Report")}</a>'
+            reps += (f'<div class="rep"><b>{rn}</b>{" " + _t("(author)") if r.get("author") else ""}: '
                      f'{e(str(r.get("text") or ""))}{extra}</div>')
         n_rep = len(a.get("replies") or [])
         bits = [x for x in (str(a.get("topic") or ""),
-                            f'{n_rep} repl{"ies" if n_rep != 1 else "y"}' if n_rep else "") if x]
-        acts = f'<a href="#" onclick="{_pycmd(f"planteamreply:{pid}:{aid}")}">{"Answer" if a.get("guid") else "Reply"}</a>'
+                            _tn("{n} reply", "{n} replies", n_rep) if n_rep else "") if x]
+        acts = f'<a href="#" onclick="{_pycmd(f"planteamreply:{pid}:{aid}")}">{_t("Answer") if a.get("guid") else _t("Reply")}</a>'
         if a.get("guid") and a["guid"] in have:
-            acts += f'<a href="#" onclick="{_pycmd(f"planteamcard:{pid}:{aid}")}">See the card</a>'
+            acts += f'<a href="#" onclick="{_pycmd(f"planteamcard:{pid}:{aid}")}">{_t("See the card")}</a>'
         if a.get("remove"):
-            acts += f'<a class="q" href="#" onclick="{_pycmd(f"planteamremove:{pid}:{aid}")}">Remove</a>'
+            acts += f'<a class="q" href="#" onclick="{_pycmd(f"planteamremove:{pid}:{aid}")}">{_t("Remove")}</a>'
         elif not a.get("mine"):
-            acts += f'<a class="q" href="#" onclick="{_pycmd(f"planteamreport:{pid}:{aid}")}">Report</a>'
+            acts += f'<a class="q" href="#" onclick="{_pycmd(f"planteamreport:{pid}:{aid}")}">{_t("Report")}</a>'
         out += (f'<div class="tq"><div class="t">{head}<span class="m">{_team_ago(a.get("act") or a.get("at"))}</span></div>'
                 f'{body}{reps}<div class="t"><span class="card">{e(" · ".join(bits))}</span>'
                 f'<span class="acts">{acts}</span></div></div>')
     if not v.get("asks"):
-        out += '<div class="tq0">No questions yet.</div>'
-    return out + (f'<div class="dc-line"><a href="#" onclick="{_pycmd("duetab:plans")}">Open the plan</a> &middot; '
-                  f'<a href="#" onclick="{_pycmd(f"planteamleave:{pid}")}">Leave</a></div>')
+        out += f'<div class="tq0">{_t("No questions yet.")}</div>'
+    return out + (f'<div class="dc-line"><a href="#" onclick="{_pycmd("duetab:plans")}">{_t("Open the plan")}</a> &middot; '
+                  f'<a href="#" onclick="{_pycmd(f"planteamleave:{pid}")}">{_t("Leave")}</a></div>')
 
 
 SQUAD_FIELDS = {"reviews": "reviews", "time": "time_ms",
@@ -125,8 +127,8 @@ def _squad_add(acts=""):
     """3.9.10: the way into another squad, on the Squads tab alone, under the one shown.
     3.9.12: the shown squad's own actions (Copy invite, Lock, Leave) sit on the same line,
     at its right: one row under the table where there were two."""
-    return (f'<div class="dc-add"><a href="#" title="With a squad&rsquo;s code, or start one" '
-            f'onclick="{_pycmd("squadadd")}">+ Create / join a squad</a>'
+    return (f'<div class="dc-add"><a href="#" title="{_t("With a squad&rsquo;s code, or start one")}" '
+            f'onclick="{_pycmd("squadadd")}">{_t("+ Create / join a squad")}</a>'
             + (f'<span class="acts">{acts}</span>' if acts else "") + '</div>')
 
 
@@ -176,7 +178,8 @@ def _squad_week_line(rows, day):
     days, people = squad_week(rows, day)
     if people < 2:
         return ""
-    return f'<div class="dc-line dc-sum sqwk">Last 7 days: <b>{days:,}</b> study days between {people:,} of you</div>'
+    said = _t("Last 7 days: {days} study days between {people} of you", days=f"<b>{days:,}</b>", people=f"{people:,}")
+    return f'<div class="dc-line dc-sum sqwk">{said}</div>'
 
 
 def _squads_html(view, cfg, crew_by=None):
@@ -190,16 +193,14 @@ def _squads_html(view, cfg, crew_by=None):
         return sw + _plan_squad_html(str(view.get("pid") or ""), view, crew_by, cfg) + _squad_add()
     name = _html.escape(str(view.get("name") or "?"))
     if state == "none":
-        return sw + '<div class="dc-line">No squads yet.</div>' + _squad_add()
+        return sw + f'<div class="dc-line">{_t("No squads yet.")}</div>' + _squad_add()
     if state == "loading":
-        return sw + '<div class="dc-line dc-wait">Fetching&hellip;</div>'
+        return sw + f'<div class="dc-line dc-wait">{_t("Fetching&hellip;")}</div>'
     if state == "error":
-        return (sw + '<div class="dc-line">Couldn&rsquo;t '
-                'load. Check your connection and Refresh.</div>')
+        return sw + f'<div class="dc-line">{_t("Couldn&rsquo;t load. Check your connection and Refresh.")}</div>'
     if state == "gone":
-        return (sw + f'<div class="dc-line">You&rsquo;re no '
-                f'longer in {name}. <a href="#" '
-                f'onclick="{_pycmd("squaddrop:" + str(view.get("current", "")))}">Remove</a></div>')
+        return (sw + f'<div class="dc-line">{_t("You&rsquo;re no longer in {name}.", name=name)} <a href="#" '
+                f'onclick="{_pycmd("squaddrop:" + str(view.get("current", "")))}">{_t("Remove")}</a></div>')
     rows = view.get("rows") or []
     day, yesterday = view.get("day", ""), view.get("yesterday", "")
     sort = sort_key(cfg)  # the crew table's sort, same headers, same links
@@ -223,16 +224,16 @@ def _squads_html(view, cfg, crew_by=None):
     rest = [r for r in rest if r not in long_q] + long_q
     long_ids = {id(r) for r in long_q}
     people = int(view.get("people") or len(rows))
-    headline = f'{people:,} in {name}'
+    headline = _t("{n} in {name}", n=f"{people:,}", name=name)
     if view.get("open") is False:
-        headline += " &middot; locked"
+        headline += " &middot; " + _t("locked")
     if live:
-        headline += (f' &middot; {len(live):,} studying today &middot; '
-                     f'{int(view.get("reviews") or 0):,} reviews together')
+        headline += (f' &middot; {_t("{n} studying today", n=f"{len(live):,}")} &middot; '
+                     f'{_t("{n} reviews together", n=format(int(view.get("reviews") or 0), ","))}')
     # 3.8.0, head row B: the squads' names in the table's corner, the
     # headline under it (rebuilt below when show-up mode is on)
     heads = _corner(sw)
-    for key, label in HEADERS:  # 3.9.10, one grid: Crew's four columns; 7 days is in each name's line
+    for key, label in headers():  # 3.9.10, one grid: Crew's four columns; 7 days is in each name's line
         on = "on" if key == hsort else ""
         arrow = " &#9662;" if key == hsort else ""
         heads += (f'<th><a class="{on}" href="#" '
@@ -241,10 +242,10 @@ def _squads_html(view, cfg, crew_by=None):
     numberless = lambda r: all(r.get(k) is None for k in ("reviews", "time_ms", "retention", "streak"))
     if show_up:
         live.sort(key=lambda r: (-(r.get("week") or 0), r["name"].lower()))
-        headline = (f'{people:,} in {name}' + (" &middot; locked" if view.get("open") is False else "")
-                    + (f" &middot; {len(live):,} showed up today" if live else ""))
+        headline = (_t("{n} in {name}", n=f"{people:,}", name=name) + (" &middot; " + _t("locked") if view.get("open") is False else "")
+                    + (" &middot; " + _t("{n} showed up today", n=f"{len(live):,}") if live else ""))
         heads = (_corner(sw) + '<th><span style="color: var(--dc-muted); font-size: 11px; '
-                 'font-weight: 700;">&#128197; 7 days</span></th>')
+                 f'font-weight: 700;">&#128197; {_t("7 days")}</span></th>')
     body = ""
     folded = False
     for r in live + waiting_today + rest:
@@ -260,29 +261,29 @@ def _squads_html(view, cfg, crew_by=None):
             cls = "qh"
         if r.get("you"):
             cls = "you"
-            link = (f'<a class="dc-pl" href="#" title="See what your crew sees" '
+            link = (f'<a class="dc-pl" href="#" title="{_t("See what your crew sees")}" '
                     f'onclick="{_pycmd("profile:" + uid)}">{pname}</a>')
         else:
             if r.get("crew"):
-                note = ' <span class="la faded">&middot; crew</span>'
+                note = f' <span class="la faded">&middot; {_t("crew")}</span>'
             elif r.get("knocked_me"):
-                note = ' <span class="la fresh">&middot; added you</span>'
+                note = f' <span class="la fresh">&middot; {_t("added you")}</span>'
             elif r.get("pending"):
-                note = ' <span class="la faded">&middot; waiting</span>'
-            link = (f'<a class="dc-pl" href="#" title="Open card" '
+                note = f' <span class="la faded">&middot; {_t("waiting")}</span>'
+            link = (f'<a class="dc-pl" href="#" title="{_t("Open card")}" '
                     f'onclick="{_pycmd("ecard:" + uid)}">{pname}</a>')
         if not show_up and isinstance(r.get("week"), int) and not isinstance(r.get("week"), bool):
-            note = f' <span class="la faded">&middot; {max(0, min(7, r["week"]))}/7 days</span>' + note
+            note = f' <span class="la faded">&middot; {_t("{n}/7 days", n=max(0, min(7, r["week"])))}</span>' + note
         if pip:  # beside the name, outside its underline, as on Crew; room above for a hat (tr.sv)
             link, cls = pip + link, cls + " sv"
         if r.get("day") != day:
             cls += " dim"
-            when = "yesterday" if r.get("day") == yesterday else "quiet"
+            when = _t("yesterday") if r.get("day") == yesterday else _t("quiet")
             note += f' <span class="la faded">&middot; {when}</span>'
             rank = ""
         elif zero(r):
             cls += " dim"
-            note += ' <span class="la faded">&middot; nothing yet today</span>'
+            note += f' <span class="la faded">&middot; {_t("nothing yet today")}</span>'
             rank = ""
         elif show_up or numberless(r):
             rank = ""
@@ -307,16 +308,15 @@ def _squads_html(view, cfg, crew_by=None):
                  f'<td class="n">{_cell(r.get("streak"))}</td></tr>')
     body = _even_rows(body)
     # the squad's own line; Share today sits in the footer, as on Today
-    acts = [f'<a href="#" onclick="{_pycmd("squadinvite")}">Copy invite</a>']
+    acts = [f'<a href="#" onclick="{_pycmd("squadinvite")}">{_t("Copy invite")}</a>']
     if view.get("founder_me"):
         acts.append(f'<a href="#" onclick="{_pycmd("squadlock")}">'
-                    f'{"Open" if view.get("open") is False else "Lock"}</a>')
-    acts.append(f'<a href="#" onclick="{_pycmd("squadleave")}">Leave</a>')
+                    f'{_t("Open") if view.get("open") is False else _t("Lock")}</a>')
+    acts.append(f'<a href="#" onclick="{_pycmd("squadleave")}">{_t("Leave")}</a>')
     foot = _squad_add(" &middot; ".join(acts))
     bingo = (f"<style>{BINGO_CSS}</style>" + bingo_card_html(view["bingo"])) if view.get("bingo") else ""  # 3.6
     if not body:
-        return (sw + bingo + '<div class="dc-line">No one&rsquo;s '
-                'synced yet.</div>' + foot)
+        return sw + bingo + f'<div class="dc-line">{_t("No one&rsquo;s synced yet.")}</div>' + foot
     # the bingo card under the table, the names it's for being in its corner
     return (_scroll(f'<table class="dc-s-{hsort}"><tr>{heads}</tr>{body}</table>' if not show_up
                     else f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class='))
@@ -384,7 +384,7 @@ BINGO_CSS = """
 
 def _bg_need(sq, need):
     # the number, never the share: "a third of you" said nothing in a small squad
-    return f"{need} of you"
+    return _t("{n} of you", n=need)
 
 
 def bingo_card_html(bv):
@@ -402,21 +402,21 @@ def bingo_card_html(bv):
             cells += f'<i class="{"on" if ev["squares"][CELLS_BINGO.index(c)]["done"] else ""}"></i>'
     m, mid = card["middle"], ev["middle"]
     if bv.get("new"):
-        line = (f'&#129376; A new card. This week&rsquo;s middle: {e(m["icon"])} '
-                f'<b>{e(m["name"])}</b>, {e(m["rule"][:1].lower() + m["rule"][1:])}.')
+        line = "&#129376; " + _t("A new card. This week&rsquo;s middle: {middle}, {rule}.", middle=f'{e(m["icon"])} <b>{e(m["name"])}</b>',
+                                 rule=e(m["rule"][:1].lower() + m["rule"][1:]))
     else:
         stamps = sum(1 for q in ev["squares"] if q["done"]) + (1 if mid["done"] else 0)
         if ev["lines"] >= 8:
-            state = "the whole card"
+            state = _t("the whole card")
         elif ev["lines"]:
-            state = "BINGO" if ev["lines"] == 1 else f'{ev["lines"]} lines'
+            state = _t("BINGO") if ev["lines"] == 1 else _t("{n} lines", n=ev["lines"])
         else:
             left = len(bv.get("closest") or [])
-            state = "one away from bingo" if left == 1 else f"{left} away from bingo"
-        line = f"{stamps} of 9 &middot; {state}"
+            state = _t("one away from bingo") if left == 1 else _t("{n} away from bingo", n=left)
+        line = f'{_t("{n} of 9", n=stamps)} &middot; {state}'
     return (f'<div class="bg-card"><span class="bg-mini">{cells}</span>'
-            f'<span class="bg-t"><b>Squad bingo</b><span>{line}</span></span>'
-            f'<a href="#" onclick="{_pycmd("bingo")}">Open the card</a></div>')
+            f'<span class="bg-t"><b>{_t("Squad bingo")}</b><span>{line}</span></span>'
+            f'<a href="#" onclick="{_pycmd("bingo")}">{_t("Open the card")}</a></div>')
 
 
 CELLS_BINGO = (0, 1, 2, 3, 5, 6, 7, 8)
@@ -434,20 +434,20 @@ def bingo_html(bv, cfg, loading=False, team=False, people=None):
     head = (f'<div id="due-crew" class="dc-frame bg-full">{_css(cfg)}<style>{BINGO_CSS}</style>{sheet}'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span></div>')
     team_card = bool(bv and bv.get("team")) or team  # 3.7.3: a plan team's card: counts, never who
-    back = (f'<a class="bg-a" href="#" onclick="{_pycmd("planteambingoback")}">&lsaquo; Squads</a>' if team_card
-            else f'<a class="bg-a" href="#" onclick="{_pycmd("bingoback")}">&lsaquo; Squads</a>')
+    back = (f'<a class="bg-a" href="#" onclick="{_pycmd("planteambingoback")}">&lsaquo; {_t("Squads")}</a>' if team_card
+            else f'<a class="bg-a" href="#" onclick="{_pycmd("bingoback")}">&lsaquo; {_t("Squads")}</a>')
     if not bv:
-        said = "Fetching&hellip;" if loading else "No card this week yet. Refresh brings it."
-        return head + (f'<div class="bg-bar">{back}<b>Squad bingo</b></div>'
+        said = _t("Fetching&hellip;") if loading else _t("No card this week yet. Refresh brings it.")
+        return head + (f'<div class="bg-bar">{back}<b>{_t("Squad bingo")}</b></div>'
                        f'<div class="bg-q{" dc-wait" if loading else ""}">{said}</div></div>')
     card, ev = bv["card"], bv["ev"]
     names, me = bv.get("names") or {}, bv.get("me")
     progress = bv.get("progress") or []
     lined = set(ev.get("cells") or [])
     squares, infos = "", ""
-    fams = {"early": "Early", "spread": "Spread out", "focus": "Focus", "volume": "Bigger day", "fresh": "New cards",
-            "often": "Showing up", "clean": "Keeping up", "wild": "Wildcard"}
-    diffs = {"e": ("&#9679;", "easy"), "m": ("&#9679;&#9679;", "medium"), "h": ("&#9679;&#9679;&#9679;", "hard")}
+    fams = {"early": _t("Early"), "spread": _t("Spread out"), "focus": _t("Focus"), "volume": _t("Bigger day"), "fresh": _t("New cards"),
+            "often": _t("Showing up"), "clean": _t("Keeping up"), "wild": _t("Wildcard")}
+    diffs = {"e": ("&#9679;", _t("easy")), "m": ("&#9679;&#9679;", _t("medium")), "h": ("&#9679;&#9679;&#9679;", _t("hard"))}
     show = "var i=this.dataset.i;document.querySelectorAll('#due-crew .bg-info>div').forEach(function(x){x.hidden=x.dataset.i!==i});" \
            "document.querySelectorAll('#due-crew .bg-sq').forEach(function(x){x.classList.toggle('sel',x.dataset.i===i)});return false;"
     for c in range(9):
@@ -456,16 +456,16 @@ def bingo_html(bv, cfg, loading=False, team=False, people=None):
             m, mid = card["middle"], ev["middle"]
             pct = 100 if mid["done"] else int(100 * mid["have"] / max(1, mid["goal"]))
             free = m.get("type") == "free"
-            said = "Unlocked" if mid["done"] else f'{mid["have"]} of {mid["goal"]} {e(m.get("unit") or "")}'.strip()
+            said = _t("Unlocked") if mid["done"] else f'{_t("{n} of {of}", n=mid["have"], of=mid["goal"])} {e(m.get("unit") or "")}'.strip()
             prog = "" if free else (f'<span class="pb"><i style="width:{pct}%"></i></span>'
                                     f'<span class="pp">{said}</span>')
             squares += (f'<button class="bg-sq mid {"done" if mid["done"] else ""} {cls}" data-i="m" onclick="{show}">'
                         f'<span class="ic">{e(m["icon"]) if mid["done"] else "&#128274;"}</span>'
                         f'<span class="tt">{e(m["name"])}</span><span class="rl">{e(m["rule"])}</span>{prog}</button>')
-            state = ("Unlocked. It counts toward all four lines through the middle." if mid["done"]
-                     else f'{mid["have"]} of {mid["goal"]} so far. The squad unlocks it together.')
+            state = (_t("Unlocked. It counts toward all four lines through the middle.") if mid["done"]
+                     else _t("{n} of {of} so far. The squad unlocks it together.", n=mid["have"], of=mid["goal"]))
             infos += (f'<div data-i="m" hidden><b>{e(m["icon"])} {e(m["name"])}: {e(m["rule"])}</b>'
-                      f'<span>{e(m["detail"])}</span><span class="k">{"This week the middle is free." if free else state}</span></div>')
+                      f'<span>{e(m["detail"])}</span><span class="k">{_t("This week the middle is free.") if free else state}</span></div>')
             continue
         i = CELLS_BINGO.index(c)
         sq, st = card["squares"][i], ev["squares"][i]
@@ -486,47 +486,47 @@ def bingo_html(bv, cfg, loading=False, team=False, people=None):
         rule = f'<span class="rl">{e(sq["rule"])}</span>' if known else ""
         squares += (f'<button class="bg-sq {"done" if st["done"] else ""} {cls}{" stamped" if pips and who else ""}" data-i="{i}" onclick="{show}">'
                     f'<span class="fm">{fams.get(sq.get("fam"), "")}</span><span class="df" title="{dname}">{dots}</span>'
-                    f'<span class="ic">{e(sq["icon"])}</span><span class="tt">{e(sq["title"]) if known else "Update to play"}</span>'
+                    f'<span class="ic">{e(sq["icon"])}</span><span class="tt">{e(sq["title"]) if known else _t("Update to play")}</span>'
                     f'{rule}{team}{marks}</button>')
-        whose = ", ".join(e(names.get(u, ("?", ""))[0]) for u in who) if who else (f"{n_who} of you" if n_who else "")
+        whose = ", ".join(e(names.get(u, ("?", ""))[0]) for u in who) if who else (_t("{n} of you", n=n_who) if n_who else "")
         if st["need"] > 1 or sq.get("need") in ("half", "third", "quarter"):
-            state = (f'A team square: {_bg_need(sq, st["need"])} have to pass the mark this week. '
-                     + (f"Done by {whose}." if st["done"] else f"So far: {whose}." if whose else "Nobody yet."))
+            state = (_t("A team square: {need} have to pass the mark this week.", need=_bg_need(sq, st["need"])) + " "
+                     + (_t("Done by {who}.", who=whose) if st["done"] else _t("So far: {who}.", who=whose) if whose else _t("Nobody yet.")))
         else:
-            state = f"Stamped by {whose}." if whose else "Not yet. Any one of you can stamp it."
+            state = _t("Stamped by {who}.", who=whose) if whose else _t("Not yet. Any one of you can stamp it.")
         mine = ""
         if known and i < len(progress) and progress[i]:
             done, words = progress[i]
             if me in who or done:  # a team card has no who: my own progress says
-                mine = '<span class="me">You: done.</span>'
+                mine = f'<span class="me">{_t("You: done.")}</span>'
             elif sq.get("type") in (bv.get("withheld") or ()):
-                mine = (f'<span class="me">You: {e(words)}</span>'
-                        '<span class="k">Your Privacy switches keep yours on this computer: it would say when or how much.</span>')
+                mine = (f'<span class="me">{_t("You: {words}", words=e(words))}</span>'
+                        f'<span class="k">{_t("Your Privacy switches keep yours on this computer: it would say when or how much.")}</span>')
             else:
-                mine = f'<span class="me">You: {e(words)}</span>'
+                mine = f'<span class="me">{_t("You: {words}", words=e(words))}</span>'
         elif not known:
-            mine = '<span class="k">New this week. Update Due Crew to play it; your squad can still stamp it.</span>'
+            mine = f'<span class="k">{_t("New this week. Update Due Crew to play it; your squad can still stamp it.")}</span>'
         infos += (f'<div data-i="{i}" hidden><b>{e(sq["icon"])} {e(sq["title"])}</b>'
                   f'<span class="k">{fams.get(sq.get("fam"), "")} &middot; {dname}</span>'
                   f'<span>{e(sq["detail"])}</span>{mine}<span class="k">{state}</span></div>')
     stamps = sum(1 for q in ev["squares"] if q["done"]) + (1 if ev["middle"]["done"] else 0)
     if ev["lines"] >= 8:
-        foot = '<span class="bg-shout">THE WHOLE CARD</span><span>All nine, together.</span>'
+        foot = f'<span class="bg-shout">{_t("THE WHOLE CARD")}</span><span>{_t("All nine, together.")}</span>'
     elif ev["lines"]:
-        foot = (f'<span class="bg-shout">BINGO!</span>'
-                f'<span>{"A line" if ev["lines"] == 1 else str(ev["lines"]) + " lines"} this week.</span>')
+        foot = (f'<span class="bg-shout">{_t("BINGO!")}</span>'
+                f'<span>{_t("A line this week.") if ev["lines"] == 1 else _t("{n} lines this week.", n=ev["lines"])}</span>')
     else:
-        foot = f'<span class="bg-q">Closest: {e(", ".join(bv.get("closest") or []))}</span>'
+        foot = f'<span class="bg-q">{_t("Closest: {names}", names=e(", ".join(bv.get("closest") or [])))}</span>'
     older = ""
     if ev.get("older"):
         n = ev["older"]
-        older = f'<div class="bg-row bg-q">{n} of you need{"s" if n == 1 else ""} to update Due Crew to play.</div>'
+        older = f'<div class="bg-row bg-q">{_tn("{n} of you needs to update Due Crew to play.", "{n} of you need to update Due Crew to play.", n)}</div>'
     copy = ("" if team_card else
-            f'<a class="bg-a" href="#" title="The grid in emoji, never who stamped what" onclick="{_pycmd("bingocopy")}">Copy for the group chat</a>')
-    title = f'{e(bv.get("squad") or "Squad")} bingo'
+            f'<a class="bg-a" href="#" title="{_t("The grid in emoji, never who stamped what")}" onclick="{_pycmd("bingocopy")}">{_t("Copy for the group chat")}</a>')
+    title = _t("{squad} bingo", squad=e(bv.get("squad") or _t("Squad")))
     return (head
             + f'<div class="bg-bar">{back}<b>{title}</b>'
-              f'<span class="bg-q">{e(_week_span(card["wk"]))} &middot; {stamps} of 9</span>{copy}</div>'
+              f'<span class="bg-q">{e(_week_span(card["wk"]))} &middot; {_t("{n} of 9", n=stamps)}</span>{copy}</div>'
             + f'<div class="bg-grid">{squares}</div>'
             + f'<div class="bg-row">{foot}</div>' + older
             + f'<div class="bg-info"><div data-i=""></div>{infos}</div>'

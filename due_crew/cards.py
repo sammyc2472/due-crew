@@ -31,6 +31,7 @@ from aqt.utils import tooltip
 from . import app
 from .app import _bg, _state, client
 from .backend.shapes import TRICKY_MAX, clean_note, clean_tricky
+from .words import later as _later, t as _t
 
 KNOWN_IVL = 21
 CLEAN_DAYS = 30
@@ -244,7 +245,7 @@ def pips_by_uid(c=None, only=None):
     from . import sev
     from .board import accent_pair
     return {e["user_id"]: {"svg": sev.slot(sev.svg("idle", rest=True, look=e.get("look"),
-                                                   label=html.escape(f'{e.get("name") or "?"}’s Pip', quote=True)), CHIP_PIP),
+                                                   label=html.escape(_t("{name}’s Pip", name=str(e.get("name") or "?")), quote=True)), CHIP_PIP),
                            "a": list(accent_pair(e.get("accent")))}
             for e in _state["entries"] or []
             if not e.get("you") and e.get("user_id") and (only is None or e["user_id"] in only)}
@@ -273,9 +274,9 @@ def my_peek_pip():
         return None
     from . import sev
     from .board import accent_pair, my_look
-    return {"svg": sev.slot(sev.svg("peek", look=my_look(c), label="Your Pip"), PEEK_PIP), "a": list(accent_pair(c.get("accent"))),
+    return {"svg": sev.slot(sev.svg("peek", look=my_look(c), label=_t("Your Pip")), PEEK_PIP), "a": list(accent_pair(c.get("accent"))),
             # 3.9.12: the same Pip holding a note out, for my own tip once it's opened
-            "held": sev.slot(sev.svg("again", look=my_look(c), label="Your Pip"), PEEK_PIP)}
+            "held": sev.slot(sev.svg("again", look=my_look(c), label=_t("Your Pip")), PEEK_PIP)}
 
 
 def peek_pip(uid, pose="peek"):
@@ -287,7 +288,7 @@ def peek_pip(uid, pose="peek"):
     e = next((e for e in _state["entries"] or [] if e.get("user_id") == uid and not e.get("you")), None)
     if e is None:
         return None
-    return sev.slot(sev.svg(pose, look=e.get("look"), label=html.escape(f'{e.get("name") or "?"}’s Pip', quote=True)), PEEK_PIP)
+    return sev.slot(sev.svg(pose, look=e.get("look"), label=html.escape(_t("{name}’s Pip", name=str(e.get("name") or "?")), quote=True)), PEEK_PIP)
 
 def tip_list(info, local_tips, names, hidden=None):
     """The tips on one card, each person once: [{from, name, text, helped}].
@@ -344,11 +345,11 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None, hidden=No
     if asks:
         who = who_of(asks[0][0])
         q = str(asks[0][2]) if len(asks[0]) > 2 and asks[0][2] else ""
-        view = {"kind": "asked", "text": f"{who}: \u201c{q}\u201d" if q else f"{who} asked about this",
-                "short": f"{who} asked", "ask": False, "cmd": f"knowsreply:{asks[0][0]}:{int(asks[0][1])}", "act": "Tip"}
+        view = {"kind": "asked", "text": f"{who}: \u201c{q}\u201d" if q else _t("{who} asked about this", who=who),
+                "short": _t("{who} asked", who=who), "ask": False, "cmd": f"knowsreply:{asks[0][0]}:{int(asks[0][1])}", "act": _t("Tip")}
         if q:
             view["title"] = q
-            view["fold"] = f"{who} asked about this card"  # the line can give the answer away
+            view["fold"] = _t("{who} asked about this card", who=who)  # the line can give the answer away
         return with_pip(view, asks[0][0])
     knows = [u for u in (info or {}).get("knows") or [] if u in names]
     tips = tip_list(info, local_tips, names, hidden)
@@ -356,35 +357,37 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None, hidden=No
         first = tips[0]
         who = first["name"].split(" ")[0]
         # 3.9.11: on the card a tip is a hook (the same line, now left without being asked)
-        view = {"kind": "tip", "text": f"\U0001F4A1 {who}: {first['text']}", "short": f"\U0001F4A1 {who}'s tip",
+        view = {"kind": "tip", "text": f"\U0001F4A1 {who}: {first['text']}", "short": "\U0001F4A1 " + _t("{who}'s tip", who=who),
                 "title": first["text"], "cmd": "knowstip"}
         if len(tips) > 1:
             view["more"] = len(tips) - 1
         if first["from"]:
-            view["act"] = "\u2713 Helped" if first["helped"] else "This helped"
+            view["act"] = _t("\u2713 Helped") if first["helped"] else _t("This helped")
             view["actcmd"] = f"knowshelped:{first['from']}"
         # 3.9.0 (Sam's note on "Asks and tips"): the tipper's Pip peeks in with it, as who knows it
         # does (the same bubble without it, Pip off); its words folded till Show
         own = first["from"] in pips
-        view["fold"] = f"{who} left a tip" if own else f"\U0001F4A1 {who} left a tip"
+        view["fold"] = ("" if own else "\U0001F4A1 ") + _t("{who} left a tip", who=who)
         view["peek"] = {"uids": [first["from"]] if own else [], "head": f"{who}: {first['text']}" if own else view["text"],
                         "act": view.get("act")}
         return with_pip(view, first["from"]) if own else view
     if knows:
         who = who_of(knows[0])
         more = len(knows) - 1
-        view = {"kind": "knows", "text": who + (f" and {more} more know this" if more > 0 else " knows this"),
+        view = {"kind": "knows", "text": _t("{who} and {n} more know this", who=who, n=more) if more > 0 else _t("{who} knows this", who=who),
                 "short": who + (f" +{more}" if more > 0 else ""), "ask": True,
-                "cmd": "knowsask", "act": "Asked" if mine else "Ask"}
+                "cmd": "knowsask", "act": _t("Asked") if mine else _t("Ask")}
         # one knower's Pip speaks for them; more, or no Pip, the words say who (Ask still reaches everyone with the card)
         speaks = knows[0] in pips and more <= 0
         firsts = [names[u][0].split(" ")[0] for u in knows[:PEEK_MAX]]
         rest = len(knows) - len(firsts)
-        said = (firsts[0] if len(firsts) == 1 and not rest else ", ".join(firsts[:-1]) + " and " + firsts[-1] if not rest
-                else ", ".join(firsts) + f" and {rest} more")
+        # who knows it, said whole (3.10.0): one, a few by name, or the first few and how many more
+        said = (_t("{who} knows this", who=firsts[0]) if len(knows) == 1
+                else _t("{who} know this", who=", ".join(firsts[:-1]) + _t(" and ") + firsts[-1]) if not rest
+                else _t("{who} and {n} more know this", who=", ".join(firsts), n=rest))
         view["peek"] = {"uids": [u for u in knows[:PEEK_MAX] if u in pips],
-                        "head": "I know this one" if speaks else f"{said} know{'s' if len(knows) == 1 else ''} this",
-                        "act": "Asked" if mine else (f"Ask {who}" if speaks else "Ask")}
+                        "head": _t("I know this one") if speaks else said,
+                        "act": _t("Asked") if mine else (_t("Ask {who}", who=who) if speaks else _t("Ask"))}
         return with_pip(view, knows[0])
     return None
 
@@ -399,7 +402,7 @@ def remark_view(plans, guid, ord_):
         return None
     name, text = got[0]
     return {"kind": "remark", "text": f"\U0001F4CC {name}: {text}", "short": f"\U0001F4CC {name}", "title": text,
-            "fold": f"\U0001F4CC A note from {name}"}  # 3.9.0: folded till Show, as a tip is
+            "fold": "\U0001F4CC " + _t("A note from {name}", name=name)}  # 3.9.0: folded till Show, as a tip is
 
 
 # 3.8.22: who asked, or knows it, as their Pip (pips_by_uid): sev.py's own
@@ -420,6 +423,7 @@ _PIP_JS = """function pip(into, D, night, css) {
 _CHIP_JS = """(function () {
   var old = document.getElementById('dc-knows'); if (old) { old.remove(); }
   var D = __DATA__; if (!D) { return; }
+  function W(s) { return (D.words && D.words[s]) || s; }  // 3.10.0: the script's own few words, in the language in use (chip_words)
   var night = /night/i.test(document.body.className) || document.documentElement.classList.contains('night-mode');
   if (Array.isArray(D.accent)) { D.accent = D.accent[night ? 1 : 0]; }
   var edit = document.querySelector('button[onclick*="edit"]');
@@ -438,10 +442,10 @@ _CHIP_JS = """(function () {
     t.textContent = folded ? D.fold : D.text;
     t.setAttribute('data-full', t.textContent); t.setAttribute('data-short', folded ? D.fold : (D.short || D.text));
     if (folded) { s.removeAttribute('title'); } else { s.title = D.title || D.text; }
-    if (D.more && !folded) { var m = document.createElement('span'); m.textContent = '+' + D.more + ' more'; m.style.opacity = '0.7'; s.appendChild(m); }
+    if (D.more && !folded) { var m = document.createElement('span'); m.textContent = W('+{n} more').replace('{n}', D.more); m.style.opacity = '0.7'; s.appendChild(m); }
     var act = folded ? 'Show' : D.act;
     if (act) {
-      var a = document.createElement('b'); a.textContent = act; a.style.cssText = 'flex:none;color:' + D.accent; s.appendChild(a);
+      var a = document.createElement('b'); a.textContent = folded ? W(act) : act; a.style.cssText = 'flex:none;color:' + D.accent; s.appendChild(a);
       if (D.actcmd && !folded) { a.onclick = function (e) { e.stopPropagation(); try { pycmd('duecrew:' + D.actcmd); } catch (x) {} }; }
     }
     s.style.cursor = folded || D.cmd ? 'pointer' : 'default';
@@ -460,6 +464,17 @@ _CHIP_JS = """(function () {
   cell.appendChild(s);
   __PIP__
 })();"""
+
+
+# 3.10.0: the words the chip's own scripts say (the view's are said in Python, as it's made)
+CHIP_WORDS = (_later("Show"), _later("Not now"), _later("Tip"), _later("+{n} more"))
+
+
+def chip_words():
+    """The scripts' own words in the language in use, {English: theirs}; {} when it's English (the scripts
+    say their own), so the English page is as it was."""
+    said = {k: _t(k) for k in CHIP_WORDS}
+    return {k: v for k, v in said.items() if v != k}
 
 
 def chip_js(data):
@@ -494,6 +509,7 @@ _FLOAT_JS = """(function () {
   if (oldPad) { oldPad.remove(); }
   if (!D) { return false; }
   var KEY = __KEY__, gone = false;
+  function W(s) { return (D.words && D.words[s]) || s; }  // 3.10.0: the script's own few words, in the language in use (chip_words)
   function send(cmd) { try { pycmd('duecrew:' + cmd + '|' + KEY); } catch (e) {} }
   var night = /night/i.test(document.body.className) || document.documentElement.classList.contains('night-mode');
   var acc = night ? D.accent[1] : D.accent[0];
@@ -525,7 +541,7 @@ _FLOAT_JS = """(function () {
   }
   var acts = el('div', 'display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;');
   function link(text, color, bold, fn) {
-    var a = el('span', 'cursor:pointer;color:' + color + ';' + (bold ? 'font-weight:700;' : ''), text);
+    var a = el('span', 'cursor:pointer;color:' + color + ';' + (bold ? 'font-weight:700;' : ''), W(text));
     a.onclick = function (e) { e.stopPropagation(); fn(); }; acts.appendChild(a); return a;
   }
   function said() {
@@ -535,7 +551,7 @@ _FLOAT_JS = """(function () {
     acts.textContent = '';
     if (folded) { link('Show', acc, true, open); } else {
       if (D.act) { link(peek ? peek.act : D.act, acc, true, function () { send(D.actcmd || D.cmd); }); }
-      if (D.more) { link('+' + D.more + ' more', c.mut, false, function () { send('knowstip'); }); }
+      if (D.more) { link(W('+{n} more').replace('{n}', D.more), c.mut, false, function () { send('knowstip'); }); }
     }
     link('Not now', c.mut, false, function () { off(true); });
   }
@@ -579,6 +595,7 @@ _FLOAT_JS = """(function () {
       bub.appendChild(el('span', 'position:absolute;top:-1px;right:-1px;width:14px;height:14px;' +
         'background:linear-gradient(225deg, transparent 50%, ' + tint + ' 50%);', ''));
       bub.appendChild(el('span', 'justify-self:start;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:' + tint + ';', 'Tip'));
+      bub.lastChild.textContent = W('Tip');
     }
     bub.appendChild(head); bub.appendChild(acts);
     if (note) {
@@ -680,6 +697,10 @@ def _put(web, where, view, cb=None):
         if cb is not None:
             cb(False)
         return
+    if view:  # 3.10.0: its scripts' own words, when the language in use isn't English
+        said = chip_words()
+        if said:
+            view = dict(view, words=said)
     if view:  # 3.9.12: the chip's shape, checked as it crosses to the page; a slip is counted and drawn anyway
         from . import views
         if views.chip_wrong(view):
@@ -880,8 +901,8 @@ def _with_hook(view, card, guid):
         # 3.9.12 (SC): mine peeks in from the bottom left with my own Pip, as who knows it does from the right
         got = dict(got)
         got.pop("bar", None)
-        got["peek"] = {"uids": [ME], "head": got["text"], "act": got.get("act") or "Add a tip", "side": "left"}
-        got.setdefault("act", "Add a tip")
+        got["peek"] = {"uids": [ME], "head": got["text"], "act": got.get("act") or _t("Add a tip"), "side": "left"}
+        got.setdefault("act", _t("Add a tip"))
         return got
     except Exception:
         from .errs import oops
@@ -905,8 +926,8 @@ def hook_edit(card=None):
     if dlg.result_words is None:
         return
     now = hooks.put(guid, dlg.result_words, log_today(mw.col), share=dlg.result_shared and client().signed_in)
-    tooltip(("Tip saved, for you and your crew." if hooks.shared(guid) else "Tip saved.") if now
-            else ("Tip removed." if have else "Nothing saved."))
+    tooltip((_t("Tip saved, for you and your crew.") if hooks.shared(guid) else _t("Tip saved.")) if now
+            else (_t("Tip removed.") if have else _t("Nothing saved.")))
     flush_hooks()
     if _card() is card and getattr(mw.reviewer, "state", "") == "answer":
         on_answer(card, opened=True)
@@ -1003,18 +1024,18 @@ def ask(card=None):
     who = [names[u][0].split(" ")[0] for u in info.get("knows") or [] if u in names]
     from .ui import ask_text
     if who:
-        listed = (", ".join(who[:-1]) + " and " + who[-1]) if 1 < len(who) <= 3 else \
-            (", ".join(who[:3]) + f" and {len(who) - 3} more" if len(who) > 3 else who[0])
-        lead = f" {listed} {'has' if len(who) == 1 else 'have'} it down."
+        lead = " " + (_t("{who} has it down.", who=who[0]) if len(who) == 1
+                      else _t("{who} have it down.", who=", ".join(who[:-1]) + _t(" and ") + who[-1]) if len(who) <= 3
+                      else _t("{who} and {n} more have it down.", who=", ".join(who[:3]), n=len(who) - 3))
     else:
         lead = ""
     from .together import _today
     asked = next((f for f in clean_tricky(client().session.get("tricky"), _today()) if f["guid"] == guid), None)
     # 3.9.0 (Sam's pick, "Asks and tips" 1): it says who it goes to first, as it goes to
     # everyone in the crew with the card, not only who has it down
-    line, ok = ask_text(mw, "Ask your crew about this card",
-                        "Goes to everyone in your crew who has this card." + lead
-                        + (" You've asked. Change your line, or leave it as it is." if asked else " One line, optional."),
+    line, ok = ask_text(mw, _t("Ask your crew about this card"),
+                        _t("Goes to everyone in your crew who has this card.") + lead + " "
+                        + (_t("You've asked. Change your line, or leave it as it is.") if asked else _t("One line, optional.")),
                         (asked or {}).get("q") or "")
     if not ok:
         return
@@ -1037,7 +1058,7 @@ def flag(card, q):
     from .bingo_flow import bump
     bump("aq")  # 3.6
     app.sync(light=True, fetch=False)
-    tooltip("Asked. Tips show here when the card comes up.")
+    tooltip(_t("Asked. Tips show here when the card comes up."))
 
 
 def _tips_here(guid):
@@ -1059,9 +1080,9 @@ def show_tips():
         head = menu.addAction(f"{t['name'].split(' ')[0]}: {t['text']}")
         head.setEnabled(False)
         if t["from"]:
-            act = menu.addAction("    \u2713 This helped" if t["helped"] else "    This helped")
+            act = menu.addAction(("    \u2713 " if t["helped"] else "    ") + _t("This helped"))
             act.triggered.connect(lambda _c=False, t=t: helped(guid, t["from"], not t["helped"]))
-            hide = menu.addAction("    Hide this tip")  # 3.9.11: it never shows here again
+            hide = menu.addAction("    " + _t("Hide this tip"))  # 3.9.11: it never shows here again
             hide.triggered.connect(lambda _c=False, t=t: hide_hook(guid, t["from"]))
     if not menu.actions():
         return
@@ -1073,7 +1094,7 @@ def helped(guid, from_uid, on=True):
 
     def done(ok):
         if not ok:
-            tooltip("Couldn't reach Due Crew. Check your connection.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         # remembered here too, so the bar says so at once and next time
         for t in ((cl.session.get("cards") or {}).get(guid) or {}).get("tips") or []:
@@ -1082,7 +1103,7 @@ def helped(guid, from_uid, on=True):
         from .together import mark_helped
         mark_helped(guid, from_uid, on)
         if on:
-            tooltip("Thanks. The tips that help most show first.")
+            tooltip(_t("Thanks. The tips that help most show first."))
         card = _card()
         if card is not None and card.note().guid == guid and getattr(mw.reviewer, "state", "") == "answer":
             on_answer(card, opened=True)
@@ -1121,7 +1142,7 @@ def on_message(cmd, parts=(), from_card_page=False):
             # the review screen runs the card's script too: a thanks is sent only on a yes
             from .ui import confirm  # in the board's colours (3.9.1); the review screen has no board for a sheet
             tip = _tip_from(parts[2])
-            if tip is None or (not tip["helped"] and not confirm(mw, "This helped", f"Tell {tip['name'].split(' ')[0]} this tip helped?", "Tell them")):
+            if tip is None or (not tip["helped"] and not confirm(mw, _t("This helped"), _t("Tell {name} this tip helped?", name=tip['name'].split(' ')[0]), _t("Tell them"))):
                 return True
         helped_toggle(parts[2])
     elif cmd == "knowsreply" and len(parts) > 3:

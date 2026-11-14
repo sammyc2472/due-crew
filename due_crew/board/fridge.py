@@ -6,6 +6,8 @@ import html as _html
 
 from .. import fridge as _fridge
 from .. import sev as _sev
+from .. import words as _words
+from ..words import t as _t
 
 from .base import ACCENTS, _by_theme, _pycmd, _short_day, accent_pair
 from .windows import POP_JS
@@ -103,7 +105,7 @@ def fridge_html(items, people, cfg, gone=None):
     looks = [[u, 1, e.get("look"), e.get("accent")] if isinstance(e, dict) else [u, 0, e] for u, e in crew.items() if e]
     if gone:
         return _fridge_notes(_fridge.clean(items), crew, cfg, gone)  # a few seconds: drawn each time
-    key = _fridge.fingerprint([items, looks, bool(cfg.get("sev", True)), str(cfg.get("theme", "auto"))])
+    key = _fridge.fingerprint([items, looks, bool(cfg.get("sev", True)), str(cfg.get("theme", "auto")), _words.lang()])
     if key is None or key != _FRIDGE_DRAWN["key"]:
         _FRIDGE_DRAWN.update(key=key, html=_fridge_notes(_fridge.clean(items), crew, cfg))
     return _FRIDGE_DRAWN["html"]
@@ -122,12 +124,12 @@ def _fridge_notes(items, people, cfg, gone=None):
         k = _fridge.key(x)
         e = people.get(x["from"]) or {}
         name = _html.escape(x["name"])
-        pip = (_sev.slot(_sev.svg("idle", rest=True, look=e.get("look"), label=f"{name}’s Pip"), FRIDGE_PIP)
+        pip = (_sev.slot(_sev.svg("idle", rest=True, look=e.get("look"), label=_t("{name}’s Pip", name=name)), FRIDGE_PIP)
                if cfg.get("sev", True) and e else "")
         when = _short_day(x["at"])
         note = f'<div class="fq">&ldquo;{_html.escape(x["n"])}&rdquo;</div>' if x.get("n") else ""
         at = f' data-s="{x["p"][0]}" data-x="{x["p"][1]}" data-y="{x["p"][2]}"' if x.get("p") else ""
-        art = _doodle_art(x["d"], x["a"], x["name"] + "’s drawing")  # fridge.clean checked it
+        art = _doodle_art(x["d"], x["a"], _t("{name}’s drawing", name=x["name"]))  # fridge.clean checked it
         # 3.9.10 (Sam: "everyone's polaroids are now showing their pip as green even if they use a different
         # color"): the Pip is theirs as it is now, so it wears the colour they have now, as it wears what they
         # have on now; the drawing keeps the ink it was made in. One that came with no colour takes theirs
@@ -136,9 +138,9 @@ def _fridge_notes(items, people, cfg, gone=None):
         pa, pd = accent_pair(now or x["a"])
         # the tape is their Pip's colour too (SC, after 3.9.12: "the tape on the polaroids should match that user's pip
         # color also"): it was the drawing's ink, so someone who changed colour had a Pip in one and tape in another
-        notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{fa};--fd:{tape};--pa:{pa};--pd:{pd};--ft:{_tape(pd)}" title="Drag it anywhere">'
+        notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{fa};--fd:{tape};--pa:{pa};--pd:{pd};--ft:{_tape(pd)}" title="{_t("Drag it anywhere")}">'
                      f'<div class="fp">{art}</div>{note}<div class="fw">{pip}<b>{name}</b>{f" · {when}" if when else ""}</div>'
-                     f'<a class="fx" href="#" title="Take it down" aria-label="Take {name}’s down" '
+                     f'<a class="fx" href="#" title="{_t("Take it down")}" aria-label="{_t("Take {name}’s down", name=name)}" '
                      f'onclick="{_pycmd("fridgedown:" + k)}">&times;</a></div>')
     if gone and gone.get("item"):
         g, k = gone["item"], str(gone.get("k") or "")
@@ -146,10 +148,10 @@ def _fridge_notes(items, people, cfg, gone=None):
         left = max(0.0, min(float(FRIDGE_UNDO), float(gone.get("ago") or 0)))
         notes.insert(max(0, min(len(notes), len(items) - int(gone.get("i") or 0))),
                      f'<div class="fz fgone" data-k="{_html.escape(k)}"{at} role="status" '
-                     f'style="--fa:{accent_pair(g.get("a"))[0]};--fd:{accent_pair(g.get("a"))[1]};--fg:-{left:.1f}s">In your scrapbook &middot; '
-                     f'<a href="#" onclick="{_pycmd("fridgeback:" + k)}">Undo</a></div>')
+                     f'style="--fa:{accent_pair(g.get("a"))[0]};--fd:{accent_pair(g.get("a"))[1]};--fg:-{left:.1f}s">'
+                     + _t("In your scrapbook &middot; {undo}", undo=f'<a href="#" onclick="{_pycmd("fridgeback:" + k)}">{_t("Undo")}</a>') + '</div>')
     return (f'<style>{FRIDGE_CSS}{_fridge_theme(cfg)}</style>'
-            f'<div id="dc-fridge" role="group" aria-label="Your fridge">{"".join(notes)}</div>')
+            f'<div id="dc-fridge" role="group" aria-label="{_t("Your fridge")}">{"".join(notes)}</div>')
 
 
 FRIDGE_JS = r"""

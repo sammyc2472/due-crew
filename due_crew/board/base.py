@@ -97,17 +97,17 @@ SORT_KEYS = ("reviews", "time", "retention", "streak", "week")  # week: squads o
 PERIODS = ("today", "week", "decks", "squads")
 # 3.5.0: tabs a person can hide in Settings (per computer); Today always shows
 # 3.8.0: Today and Week are always there; the rest can be hidden in Settings
-HIDEABLE_TABS = (("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"), ("insights", "Insights"),
-                 ("party", "Party"))  # 3.9.10: the tab says Party (Sam: "Let's go for party"); the feature is still Pip Party. 3.9.5 (Sam: "make pip party something someone can unshow")
+HIDEABLE_TABS = (("decks", _later("Decks")), ("squads", _later("Squads")), ("plans", _later("Plans")), ("insights", _later("Insights")),
+                 ("party", _later("Party")))  # 3.9.10: the tab says Party (Sam: "Let's go for party"); the feature is still Pip Party. 3.9.5 (Sam: "make pip party something someone can unshow")
 CREW_VIEWS = (("today", _later("Today")), ("week", _later("Week")), ("decks", _later("Decks")))
-YOU_MORE = (("plans", "Plans"), ("insights", "Insights"))
-PARTY_TAB = ("party", "Party")  # 3.9.5's last round: after Insights, for those it's open to (gamenight_flow.shown)
+YOU_MORE = (("plans", _later("Plans")), ("insights", _later("Insights")))  # said where they're drawn (draw.you_html)
+PARTY_TAB = ("party", _later("Party"))  # 3.9.5's last round: after Insights, for those it's open to (gamenight_flow.shown)
 BETA_TABS = ()  # a tab named here says Beta (Pip Party did, 3.9.5 to 3.9.10: Sam, "we can take pip party out of beta")
 
 
 def _tab_word(k, lb):
-    """A You tab's name; a tab in BETA_TABS says Beta beside it."""
-    return f'{lb}<span class="du-beta">Beta</span>' if k in BETA_TABS else lb
+    """A You tab's name (said already, by whoever draws it); a tab in BETA_TABS says Beta beside it."""
+    return f'{lb}<span class="du-beta">{_t("Beta")}</span>' if k in BETA_TABS else lb
 
 
 def hidden_tabs(cfg):
@@ -213,7 +213,7 @@ BENCH_MAX = 12  # Pips on the bench; past it, "+N more"
 
 QUIET_FOLD_DAYS = 90  # "The next round", Q3: the server's fold, the same number
 # Q2: said where people read it (here, the Settings dialog, the site's Account, the README)
-KEEP_LINE = "Unused for 12 months (24 when paused), an account is deleted with everything in it."
+KEEP_LINE = _later("Unused for 12 months (24 when paused), an account is deleted with everything in it.")
 
 
 def _long_quiet(ts_str, now=None):
@@ -231,17 +231,20 @@ def _quiet_fold(rows):
     """Q3: the fold's line for long-quiet friends: how many, their names,
     and the month they were last here. Opened in the page, no command."""
     names = [_html.escape(str(r["name"])) for r in rows]
-    who = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1] if len(names) <= 3 else f"{', '.join(names[:2])} and {len(names) - 2} more"
+    who = (names[0] if len(names) == 1 else _t("{names} and {last}", names=", ".join(names[:-1]), last=names[-1]) if len(names) <= 3
+           else _t("{names} and {n} more", names=", ".join(names[:2]), n=len(names) - 2))
     newest = max((str(r.get("last_updated") or "") for r in rows), default="")
     try:
-        since = datetime.fromisoformat(newest.replace("Z", "+00:00")).astimezone().strftime("%b")  # this computer's month
+        since = _month(datetime.fromisoformat(newest.replace("Z", "+00:00")).astimezone().month)  # this computer's month
     except Exception:
         since = ""
-    verb = "hasn't" if len(rows) == 1 else "haven't"
+    if len(rows) == 1:
+        said = _t("{who} hasn't been here since {month}", who=who, month=since) if since else _t("{who} hasn't been here in months", who=who)
+    else:
+        said = _t("{who} haven't been here since {month}", who=who, month=since) if since else _t("{who} haven't been here in months", who=who)
     return (f'<tr class="qfold"><td class="rk"></td><td class="nm" colspan="{len(HEADERS) + 1}">'
             f'<a href="#" onclick="this.closest(\'table\').classList.toggle(\'qopen\');return false;">'
-            f'&#9656; {len(rows)} quiet</a> <span class="dc-note">&middot; {who} {verb} been here'
-            f'{" since " + since if since else " in months"}</span></td></tr>')
+            f'&#9656; {_t("{n} quiet", n=len(rows))}</a> <span class="dc-note">&middot; {said}</span></td></tr>')
 
 
 def _day_metrics(doc):
@@ -507,14 +510,14 @@ def _cell(value, fmt=str):
 def today_text(reviews, new=None):
     """ "205 reviews (20 new)": the profile card's Today line (2.13)."""
     reviews = int(reviews or 0)
-    out = f'{reviews:,} review{"" if reviews == 1 else "s"}'
+    out = _t("{n} review", n=f"{reviews:,}") if reviews == 1 else _t("{n} reviews", n=f"{reviews:,}")
     try:
         new = min(int(new), reviews)
     except (TypeError, ValueError):
         return out
     if new <= 0:
         return out
-    return out + (" (all new)" if new == reviews else f" ({new:,} new)")
+    return _t("{reviews} (all new)", reviews=out) if new == reviews else _t("{reviews} ({n} new)", reviews=out, n=f"{new:,}")
 
 
 # where a row without the new-cards line would take one; _even_rows fills it
@@ -543,8 +546,8 @@ def _reviews_cell(reviews, new):
     if new <= 0 or reviews <= 0:
         return _NW_ROOM + out + _NW_ROOM
     new = min(new, int(reviews))
-    line = "all new" if new == reviews else f"{new:,} new"
-    return (f'<span title="{new:,} of {int(reviews):,} were new cards">{out}'
+    line = _t("all new") if new == reviews else _t("{n} new", n=f"{new:,}")
+    return (f'<span title="{_t("{n} of {of} were new cards", n=f"{new:,}", of=f"{int(reviews):,}")}">{out}'
             f'<small class="nw">{line}</small></span>')
 
 
@@ -607,7 +610,9 @@ def _ins_dname(iso, long=False):
         d = _dt.date.fromisoformat(str(iso))
     except ValueError:
         return ""
-    return f"{d:%a} {d.day} {d:%b}" if long else f"{d:%a} {d.day}"
+    if long:
+        return _t("{weekday} {day} {month}", weekday=_weekday(d.weekday()), day=d.day, month=_month(d.month))
+    return _t("{weekday} {day}", weekday=_weekday(d.weekday()), day=d.day)
 
 
 def _week_span(wk):
@@ -615,7 +620,7 @@ def _week_span(wk):
         monday = _dt.date.fromisocalendar(int(wk[:4]), int(wk[6:]), 1)
     except ValueError:
         return ""
-    return f"week of {monday.day} {monday:%b}"
+    return _t("week of {day} {month}", day=monday.day, month=_month(monday.month))
 
 
 def _short_day(iso):
@@ -633,6 +638,6 @@ def _short_day(iso):
             d = _dt.date.fromisoformat(s[:10])
     except ValueError:
         return ""
-    return f"{d.day} {d.strftime('%b')}"
+    return _t("{day} {month}", day=d.day, month=_month(d.month))
 # the board's own font (Sam: "consistent with our normal fonts"): a sign is the board's words, bold
 BOARD_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"

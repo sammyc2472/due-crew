@@ -12,16 +12,17 @@ from aqt.qt import (
 )
 
 from . import accent, attach_alive, danger, logo_label, note, run_bg
+from ..words import later as _later, t as _t
 
 ERRORS = {
-    "bad_email": "That doesn't look like an email address.",
-    "wrong_code": "That code isn't right.",
-    "expired": "That code has expired. Send a new one.",
-    "locked": "Too many tries. Wait an hour, then send a new code.",
-    "slow_down": "Too many codes. Wait a bit, then try again.",
-    "mail_failed": "The email didn't go out. Your address is fine: try again in a minute.",
-    "NETWORK": "Couldn't reach Due Crew. Check your connection.",
-}
+    "bad_email": _later("That doesn't look like an email address."),
+    "wrong_code": _later("That code isn't right."),
+    "expired": _later("That code has expired. Send a new one."),
+    "locked": _later("Too many tries. Wait an hour, then send a new code."),
+    "slow_down": _later("Too many codes. Wait a bit, then try again."),
+    "mail_failed": _later("The email didn't go out. Your address is fine: try again in a minute."),
+    "NETWORK": _later("Couldn't reach Due Crew. Check your connection."),
+}  # said with _t where shown
 
 
 def _device():
@@ -98,9 +99,9 @@ class AuthDialog(QDialog):
 
     def _email_page(self):
         w, lay = _page()
-        self.email = self._field(lay, "Email", "you@example.com")
+        self.email = self._field(lay, _t("Email"), "you@example.com")
         self.email.setText(self.client.email)
-        lay.addWidget(note(QLabel("We'll email you a code. No password.")))
+        lay.addWidget(note(QLabel(_t("We'll email you a code. No password."))))
         lay.addStretch()
         return w
 
@@ -114,15 +115,15 @@ class AuthDialog(QDialog):
         lay.addWidget(self.sent_to)
         self.code = self._field(lay, "", "123 456")
         self.code.setMaxLength(9)
-        lay.addWidget(self._link("Send a new code", self._resend), alignment=Qt.AlignmentFlag.AlignLeft)
-        lay.addWidget(self._link("Use a different email", lambda: self._show(0)),
+        lay.addWidget(self._link(_t("Send a new code"), self._resend), alignment=Qt.AlignmentFlag.AlignLeft)
+        lay.addWidget(self._link(_t("Use a different email"), lambda: self._show(0)),
                       alignment=Qt.AlignmentFlag.AlignLeft)
         lay.addStretch()
         return w
 
     def _name_page(self):
         w, lay = _page()
-        self.name = self._field(lay, "Display name", "How your crew sees you")
+        self.name = self._field(lay, _t("Display name"), _t("How your crew sees you"))
         self.name.setMaxLength(60)
         lay.addStretch()
         return w
@@ -130,7 +131,7 @@ class AuthDialog(QDialog):
     def _show(self, page):
         self.pages.setCurrentIndex(page)
         self.error.setText("")
-        self.go.setText(("Send code", "Sign in", "Done")[page])
+        self.go.setText((_t("Send code"), _t("Sign in"), _t("Done"))[page])
         (self.email, self.code, self.name)[page].setFocus()
 
     # ---- actions ----
@@ -144,7 +145,7 @@ class AuthDialog(QDialog):
     def _fail(self, err, again):
         self._busy(False, again)
         self.error.setStyleSheet(f"color: {danger()}; font-size: 12px;")
-        self.error.setText(ERRORS.get(err, ERRORS["NETWORK"]))
+        self.error.setText(_t(ERRORS.get(err, ERRORS["NETWORK"])))
 
     def _submit(self):
         if not self.go.isEnabled():
@@ -161,16 +162,16 @@ class AuthDialog(QDialog):
     def _send(self):
         email = self.email.text().strip()
         if "@" not in email:
-            self.error.setText(ERRORS["bad_email"])
+            self.error.setText(_t(ERRORS["bad_email"]))
             return
-        self._busy(True, "Sending…")
+        self._busy(True, _t("Sending…"))
 
         def done(_result, err):
             if err:
-                self._fail(err, "Send code")
+                self._fail(err, _t("Send code"))
                 return
             self._busy(False)
-            self.sent_to.setText(f"We sent a code to {email}. It works for 10 minutes.")
+            self.sent_to.setText(_t("We sent a code to {email}. It works for 10 minutes.", email=email))
             self.code.clear()
             self._show(1)
 
@@ -185,14 +186,14 @@ class AuthDialog(QDialog):
     def _verify(self):
         code = "".join(ch for ch in self.code.text() if ch.isdigit())
         if len(code) != 6:
-            self.error.setText("The code is six digits.")
+            self.error.setText(_t("The code is six digits."))
             return
         email = self.email.text().strip()
-        self._busy(True, "Signing in…")
+        self._busy(True, _t("Signing in…"))
 
         def done(result, err):
             if err or not result:
-                self._fail(err, "Sign in")
+                self._fail(err, _t("Sign in"))
                 return
             self._busy(False)
             self._uid = result["uid"]
@@ -209,13 +210,13 @@ class AuthDialog(QDialog):
     def _save_name(self):
         name = " ".join(self.name.text().split())
         if not name:
-            self.error.setText("Pick a display name.")
+            self.error.setText(_t("Pick a display name."))
             return
-        self._busy(True, "Saving…")
+        self._busy(True, _t("Saving…"))
 
         def done(ok, err):
             if err or not ok:
-                self._fail(err, "Done")
+                self._fail(err, _t("Done"))
                 return
             self.user = (self._uid, name)
             self.accept()

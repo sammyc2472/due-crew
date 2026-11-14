@@ -27,6 +27,7 @@ from .sync import _on_sync_done
 from .render import _rerender
 from .windows import _share_push, open_auth
 from .commands import _swap
+from ..words import t as _t
 
 
 def _board_on_screen():
@@ -40,10 +41,10 @@ def _settings_view():
     from ..board import _ago
     c, cl = cfg(), client()
     if cl.session_dead:
-        state = "Sign-in expired"
+        state = _t("Sign-in expired")
     else:
         ago, _tone = _ago(cl.session.get("last_ok", ""))
-        state = f"Synced {ago}" if ago else "Not synced yet"
+        state = _t("Synced {ago}", ago=ago) if ago else _t("Not synced yet")
     sync = " · ".join(x for x in (cl.email, state, f"v{ADDON_VERSION}" if ADDON_VERSION else "") if x)
     decks = []
     for did in c.get("shared_decks") or []:
@@ -126,7 +127,7 @@ def _settings_cmd(cmd, parts):
             _state["settings_tab"] = None
             client().sign_out()
             _on_signed_out()
-        sheets.confirm("Sign out?", "Sign out on this device? Your account and stats stay.", "Sign out", out)
+        sheets.confirm(_t("Sign out?"), _t("Sign out on this device? Your account and stats stay."), _t("Sign out"), out)
     elif cmd == "setdelete":
         _delete_account()
     elif cmd == "setfeedback":
@@ -155,14 +156,14 @@ def _pick_exam_day(cmd):
             now = datetime.date.fromisoformat(str(c.get("exam_date") or ""))
         except ValueError:
             now = today + datetime.timedelta(days=7)
-        day = pick_date(mw, "Exam date", max(now, today), lo=today, hi=today + datetime.timedelta(days=730))
+        day = pick_date(mw, _t("Exam date"), max(now, today), lo=today, hi=today + datetime.timedelta(days=730))
         changed = change(["setexam", day], c, today=today) if day else None
     else:
         try:
             now = datetime.date.fromisoformat(str(c.get("exam_since") or ""))
         except ValueError:
             now = today - datetime.timedelta(days=14)
-        day = pick_date(mw, "Count the cards started since", min(now, today), hi=today)
+        day = pick_date(mw, _t("Count the cards started since"), min(now, today), hi=today)
         changed = change(["setscope", day], c, today=today) if day else None
     if changed:
         _apply_settings(changed)
@@ -198,7 +199,7 @@ def _apply_settings(changed, focus=None):
     if changed.get("show_leaderboard") is False:
         _state["settings_tab"] = None
         _rerender()
-        tooltip("Due Crew is off the Decks screen. Tools › Due Crew › Show on the Decks screen brings it back.")
+        tooltip(_t("Due Crew is off the Decks screen. Tools › Due Crew › Show on the Decks screen brings it back."))
     else:
         # the focus names the command sent; after a toggle it's the opposite one
         _swap(c, focus=_flip(focus))
@@ -237,12 +238,12 @@ def _rename():
 
         def done(result):
             if not result:
-                tooltip("Couldn't save the name. Try again.")
+                tooltip(_t("Couldn't save the name. Try again."))
                 return
-            tooltip("Name changed.")
+            tooltip(_t("Name changed."))
             _swap(cfg())
         _bg(lambda: cl.set_display_name(name), done)
-    sheets.ask_text("Display name", "New name.", go, value=current or "", most=60)
+    sheets.ask_text(_t("Display name"), _t("New name."), go, value=current or "", most=60)
 
 
 def _delete_account():
@@ -251,23 +252,23 @@ def _delete_account():
 
         def done(result):
             if not result:
-                tooltip("Couldn't delete. Check your connection and try again.")
+                tooltip(_t("Couldn't delete. Check your connection and try again."))
                 return
             _state["settings_tab"] = None
             _on_signed_out()
-            tooltip("Account deleted.")
+            tooltip(_t("Account deleted."))
         _bg(lambda: cl.delete_account() or True, done)
-    sheets.confirm("Delete account?", "This deletes your stats, your code, and your account for good. No undo.",
-                   "Delete Account", go, danger=True)
+    sheets.confirm(_t("Delete account?"), _t("This deletes your stats, your code, and your account for good. No undo."),
+                   _t("Delete Account"), go, danger=True)
 
 
 def open_feedback():
     """3.6.5, P6: Send feedback (Tools › Due Crew, and Settings)."""
     if not client().signed_in:
-        tooltip("Sign in to send feedback.")
+        tooltip(_t("Sign in to send feedback."))
         return
     from ..ui.feedback_dialog import FeedbackDialog
-    FeedbackDialog(mw, client(), ADDON_VERSION, on_sent=lambda: tooltip("Sent. Thanks, every one is read.")).exec()
+    FeedbackDialog(mw, client(), ADDON_VERSION, on_sent=lambda: tooltip(_t("Sent. Thanks, every one is read."))).exec()
 
 
 def open_settings(tab=None):
@@ -302,7 +303,7 @@ def _browse_day(day):
     end = (int(mw.col.sched.day_cutoff) - ago * 86400) * 1000
     cids = [int(x) for x in mw.col.db.list(
         "SELECT DISTINCT cid FROM revlog WHERE id >= ? AND id < ? AND ease > 0", end - 86400 * 1000, end)]
-    plan_flow._browse(cids, empty="No reviews that day.")
+    plan_flow._browse(cids, empty=_t("No reviews that day."))
 
 
 def _close_addons_dialog():

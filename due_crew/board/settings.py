@@ -177,7 +177,7 @@ def _settings_you(view, cfg=None):
             + '</div>')
     out += (f'<div class="st-foot"><a class="st-lk" href="#" {_st_click("setsignout")}>Sign out</a>'
             f'<a class="st-lk st-danger" href="#" {_st_click("setdelete")}>Delete account&hellip;</a></div>'
-            f'<div class="st-foot"><span>{KEEP_LINE}</span></div>')
+            f'<div class="st-foot"><span>{_t(KEEP_LINE)}</span></div>')
     return out
 
 
@@ -197,7 +197,7 @@ def _settings_board(cfg):
     hidden = hidden_tabs(cfg)
     pills = '<button class="st-pill on" disabled aria-pressed="true">Crew</button>' + "".join(
         f'<button class="st-pill{"" if k in hidden else " on"}" aria-pressed="{"false" if k in hidden else "true"}" '
-        f'{_st_click(f"settabs:{k}:{1 if k in hidden else 0}")}>{t}</button>' for k, t in HIDEABLE_TABS)
+        f'{_st_click(f"settabs:{k}:{1 if k in hidden else 0}")}>{_t(t)}</button>' for k, t in HIDEABLE_TABS)
     swatches = _accent_swatches(cfg)
     g = lambda k, d: bool(cfg.get(k, d))  # noqa: E731
     return ('<div class="st-h">On the Decks screen</div><div class="st-box">'

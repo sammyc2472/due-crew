@@ -13,6 +13,7 @@ from aqt.qt import (
 
 from . import _dark, attach_alive, heading, note, role, tone
 from .. import schedule as S
+from ..words import later as _later, month as _month, t as _t, tn as _tn, weekday as _weekday
 
 DAY_NAMES = ("M", "T", "W", "T", "F", "S", "S")
 MINUTES = (30, 45, 60, 90, 120, 180)
@@ -66,7 +67,7 @@ class LoadChart(QWidget):
                 p.setPen(muted)
                 p.drawText(int(x - 4), h - 4, label)
         p.setPen(ink)
-        cap_text = f"your {v.get('minutes', 60)} min ≈ {v['cap']:,}"
+        cap_text = _t("your {m} min ≈ {cap}", m=v.get('minutes', 60), cap=f"{v['cap']:,}")
         tw = p.fontMetrics().horizontalAdvance(cap_text)
         p.drawText(w - 4 - tw, max(10, int(y(v["cap"])) - 4), cap_text)
         pen = p.pen()
@@ -85,15 +86,15 @@ class ScheduleDialog(QDialog):
         self.totals, self.base, self.pace = totals, base_due, pace
         have = plan.get("sched") or DEFAULT
         self.days = list(have["days"])
-        self.setWindowTitle(f"My schedule · {plan.get('name') or 'Plan'}")
+        self.setWindowTitle(_t("My schedule · {plan}", plan=plan.get('name') or _t("Plan")))
         self.setMinimumWidth(460)
         lay = QVBoxLayout(self)
         heading(self, lay)
 
         first = S.plan_start(plan["doc"]) or self.today
-        lay.addWidget(self._label("Start"))
-        self.with_plan = QRadioButton(f"With the plan, {first:%a} {first.day} {first:%b}")
-        self.later = QRadioButton("Later:")
+        lay.addWidget(self._label(_t("Start")))
+        self.with_plan = QRadioButton(_t("With the plan, {day}", day=f"{_weekday(first.weekday())} {first.day} {_month(first.month)}"))
+        self.later = QRadioButton(_t("Later:"))
         grp = QButtonGroup(self)
         grp.addButton(self.with_plan)
         grp.addButton(self.later)
@@ -110,10 +111,11 @@ class ScheduleDialog(QDialog):
         lay.addWidget(self.with_plan)
         lay.addLayout(row)
 
-        lay.addWidget(self._label("Days I study"))
+        lay.addWidget(self._label(_t("Days I study")))
         days_row = QHBoxLayout()
         self.day_buttons = []
-        for i, name in enumerate(DAY_NAMES):
+        letters = _t("MTWTFSS")  # the week's days, a letter each
+        for i, name in enumerate(letters if len(letters) == 7 else DAY_NAMES):
             b = QPushButton(name)
             b.setFixedWidth(34)
             b.clicked.connect(lambda _c=False, i=i: self._tap(i))
@@ -125,10 +127,10 @@ class ScheduleDialog(QDialog):
         self.days_hint.setTextFormat(Qt.TextFormat.PlainText)
         lay.addWidget(note(self.days_hint))
 
-        lay.addWidget(self._label("Time a day"))
+        lay.addWidget(self._label(_t("Time a day")))
         self.minutes = QComboBox()
         for m in MINUTES:
-            self.minutes.addItem(f"{m} min" if m < 60 or m % 60 else f"{m // 60} h", m)
+            self.minutes.addItem(_t("{n} min", n=m) if m < 60 or m % 60 else _t("{n} h", n=m // 60), m)
         at = min(range(len(MINUTES)), key=lambda i: abs(MINUTES[i] - int(have.get("minutes") or 60)))
         self.minutes.setCurrentIndex(at)
         lay.addWidget(self.minutes)
@@ -139,16 +141,16 @@ class ScheduleDialog(QDialog):
         self.summary.setTextFormat(Qt.TextFormat.PlainText)
         self.summary.setWordWrap(True)
         lay.addWidget(self.summary)
-        small = QLabel("The plan's dates are the window; your days decide how each one fills. "
-                       "Rest days open no new cards. Anki's reviews still come due.")
+        small = QLabel(_t("The plan's dates are the window; your days decide how each one fills. "
+                          "Rest days open no new cards. Anki's reviews still come due."))
         small.setTextFormat(Qt.TextFormat.PlainText)
         lay.addWidget(note(small))
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Save")
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText(_t("Save"))
         self.off = None
         if plan.get("sched"):
-            self.off = buttons.addButton("No schedule", QDialogButtonBox.ButtonRole.DestructiveRole)
+            self.off = buttons.addButton(_t("No schedule"), QDialogButtonBox.ButtonRole.DestructiveRole)
             self.off.clicked.connect(self._no_schedule)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -197,24 +199,27 @@ class ScheduleDialog(QDialog):
             b.setStyleSheet("padding: 4px 0;" + (f" background: {tone('you-bg')}; border: 1px solid {tone('accent')};"
                                                  f" color: {tone('mark')}; font-weight: 700;" if n
                                                  else f" color: {tone('faded')};"))
-            b.setToolTip(("Rest day", "Study day", "Double share")[n] + ". Click to change.")
+            b.setToolTip(_t((_later("Rest day. Click to change."), _later("Study day. Click to change."), _later("Double share. Click to change."))[n]))
         rest = [DAY_NAMES[i] for i, n in enumerate(self.days) if n == 0]
         double = [DAY_NAMES[i] for i, n in enumerate(self.days) if n == 2]
         self.days_hint.setText(" ".join(filter(None, [
-            f"{len(double)} day{'s' if len(double) != 1 else ''} take a double share." if double else "",
-            f"{len(rest)} rest day{'s' if len(rest) != 1 else ''}." if rest else "",
-            "Click a day to change it."])))
+            _tn("{n} day take a double share.", "{n} days take a double share.", len(double)) if double else "",
+            _tn("{n} rest day.", "{n} rest days.", len(rest)) if rest else "",
+            _t("Click a day to change it.")])))
         sched = self.value() or DEFAULT
         secs_review, secs_new = self.pace
         view = S.load_view(self.plan["doc"], sched, self.totals, self.today, self.base, secs_review, secs_new)
         self.chart.set_view(view)
         if not view or not any(self.totals.values()):
-            self.summary.setText("None of this plan's cards are in the deck it runs on here yet.")
+            self.summary.setText(_t("None of this plan's cards are in the deck it runs on here yet."))
             return
-        text = (f"About {view['new_a_day']:,} new cards a study day. Reviews peak near "
-                f"{view['peak']:,} a day.")
+        text = _t("About {n} new cards a study day. Reviews peak near {peak} a day.", n=f"{view['new_a_day']:,}", peak=f"{view['peak']:,}")
         if view["over"]:
             n = len(view["over"])
-            fix = "add a study day, or give it more time" if any(k == 0 for k in self.days) else "give it more time a day"
-            text += f" {n} week{'s' if n != 1 else ''} go past your {sched['minutes']} min: {fix}."
+            if any(k == 0 for k in self.days):
+                text += " " + _tn("{n} week go past your {m} min: add a study day, or give it more time.",
+                                  "{n} weeks go past your {m} min: add a study day, or give it more time.", n, m=sched['minutes'])
+            else:
+                text += " " + _tn("{n} week go past your {m} min: give it more time a day.",
+                                  "{n} weeks go past your {m} min: give it more time a day.", n, m=sched['minutes'])
         self.summary.setText(text)

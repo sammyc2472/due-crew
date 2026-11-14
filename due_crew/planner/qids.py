@@ -18,6 +18,7 @@ the map's % and a Study of what I missed there.
 import re
 
 from .. import team as T
+from ..words import t as _t
 from . import model as M
 
 _NUM = re.compile(r"(?<![0-9])[0-9]{3,9}(?![0-9])")
@@ -97,6 +98,11 @@ def tally(idx, cids):
     return out
 
 
+def _count(n, one, many, **names):
+    """A phrase for a count, its number with its commas: `one` and `many` said already (`_t("{n} card")`)."""
+    return (one if n == 1 else many).format(n=f"{n:,}", **names)
+
+
 def words(found, t, plan_dates=None):
     """The window's lines for a paste: [str], the counts first ([] for
     nothing pasted). found: find(); t: tally(); plan_dates: [(plan name,
@@ -105,23 +111,25 @@ def words(found, t, plan_dates=None):
     if not nums:
         return []
     if got:
-        bits = [f"{len(got):,} question{'s' if len(got) != 1 else ''}", f"{t['cards']:,} card{'s' if t['cards'] != 1 else ''}"]
+        bits = [_count(len(got), _t("{n} question"), _t("{n} questions")), _count(t["cards"], _t("{n} card"), _t("{n} cards"))]
         if t["shut"]:
-            bits.append(f"{t['shut']:,} suspended")
+            bits.append(_t("{n} suspended", n=f"{t['shut']:,}"))
         if t["leech"]:
-            bits.append(f"{t['leech']:,} leech{'es' if t['leech'] != 1 else ''} left suspended")
+            bits.append(_count(t["leech"], _t("{n} leech left suspended"), _t("{n} leeches left suspended")))
         lines = [" · ".join(bits)]
     else:
-        lines = ["None of these are questions in this deck."]
+        lines = [_t("None of these are questions in this deck.")]
     miss = found["missing"]
     if miss and got:
         shown = ", ".join(miss[:4]) + (" …" if len(miss) > 4 else "")
-        lines.append(f"{len(miss):,} number{'s' if len(miss) != 1 else ''} aren’t questions here: {shown}"
-                     if len(miss) != 1 else f"1 number isn’t a question here: {shown}")
+        lines.append(_t("{n} numbers aren’t questions here: {shown}", n=f"{len(miss):,}", shown=shown)
+                     if len(miss) != 1 else _t("1 number isn’t a question here: {shown}", shown=shown))
     for name, dates in plan_dates or ():
         if dates:
-            shown = ", ".join(dates[:3]) + (f" and {len(dates) - 3} more" if len(dates) > 3 else "")
-            lines.append(f"On {name}: {shown}")
+            shown = ", ".join(dates[:3])
+            if len(dates) > 3:
+                shown = _t("{names} and {n} more", names=shown, n=len(dates) - 3)
+            lines.append(_t("On {name}: {shown}", name=name, shown=shown))
     return lines
 
 
@@ -180,11 +188,11 @@ def topic_words(rows):
     for r in rows:
         q, k = r["questions"], r["know"]
         if k is None:
-            how = "too soon to say" if r["started"] else "new"
+            how = _t("too soon to say") if r["started"] else _t("new")
         else:
-            how = f"{int(k)}%" + ("" if said else " here")
+            how = f"{int(k)}%" if said else _t("{pct}% here", pct=int(k))
             said = True
-        out.append(f"{q:,} question{'s' if q != 1 else ''} · {how}")
+        out.append(_count(q, _t("{n} question · {how}"), _t("{n} questions · {how}"), how=how))
     return out
 
 
@@ -193,5 +201,7 @@ def more_topics(rows, shown=TOPICS_SHOWN):
     rest = [r["name"] for r in rows[shown:]]
     if not rest:
         return ""
-    names = rest[:3]
-    return "Also: " + ", ".join(names) + (f" and {len(rest) - len(names):,} more" if len(rest) > len(names) else "")
+    names = ", ".join(rest[:3])
+    if len(rest) > 3:
+        names = _t("{names} and {n} more", names=names, n=f"{len(rest) - 3:,}")
+    return _t("Also: {names}", names=names)

@@ -760,7 +760,7 @@ def test_plan_words_v381():
           and "When I'm ready, the next once I've seen most of the last" in src["plan_flow.py"]
           and "seen the last\"" not in src["ui/follow_dialog.py"] + src["plan_flow.py"])
     check("words: Welcome back's choice is Push my dates back",
-          'f"Push my dates back {days} day' in src["ui/days_dialog.py"] and "Pick up where" not in src["ui/days_dialog.py"])
+          '"Push my dates back {n} day"' in src["ui/days_dialog.py"] and "Pick up where" not in src["ui/days_dialog.py"])
     said = [F._hold_words("Step 1", 3, own=True)[1], F._hold_words("Step 1", 1)[1]]
     check("words: Hold back's question at my own pace: until you open them",
           "3 cards of its later sets until you open them?" in said[0] and "their day" not in said[0]
@@ -1099,7 +1099,7 @@ def test_plan_remarks_and_deck_link_v381():
           and said == ["Select one card first."], (one, two, said))
     src = open(os.path.join(REPO, "due_crew", "ui", "follow_dialog.py"), encoding="utf-8").read()
     check("follow: no deck named like the plan's, and a link: \"Where to get it ›\", opened in the browser from the plan's own link",
-          "Your Anki has no deck called <b>{esc(deck)}</b>. " in src and "Where to get it &rsaquo;" in src
+          '"Your Anki has no deck called {deck}."' in src and '{_t("Where to get it")} &rsaquo;' in src
           and "openLink(url)" in src and "setOpenExternalLinks(False)" in src)
 
 
@@ -1232,7 +1232,7 @@ def test_export_with_the_plan_v381():
     check("export: without the plan, as before", P.export_notes(col, {1, 6})[0].split("\n")[7].startswith("guid000001\t"))
     src = open(os.path.join(REPO, "due_crew", "ui", "export_dialog.py"), encoding="utf-8").read()
     check("export: the box, on by default, only with a plan picked; the plan itself, not my days",
-          'QCheckBox("With the plan (its sets, tags, notes and what overlaps)")' in src and "self.with_plan.setChecked(True)" in src
+          'QCheckBox(_t("With the plan (its sets, tags, notes and what overlaps)"))' in src and "self.with_plan.setChecked(True)" in src
           and "self.with_plan.setVisible(bool(p))" in src and 'p.get("plan_doc") or p["doc"]' in src)
 
 

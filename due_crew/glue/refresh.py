@@ -42,6 +42,7 @@ from ..stats.queries import StatsQueries
 from ..ui import copy_text
 from ..wrap import _update_returns
 from ..wrap import _update_wrap
+from ..words import t as _t
 
 
 _lock = threading.Lock()
@@ -137,7 +138,7 @@ def _after_push(pushed, labels, gone=(), gen=None):
     for sid in gone or ():
         name = next((sq.get("name") for sq in _my_squads() if sq["id"] == sid), None)
         _drop_squad(sid, swap=False)
-        tooltip(f"You're no longer in {html.escape(name or 'a squad')}.")
+        tooltip(_t("You're no longer in {squad}.", squad=html.escape(name)) if name else _t("You're no longer in a squad."))
     if _state["board_shown"] and mw.state == "deckBrowser":
         _swap(cfg(), quiet=True)
 
@@ -299,10 +300,10 @@ def _copy_friend_invite():
     def done(result):
         invite, code = result if result else (None, None)
         if not invite and not code:
-            tooltip("Couldn't make your invite. Check your connection.")
+            tooltip(_t("Couldn't make your invite. Check your connection."))
             return
         copy_text(friend_invite(invite or code))
-        tooltip(INVITE_COPIED if invite else "Invite copied.")
+        tooltip(_t(INVITE_COPIED) if invite else _t("Invite copied."))
         if code and code != _state["my_code"]:
             _state["my_code"] = code
             _swap(cfg())
@@ -346,8 +347,8 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         if baseline_valid and c.get("sync_notifications", True):
             old = _state["prev_counts"].get(e["user_id"])
             if old is not None and counts[e["user_id"]] > old:
-                toasts.append(f"{html.escape(e['name'])} just studied" + (
-                    "" if c.get("show_up") else f" — {counts[e['user_id']]:,} reviews today"))
+                toasts.append(_t("{name} just studied", name=html.escape(e['name'])) if c.get("show_up") else
+                              _t("{name} just studied — {n} reviews today", name=html.escape(e['name']), n=f"{counts[e['user_id']]:,}"))
     for e in data["entries"]:
         if e["you"]:
             continue
@@ -358,8 +359,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
             if isinstance(old, int) and c.get("sync_notifications", True) and not c.get("show_up"):
                 for t in STREAK_MILESTONES:
                     if old < t <= streak_val:
-                        toasts.append(f"{html.escape(e['name'])} hit a "
-                                      f"{t}-day streak \U0001F525")
+                        toasts.append(_t("{name} hit a {n}-day streak", name=html.escape(e['name']), n=t) + " \U0001F525")
                         if t >= 100:
                             # 2.10: the big ones get a banner with a one-tap cheer
                             _state["milestones"] = [m for m in _state["milestones"]
@@ -411,7 +411,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     for sid in gone or ():
         name = next((sq.get("name") for sq in _my_squads() if sq["id"] == sid), None)
         _drop_squad(sid, swap=False)
-        tooltip(f"You're no longer in {html.escape(name or 'a squad')}.")
+        tooltip(_t("You're no longer in {squad}.", squad=html.escape(name)) if name else _t("You're no longer in a squad."))
     if data.get("squads") is not None:
         heal_squads(data["squads"], gone)  # 3.6: squads the server has and this config lost
 

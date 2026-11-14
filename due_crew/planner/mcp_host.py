@@ -22,6 +22,7 @@ from .. import app, plan_flow
 from . import build as B
 from . import flow, mcp, remote
 from ..errs import oops
+from ..words import later as _later, t as _t
 
 KEY = "mcp"
 MAIN_WAIT = 30      # seconds a tool waits for Anki's main thread
@@ -62,7 +63,7 @@ def follow():
     if not m["on"] or not m["token"]:
         return None
     if not app.client().signed_in:
-        _said[0] = "It starts once you're signed in to Due Crew."
+        _said[0] = _later("It starts once you're signed in to Due Crew.")
         return None
     return _start(m)
 
@@ -78,7 +79,7 @@ def _start(m):
         if srv.port != m["port"]:
             _keep(dict(m, port=srv.port))  # the address stays the same from now on, so the AI app's setup does
         return srv
-    _said[0] = "It couldn't start: no port on this computer was free."
+    _said[0] = _later("It couldn't start: no port on this computer was free.")
     return None
 
 
@@ -121,7 +122,7 @@ def state():
     m = settings()
     srv = running()
     return {"on": m["on"], "running": srv is not None, "port": srv.port if srv else m["port"],
-            "url": srv.url if srv else "", "token": m["token"], "said": _said[0]}
+            "url": srv.url if srv else "", "token": m["token"], "said": _t(_said[0]) if _said[0] else ""}
 
 
 def shim_path():

@@ -725,7 +725,7 @@ def test_settings_an_author_who_follows_it():
 
 def test_team_says_is_team_flows():
     src = open(os.path.join(REPO, "due_crew", "team_flow.py")).read()
-    got = re.search(r"JOIN_SAYS = \(((?:\s*\"[^\"]*\")+)\)", src)
+    got = re.search(r"JOIN_SAYS = (?:_later)?\(((?:\s*\"[^\"]*\")+)\)", src)
     words = "".join(re.findall(r'"([^"]*)"', got.group(1))) if got else ""
     check("tabs: Join its squad's words are team_flow.JOIN_SAYS word for word", words == WT.TEAM_SAYS, words)
 

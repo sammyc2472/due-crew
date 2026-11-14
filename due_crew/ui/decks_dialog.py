@@ -17,6 +17,7 @@ from aqt.qt import (
 
 from . import attach_alive, heading, note
 from ..stats.decks import all_deck_counts, local_matches, subtree_counts
+from ..words import t as _t
 
 DID = Qt.ItemDataRole.UserRole
 
@@ -34,26 +35,26 @@ class DecksDialog(QDialog):
         QTimer.singleShot(0, self._match)
 
     def _build(self):
-        self.setWindowTitle("Shared decks")
+        self.setWindowTitle(_t("Shared decks"))
         self.setMinimumWidth(480)
         self.setMinimumHeight(400)
         root = QVBoxLayout(self)
         heading(self, root)
 
-        intro = QLabel("Share a deck and its progress shows under Crew › Decks. Decks "
-                       "you and your crew both study match automatically. A subdeck "
-                       "can be shared on its own.")
+        intro = QLabel(_t("Share a deck and its progress shows under Crew › Decks. Decks "
+                          "you and your crew both study match automatically. A subdeck "
+                          "can be shared on its own."))
         root.addWidget(note(intro))
 
         self.filter = QLineEdit()
-        self.filter.setPlaceholderText("Filter decks")
+        self.filter.setPlaceholderText(_t("Filter decks"))
         self.filter.setClearButtonEnabled(True)
         self.filter.textChanged.connect(self._filter)
         root.addWidget(self.filter)
 
         self.tree = QTreeWidget()
         self.tree.setColumnCount(3)
-        self.tree.setHeaderLabels(["Deck", "Cards", ""])
+        self.tree.setHeaderLabels([_t("Deck"), _t("Cards"), ""])
         self.tree.setRootIsDecorated(True)
         self.tree.setUniformRowHeights(True)
         header = self.tree.header()
@@ -97,7 +98,7 @@ class DecksDialog(QDialog):
         self.tree.resizeColumnToContents(1)
 
         if not self.items:
-            root.addWidget(QLabel("No decks with cards yet."))
+            root.addWidget(QLabel(_t("No decks with cards yet.")))
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save
                                    | QDialogButtonBox.StandardButton.Cancel)
@@ -127,7 +128,7 @@ class DecksDialog(QDialog):
         for did, who in found.items():
             item = self.items.get(did)
             if item is not None:
-                item.setText(2, f"you and {', '.join(who)} both study it")  # 3.4 review, N9
+                item.setText(2, _t("you and {who} both study it", who=", ".join(who)))  # 3.4 review, N9
                 self._reveal(item)
 
     def _filter(self, text):

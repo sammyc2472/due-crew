@@ -17,6 +17,7 @@ from .backend.shapes import TransportError, clean_doodle, clean_emoji, clean_not
 from .stats import duet_runs, heatmap
 from .stats.queries import StatsQueries
 from .errs import oops
+from .words import t as _t
 
 def _fresh_cheers(cheers, seen, old_ts=""):
     """(fresh, seen') — which cheers to play, and the per-sender marks to
@@ -40,9 +41,9 @@ def _play_cheers():
     names = list(dict.fromkeys(ch["name"] for ch in cheers))  # 3.8.22: in the order they came, as their Pips toss them
     emojis = [ch["emoji"] for ch in cheers]
     if len(names) == 1:
-        text = f"{emojis[0]} {names[0]} sent cheers"
+        text = f"{emojis[0]} " + _t("{who} sent cheers", who=names[0])
     else:
-        text = f"{' '.join(list(dict.fromkeys(emojis))[:3])} {board.and_more(names)} sent cheers"
+        text = f"{' '.join(list(dict.fromkeys(emojis))[:3])} " + _t("{who} sent cheers", who=board.and_more(names))
     back = (cheers[0]["from"], cheers[0]["emoji"]) if len(cheers) == 1 else None
     notes = [ch["note"] if len(cheers) == 1 else f"{ch['name']}: {ch['note']}"
              for ch in cheers if ch.get("note")]
@@ -137,26 +138,28 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
         if then is not None:
             then(ok is True)
         if ok is True and luck:
-            tooltip(f"Added to {html.escape(to_name)}'s card.")
+            tooltip(_t("Added to {name}'s card.", name=html.escape(to_name)))
         elif ok is True and guid:
-            tooltip("Tip sent.")
+            tooltip(_t("Tip sent."))
         elif ok == "offline":
             # 3.9.9 (Off the Board, 11): no answer; it waits, marked on their row, for the next refresh that gets through
             if hold_cheer(to_uid, to_name, emoji, note, luck, guid, doodle):
-                tooltip(f"No connection. Your {html.escape(emoji)} for {html.escape(to_name)} sends when Due Crew is back.")
+                tooltip(_t("No connection. Your {emoji} for {name} sends when Due Crew is back.", emoji=html.escape(emoji), name=html.escape(to_name)))
                 if app.swap:
                     app.swap(cfg())
             else:
-                tooltip("Couldn't send. Check your connection.")
+                tooltip(_t("Couldn't send. Check your connection."))
         elif ok:
-            extra = "" if plain else {"draw": " and a drawing", "sign": " and a sign"}.get((doodle or {}).get("k"), "")
-            tooltip(f"Sent {html.escape(emoji)}{extra} to {html.escape(to_name)}.")
+            with_it = "" if plain else (doodle or {}).get("k")
+            sent = {"emoji": html.escape(emoji), "name": html.escape(to_name)}
+            tooltip(_t("Sent {emoji} and a drawing to {name}.", **sent) if with_it == "draw"
+                    else _t("Sent {emoji} and a sign to {name}.", **sent) if with_it == "sign" else _t("Sent {emoji} to {name}.", **sent))
             try:  # 3.8.0: a few of it float up from their row (motion.js)
                 mw.web.eval("window.dcMotion&&dcMotion.cheer(%s,%s)" % (json.dumps(str(to_uid)), json.dumps(str(emoji))))
             except Exception:
                 pass
         else:
-            tooltip("Couldn't send. Check your connection.")
+            tooltip(_t("Couldn't send. Check your connection."))
 
     def job():
         try:
@@ -256,13 +259,13 @@ def _edit_status(then=None):
                 e["days"][lb] = doc
         app.rerender()
         app.sync()
-        tooltip("Status set." if text else "Status cleared.")
+        tooltip(_t("Status set.") if text else _t("Status cleared."))
         if then is not None:
             then(text)
 
-    sheets.ask_text("Status", "One line under your name, for your crew. Start with a number "
-                    "(\u201c200 cards, then bed\u201d) and it ticks itself off. Empty clears it.",
-                    save, value=current, most=80, yes="Set")
+    sheets.ask_text(_t("Status"), _t("One line under your name, for your crew. Start with a number "
+                                     "(\u201c200 cards, then bed\u201d) and it ticks itself off. Empty clears it."),
+                    save, value=current, most=80, yes=_t("Set"))
 
 
 def _edit_emoji(parent=None):
@@ -287,7 +290,7 @@ def _edit_emoji(parent=None):
             e["emoji"] = emoji
     app.rerender()
     app.sync()
-    tooltip("Emoji set." if emoji else "Emoji removed.")
+    tooltip(_t("Emoji set.") if emoji else _t("Emoji removed."))
     return emoji
 
 
@@ -404,16 +407,16 @@ def row_menu(uid):
     from aqt.qt import QCursor, QMenu
     muted = uid in muted_uids(cfg())
     menu = QMenu(mw)
-    mute = menu.addAction("Unmute cheers" if muted else "Mute cheers")
+    mute = menu.addAction(_t("Unmute cheers") if muted else _t("Mute cheers"))
     mute.triggered.connect(lambda: _toggle_mute(uid, entry["name"], not muted))
-    report = menu.addAction("Report…")
+    report = menu.addAction(_t("Report…"))
     report.triggered.connect(lambda: _report(uid, entry["name"]))
     menu.exec(QCursor.pos())
 
 
 def _toggle_mute(uid, name, on):
     set_muted(uid, on)
-    tooltip(f"Muted {html.escape(name)}." if on else f"Unmuted {html.escape(name)}.")
+    tooltip(_t("Muted {name}.", name=html.escape(name)) if on else _t("Unmuted {name}.", name=html.escape(name)))
 
 
 def _report(uid, name):
@@ -426,7 +429,7 @@ def _report(uid, name):
     reason, note = dlg.reason, dlg.note
 
     def done(ok):
-        tooltip(f"Reported. {html.escape(name)} is muted." if ok
-                else f"Couldn't send the report. {html.escape(name)} is muted.")
+        tooltip(_t("Reported. {name} is muted.", name=html.escape(name)) if ok
+                else _t("Couldn't send the report. {name} is muted.", name=html.escape(name)))
 
     _bg(lambda: cl.report(uid, reason, note), done)

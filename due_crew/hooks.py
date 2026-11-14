@@ -29,6 +29,7 @@ import os
 
 from . import store
 from .backend.shapes import clean_note
+from .words import t as _t
 
 KEEP = 3000            # hooks kept (the oldest go first)
 TURNED_LAPSES = 3      # a card I kept missing...
@@ -204,13 +205,13 @@ def view(hook, stuck, offer, has_turned, can_ask):
     if hook:
         if not stuck:
             return None, False  # a card I have down doesn't need its hook read to me
-        return {"kind": "hook", "text": f"Your tip: {hook}", "short": "Your tip", "title": hook,
-                "fold": "You left a tip", "cmd": "hookadd", "act": "Edit"}, False
+        return {"kind": "hook", "text": _t("Your tip: {tip}", tip=hook), "short": _t("Your tip"), "title": hook,
+                "fold": _t("You left a tip"), "cmd": "hookadd", "act": _t("Edit")}, False
     if has_turned and can_ask:
-        return {"kind": "hookask", "text": "This one stuck. What made it click?", "short": "What made it click?",
-                "cmd": "hookadd", "act": "Add a tip"}, True
+        return {"kind": "hookask", "text": _t("This one stuck. What made it click?"), "short": _t("What made it click?"),
+                "cmd": "hookadd", "act": _t("Add a tip")}, True
     if offer:
-        return {"kind": "hookadd", "text": "Add a tip for next time", "short": "+ Tip", "cmd": "hookadd", "bar": True}, False
+        return {"kind": "hookadd", "text": _t("Add a tip for next time"), "short": _t("+ Tip"), "cmd": "hookadd", "bar": True}, False
     return None, False
 
 
@@ -235,9 +236,14 @@ def thanks_lines(thanks, names, part_of):
     for guid, uids in by.items():
         who = [names[u] for u in uids if u in names]
         rest = len(uids) - 1
-        first = who[0] if who else "a crewmate"
-        said = first + (f" and {rest} more" if rest > 0 else "")
+        first = who[0] if who else _t("a crewmate")
         part = str(part_of(guid) or "")
-        on = f"on a {part} card" if part else "on a card"
-        out.append(f"Your tip {on} helped {said}.")
+        if part and rest > 0:  # each said whole (3.10.0): the words' order is the language's
+            out.append(_t("Your tip on a {part} card helped {who} and {n} more.", part=part, who=first, n=rest))
+        elif part:
+            out.append(_t("Your tip on a {part} card helped {who}.", part=part, who=first))
+        elif rest > 0:
+            out.append(_t("Your tip on a card helped {who} and {n} more.", who=first, n=rest))
+        else:
+            out.append(_t("Your tip on a card helped {who}.", who=first))
     return out

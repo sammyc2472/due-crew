@@ -174,7 +174,7 @@ def _live_line(cfg):
     from .. import errs_flow, together
     if errs_flow.note_due(cfg) or not together.live_note_due(cfg):
         return ""
-    return (f'<div class="dc-calm"><span>{together.LIVE_NOTE}</span><span class="sp"></span>'
+    return (f'<div class="dc-calm"><span>{_t(together.LIVE_NOTE)}</span><span class="sp"></span>'
             f'<a href="#" onclick="{_pycmd("livesee")}">Privacy</a>'
             f'<a href="#" onclick="{_pycmd("livetold")}">Got it</a></div>')
 
@@ -369,7 +369,7 @@ def you_html(cfg, due=None, you=None, people=None):
     if you is None:
         return _due_html(due)
     hidden = hidden_tabs(cfg)
-    more = tuple(t for t in YOU_MORE if t[0] not in hidden) + ((PARTY_TAB,) if you.get("party_on") else ())
+    more = tuple((k, _t(lb)) for k, lb in tuple(t for t in YOU_MORE if t[0] not in hidden) + ((PARTY_TAB,) if you.get("party_on") else ()))
     keys = (["today", "upcoming", "later"] if due else []) + [k for k, _l in more]
     if not keys:
         return ""

@@ -10,6 +10,7 @@ from ..backend.shapes import SQUAD_CODE_LEN, SQUAD_NAME_MAX, squad_code_from
 from ..app import _bg
 from . import attach_alive, copy_text, heading, role, run_bg, shared_words
 from . import note as ui_note
+from ..words import t as _t
 
 
 def invite_text(name, code):
@@ -21,11 +22,11 @@ def shared_note(cfg):
     """What squadmates see, from the Privacy switches (2.9: they apply to
     squads too). Until then this always listed all four numbers."""
     if cfg.get("paused"):
-        return "Sharing is paused: squadmates see your name and nothing new."
+        return _t("Sharing is paused: squadmates see your name and nothing new.")
     words = "" if cfg.get("show_up") else shared_words(cfg)
     if not words:
-        return "Squadmates see your name and which days you studied."
-    return f"Squadmates see your name and today's {words}."
+        return _t("Squadmates see your name and which days you studied.")
+    return _t("Squadmates see your name and today's {words}.", words=words)
 
 
 class SquadDialog(QDialog):
@@ -35,7 +36,7 @@ class SquadDialog(QDialog):
         self.on_joined = on_joined   # main thread: {id, code, name, founder}
         self.peek = None
         attach_alive(self)
-        self.setWindowTitle("Squads")
+        self.setWindowTitle(_t("Squads"))
         self.setMinimumWidth(400)
         lay = QVBoxLayout(self)
         lay.setSpacing(8)
@@ -46,12 +47,12 @@ class SquadDialog(QDialog):
         grid.setVerticalSpacing(6)
         grid.setColumnStretch(0, 1)
 
-        grid.addWidget(_head("Join a squad"), 0, 0, 1, 2)
+        grid.addWidget(_head(_t("Join a squad")), 0, 0, 1, 2)
         self.code_edit = QLineEdit()
-        self.code_edit.setPlaceholderText("Its code, or paste the invite")
+        self.code_edit.setPlaceholderText(_t("Its code, or paste the invite"))
         self.code_edit.textChanged.connect(self._code_changed)
         self.code_edit.returnPressed.connect(self._look_up)
-        self.look_btn = QPushButton("Look up")
+        self.look_btn = QPushButton(_t("Look up"))
         self.look_btn.clicked.connect(self._look_up)
         grid.addWidget(self.code_edit, 1, 0)
         grid.addWidget(self.look_btn, 1, 1)
@@ -60,19 +61,19 @@ class SquadDialog(QDialog):
         self.peek_label = QLabel("")
         self.peek_label.setWordWrap(True)
         self.peek_label.setVisible(False)
-        self.join_btn = QPushButton("Join")
+        self.join_btn = QPushButton(_t("Join"))
         self.join_btn.setVisible(False)
         self.join_btn.setDefault(True)
         self.join_btn.clicked.connect(self._join)
         grid.addWidget(self.peek_label, 2, 0)
         grid.addWidget(self.join_btn, 2, 1, Qt.AlignmentFlag.AlignTop)
 
-        grid.addWidget(_head("Start a squad"), 3, 0, 1, 2)
+        grid.addWidget(_head(_t("Start a squad")), 3, 0, 1, 2)
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("Its name")
+        self.name_edit.setPlaceholderText(_t("Its name"))
         self.name_edit.setMaxLength(SQUAD_NAME_MAX)
         self.name_edit.returnPressed.connect(self._create)
-        self.create_btn = QPushButton("Create")
+        self.create_btn = QPushButton(_t("Create"))
         self.create_btn.clicked.connect(self._create)
         grid.addWidget(self.name_edit, 4, 0)
         grid.addWidget(self.create_btn, 4, 1)
@@ -115,10 +116,10 @@ class SquadDialog(QDialog):
         # a pasted invite works too: the code is taken from after "code"
         code = squad_code_from(self.code_edit.text())
         if len(code) != SQUAD_CODE_LEN:
-            self._say(f"Codes are {SQUAD_CODE_LEN} letters and numbers.")
+            self._say(_t("Codes are {n} letters and numbers.", n=SQUAD_CODE_LEN))
             return
         self.look_btn.setEnabled(False)
-        self._say("Looking up…")
+        self._say(_t("Looking up…"))
         cl = self.client
 
         def job():
@@ -137,15 +138,15 @@ class SquadDialog(QDialog):
     def _peeked(self, info, status, founder):
         self.look_btn.setEnabled(True)
         if info is None:
-            self._say("No squad with that code." if status == 404
-                      else "Couldn't look it up. Check your connection.")
+            self._say(_t("No squad with that code.") if status == 404
+                      else _t("Couldn't look it up. Check your connection."))
             return
         self.peek = info
         bits = [f"<b>{_esc(info['name'])}</b>"]
         if founder:
-            bits.append(f"founded by {_esc(founder)}")
+            bits.append(_t("founded by {name}", name=_esc(founder)))
         if not info["open"]:
-            bits.append("locked")
+            bits.append(_t("locked"))
         self._say(" · ".join(bits), join=bool(info["open"]))
 
     def _join(self):
@@ -168,9 +169,9 @@ class SquadDialog(QDialog):
             return
         if not self._alive:
             return
-        said = {403: "Locked.", 409: "You're in 20 squads. Leave one to join another.",
-                429: "That's a lot of tries. Try again in an hour."}  # 3.9.5: the squads' ceiling, and a join's budget
-        self._say(said.get(status, "Couldn't join. Check your connection."), join=status not in said)
+        said = {403: _t("Locked."), 409: _t("You're in 20 squads. Leave one to join another."),
+                429: _t("That's a lot of tries. Try again in an hour.")}  # 3.9.5: the squads' ceiling, and a join's budget
+        self._say(said.get(status, _t("Couldn't join. Check your connection.")), join=status not in said)
 
     # ---- create ----
     def _made(self, text):
@@ -180,7 +181,7 @@ class SquadDialog(QDialog):
     def _create(self):
         name = " ".join(self.name_edit.text().split())[:SQUAD_NAME_MAX]
         if not name:
-            self._made("Give it a name.")
+            self._made(_t("Give it a name."))
             return
         self.create_btn.setEnabled(False)
         cl = self.client
@@ -195,12 +196,12 @@ class SquadDialog(QDialog):
             return
         self.create_btn.setEnabled(True)
         if full:
-            self._made("You're in 20 squads. Leave one to make another.")
+            self._made(_t("You're in 20 squads. Leave one to make another."))
             return
         if not squad:
-            self._made("Couldn't create it. Check your connection.")
+            self._made(_t("Couldn't create it. Check your connection."))
             return
-        self._made(f"<b>{_esc(squad['name'])}</b> · code <b>{squad['code']}</b> · invite copied")
+        self._made(_t("{name} · code {code} · invite copied", name=f"<b>{_esc(squad['name'])}</b>", code=f"<b>{squad['code']}</b>"))
         self.name_edit.setText("")
 
 

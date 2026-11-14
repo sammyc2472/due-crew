@@ -19,6 +19,7 @@ from aqt.qt import (
 
 from . import accent, heading, note, open_emoji_picker, styled, tone
 from ..backend.shapes import clean_emoji
+from ..words import t as _t
 
 # the crew-emoji dialog's quick row: faces for a name, not reactions
 CREW_EMOJI = ("\U0001F98A", "\U0001F422", "\U0001F989", "\U0001F41D",   # fox, turtle, owl, bee
@@ -28,8 +29,8 @@ CREW_EMOJI = ("\U0001F98A", "\U0001F422", "\U0001F989", "\U0001F41D",   # fox, t
 class _OtherBox(QLineEdit):
     def __init__(self):
         super().__init__()
-        self.setPlaceholderText("other")
-        self.setToolTip("Any emoji")
+        self.setPlaceholderText(_t("other"))
+        self.setToolTip(_t("Any emoji"))
         self.setFixedWidth(66)
         self.setMaxLength(16)  # QString length is UTF-16 units: the rules' own cap
 
@@ -126,18 +127,18 @@ class EmojiDialog(QDialog):
     def __init__(self, parent, current=""):
         super().__init__(parent)
         styled(self)  # 3.9.1: the board's look
-        self.setWindowTitle("Your emoji")
+        self.setWindowTitle(_t("Your emoji"))
         self.setMinimumWidth(380)
         self._removed = False
         lay = QVBoxLayout(self)
         heading(self, lay)
-        lay.addWidget(note(QLabel("In front of your name, for your crew and squads.")))
+        lay.addWidget(note(QLabel(_t("In front of your name, for your crew and squads."))))
         self.picker = EmojiPicker(CREW_EMOJI, True, initial=current or "")
         lay.addWidget(self.picker)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save
                                    | QDialogButtonBox.StandardButton.Cancel)
         if current:
-            remove = buttons.addButton("Remove", QDialogButtonBox.ButtonRole.DestructiveRole)
+            remove = buttons.addButton(_t("Remove"), QDialogButtonBox.ButtonRole.DestructiveRole)
             remove.clicked.connect(self._remove)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
