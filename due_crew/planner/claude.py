@@ -24,6 +24,7 @@ card's text, an id, or anything about anyone else. Pure.
 
 import re
 
+from ..words import later as _later, t as _t
 from . import model as M
 from . import reading as R
 
@@ -31,12 +32,12 @@ class StandIn:
     """Claude's stand-in. `fake`: its answers are made here, by rules, and
     said to be."""
 
-    name = "Claude’s stand-in"
+    name = _later("Claude’s stand-in")  # said with _t(name)
     fake = True
 
     def status(self):
-        return ("Claude isn’t connected yet. Where plain rules leave something, a stand-in answers in its "
-                "place so you can try each step; its answers say so. Nothing is sent.")
+        return _t("Claude isn’t connected yet. Where plain rules leave something, a stand-in answers in its "
+                  "place so you can try each step; its answers say so. Nothing is sent.")
 
     # ---- the calendar ----
 

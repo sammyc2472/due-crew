@@ -11,6 +11,7 @@ from aqt.qt import (
 
 from . import attach_alive, heading, note, run_bg
 from .. import plans as P
+from ..words import later as _later, t as _t
 
 PER_TAG = 5000  # plans.ts IDLIST_MAX: a tag's notes
 
@@ -28,35 +29,35 @@ class TagDialog(QDialog):
         self.plans = []
         attach_alive(self)
         n = len(self.guids)
-        self.setWindowTitle("Tag for a plan")
+        self.setWindowTitle(_t("Tag for a plan"))
         self.setMinimumWidth(440)
         root = QVBoxLayout(self)
-        heading(self, root, f"Tag {n:,} note{'s' if n != 1 else ''} for a plan")
+        heading(self, root, _t(_later("Tag {n} note for a plan") if n == 1 else _later("Tag {n} notes for a plan"), n=f"{n:,}"))
         form = QFormLayout()
         self.plan = QComboBox()
         self.plan.currentIndexChanged.connect(self._plan_changed)
-        form.addRow("Plan", self.plan)
+        form.addRow(_t("Plan"), self.plan)
         self.tag = QComboBox()
         self.tag.setEditable(True)
         self.tag.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.tag.lineEdit().setMaxLength(40)
         self.tag.lineEdit().setPlaceholderText("SLG 12")
         self.tag.currentTextChanged.connect(self._tag_changed)
-        form.addRow("Tag", self.tag)
+        form.addRow(_t("Tag"), self.tag)
         root.addLayout(form)
         self.where = QLabel("")
         self.where.setTextFormat(Qt.TextFormat.PlainText)  # names come from the server
         root.addWidget(note(self.where))
-        self.status = QLabel("Looking for your plans…")
+        self.status = QLabel(_t("Looking for your plans…"))
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         self.status.setWordWrap(True)
         root.addWidget(self.status)
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
-        self.take_btn = QPushButton("Take off")
+        self.take_btn = QPushButton(_t("Take off"))
         self.take_btn.setVisible(False)
         self.take_btn.clicked.connect(lambda: self._send(take=True))
         self.buttons.addButton(self.take_btn, QDialogButtonBox.ButtonRole.ActionRole)
-        self.add_btn = QPushButton(f"Tag {n:,} note{'s' if n != 1 else ''}")
+        self.add_btn = QPushButton(_t(_later("Tag {n} note") if n == 1 else _later("Tag {n} notes"), n=f"{n:,}"))
         self.add_btn.setDefault(True)
         self.add_btn.setEnabled(False)
         self.add_btn.clicked.connect(lambda: self._send(take=False))
@@ -64,7 +65,7 @@ class TagDialog(QDialog):
         self.buttons.rejected.connect(self.reject)
         root.addWidget(self.buttons)
         if n > PER_TAG:
-            self.status.setText(f"A tag holds up to {PER_TAG:,} notes. Pick fewer, or split them over two tags.")
+            self.status.setText(_t("A tag holds up to {n} notes. Pick fewer, or split them over two tags.", n=f"{PER_TAG:,}"))
             return
         me = client.user_id
         run_bg(self, client.my_plans, lambda plans, err: self._loaded(
@@ -72,12 +73,12 @@ class TagDialog(QDialog):
 
     def _loaded(self, plans):
         if plans is None:
-            self.status.setText("Couldn't reach Due Crew. Check your connection.")
+            self.status.setText(_t("Couldn't reach Due Crew. Check your connection."))
             return
         self.plans = plans
         if not plans:
-            self.status.setText("Only a plan's author or co-authors tag for it. "
-                                "Make one: Tools › Due Crew › Make a plan from a deck…")
+            self.status.setText(_t("Only a plan's author or co-authors tag for it. "
+                                   "Make one: Tools › Due Crew › Make a plan from a deck…"))
             return
         self.status.setText("")
         for p in plans:
@@ -101,7 +102,7 @@ class TagDialog(QDialog):
         for t in P.plan_tags((p or {}).get("doc")):
             n = len(t.get("notes") or [])
             self.tag.addItem(t["name"], t["id"])
-            self.tag.setItemData(self.tag.count() - 1, f"{n:,} notes" if n else "made from tags", Qt.ItemDataRole.ToolTipRole)
+            self.tag.setItemData(self.tag.count() - 1, _t("{n} notes", n=f"{n:,}") if n else _t("made from tags"), Qt.ItemDataRole.ToolTipRole)
         self.tag.setCurrentIndex(-1)
         self.tag.setEditText(typed)
         self.tag.blockSignals(False)
@@ -119,7 +120,7 @@ class TagDialog(QDialog):
         t = self._existing(name) if name else None
         inside = len(set(self.guids) & set((t or {}).get("notes") or []))
         self.take_btn.setVisible(bool(inside))
-        self.take_btn.setText(f"Take {inside:,} off")
+        self.take_btn.setText(_t("Take {n} off", n=f"{inside:,}"))
         self.add_btn.setEnabled(bool(p) and bool(name) and len(self.guids) <= PER_TAG)
         if p and name:
             if self.outside and p["id"] not in self._out:
@@ -128,11 +129,18 @@ class TagDialog(QDialog):
                 except Exception:
                     self._out[p["id"]] = 0
             out = self._out.get(p["id"], 0)
-            deck = str((p.get("doc") or {}).get("deck") or "its deck")
-            self.where.setText(f"Everyone following {p.get('name') or 'it'} gets it with the plan's next update, "
-                               f"as {self._path(name)}. Only the notes' IDs go to the plan; their text stays here."
-                               + (f" {out:,} of them aren't in {deck}, so followers won't get {'that one' if out == 1 else 'those'}."
-                                  if out else ""))
+            deck = str((p.get("doc") or {}).get("deck") or "")
+            said = (_t("Everyone following {plan} gets it with the plan's next update, "
+                       "as {tag}. Only the notes' IDs go to the plan; their text stays here.", plan=p["name"], tag=self._path(name)) if p.get("name")
+                    else _t("Everyone following it gets it with the plan's next update, "
+                            "as {tag}. Only the notes' IDs go to the plan; their text stays here.", tag=self._path(name)))
+            if out and deck:
+                said += " " + _t(_later("{n} of them aren't in {deck}, so followers won't get that one.") if out == 1
+                                 else _later("{n} of them aren't in {deck}, so followers won't get those."), n=f"{out:,}", deck=deck)
+            elif out:
+                said += " " + _t(_later("{n} of them aren't in its deck, so followers won't get that one.") if out == 1
+                                 else _later("{n} of them aren't in its deck, so followers won't get those."), n=f"{out:,}")
+            self.where.setText(said)
         else:
             self.where.setText("")
 
@@ -143,7 +151,7 @@ class TagDialog(QDialog):
             return
         self.add_btn.setEnabled(False)
         self.take_btn.setEnabled(False)
-        self.status.setText("Taking them off…" if take else "Tagging…")
+        self.status.setText(_t("Taking them off…") if take else _t("Tagging…"))
         cl, pid = self.client, p["id"]
         before = set(((self._existing(name) or {}).get("notes")) or [])
         guids = [g for g in self.guids if g in before] if take else self.guids
@@ -153,10 +161,10 @@ class TagDialog(QDialog):
             if got is None:
                 self.add_btn.setEnabled(True)
                 self.take_btn.setEnabled(True)
-                self.status.setText({403: "Only the plan's author or co-authors tag for it.",
-                                     404: "That tag is gone already.",
-                                     400: "That's more than the plan holds: 5,000 notes a tag, 50,000 picks a plan."}.get(
-                    status, "Couldn't tag them. Check your connection."))
+                self.status.setText({403: _t("Only the plan's author or co-authors tag for it."),
+                                     404: _t("That tag is gone already."),
+                                     400: _t("That's more than the plan holds: 5,000 notes a tag, 50,000 picks a plan.")}.get(
+                    status, _t("Couldn't tag them. Check your connection.")))
                 return
             doc = got.get("doc") or {}
             path = P.tag_path(doc, {"name": name})

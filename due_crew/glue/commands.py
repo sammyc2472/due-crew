@@ -23,6 +23,7 @@ from ..ui import copy_text
 from ..wrap import _save_wrap
 from ..wrap import _wrap_data
 from ..wrap import _wrap_info
+from ..words import t as _t
 
 from .render import _SCRIPTS, _arrive_js, _board_html, _board_js, _dance_seen, _rerender
 from .refresh import _fetch_decks
@@ -223,7 +224,7 @@ def _cmd_wrap_copy(c, parts):
         if b.get("milestone"):
             text += f" · just passed {b['milestone']} all-time"
         copy_text(text + " — Due Crew")
-        tooltip("Copied.")
+        tooltip(_t("Copied."))
 
 
 def _cmd_cheer_back(c, parts):

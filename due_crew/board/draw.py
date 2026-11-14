@@ -369,7 +369,7 @@ def you_html(cfg, due=None, you=None, people=None):
     if you is None:
         return _due_html(due)
     hidden = hidden_tabs(cfg)
-    more = tuple(t for t in YOU_MORE if t[0] not in hidden) + ((PARTY_TAB,) if you.get("party_on") else ())
+    more = tuple((k, _t(lb)) for k, lb in tuple(t for t in YOU_MORE if t[0] not in hidden) + ((PARTY_TAB,) if you.get("party_on") else ()))
     keys = (["today", "upcoming", "later"] if due else []) + [k for k, _l in more]
     if not keys:
         return ""

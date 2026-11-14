@@ -16,6 +16,7 @@ from . import attach_alive, _night, title
 from . import note as ui_note
 from .map_card_dialog import _font, _logo, _text
 from .. import sharecard as S, sev
+from ..words import t as _t
 
 BOX_W, BOX_H = 380, 475  # the preview: a story fills it, a link sits in its middle
 
@@ -110,7 +111,7 @@ class ShareCardDialog(QDialog):
         self.preview = QLabel()
         self.preview.setFixedSize(BOX_W, BOX_H)
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview.setAccessibleName("The card")
+        self.preview.setAccessibleName(_t("The card"))
         row.addWidget(self.preview)
         side = QVBoxLayout()
         self.head = title("")  # the card's name; the frame says Due Crew (ui.heading)
@@ -119,7 +120,7 @@ class ShareCardDialog(QDialog):
         self.pick = None
         if options:
             self.pick = QComboBox()
-            self.pick.setAccessibleName("Which")
+            self.pick.setAccessibleName(_t("Which"))
             for key, label in options:
                 self.pick.addItem(label, key)
             keys = [k for k, _l in options]
@@ -130,18 +131,18 @@ class ShareCardDialog(QDialog):
         self.boxes = QVBoxLayout()
         self.boxes.setSpacing(2)
         side.addLayout(self.boxes)
-        self.story, self.link = QRadioButton("Story"), QRadioButton("Link")
+        self.story, self.link = QRadioButton(_t("Story")), QRadioButton(_t("Link"))
         self.story.setChecked(True)
         self.size_row = QHBoxLayout()
-        self.size_label = QLabel("Size")
+        self.size_label = QLabel(_t("Size"))
         for w in (self.size_label, self.story, self.link):
             self.size_row.addWidget(w)
         self.size_row.addStretch()
         side.addLayout(self.size_row)
-        self.light, self.dark = QRadioButton("Light"), QRadioButton("Dark")
+        self.light, self.dark = QRadioButton(_t("Light")), QRadioButton(_t("Dark"))
         (self.dark if _night() else self.light).setChecked(True)
         look = QHBoxLayout()
-        look.addWidget(QLabel("Look"))
+        look.addWidget(QLabel(_t("Look")))
         look.addWidget(self.light)
         look.addWidget(self.dark)
         look.addStretch()
@@ -152,9 +153,9 @@ class ShareCardDialog(QDialog):
             for b in pair:
                 g.addButton(b)
                 b.toggled.connect(self._draw)
-        self.copy = QPushButton("Copy picture")
+        self.copy = QPushButton(_t("Copy picture"))
         self.copy.setDefault(True)
-        self.save = QPushButton("Save…")
+        self.save = QPushButton(_t("Save…"))
         self.copy.clicked.connect(self._copy)
         self.save.clicked.connect(self._save)
         buttons = QHBoxLayout()
@@ -162,7 +163,7 @@ class ShareCardDialog(QDialog):
         buttons.addWidget(self.save)
         side.addSpacing(12)
         side.addLayout(buttons)
-        side.addWidget(ui_note(QLabel("Made here, from your own Anki. Nothing is posted.")))
+        side.addWidget(ui_note(QLabel(_t("Made here, from your own Anki. Nothing is posted."))))
         side.addStretch()
         row.addLayout(side)
         self.refresh()
@@ -235,14 +236,14 @@ class ShareCardDialog(QDialog):
 
     def _copy(self):
         QApplication.clipboard().setImage(self.image())
-        self._tip("Copied. Paste it where your crew is.")
+        self._tip(_t("Copied. Paste it where your crew is."))
 
     def _save(self):
         name = f"{self.card()['file']}-{self.size()}.png"
-        path, _f = QFileDialog.getSaveFileName(self, "Save the picture", os.path.join(os.path.expanduser("~"), name),
+        path, _f = QFileDialog.getSaveFileName(self, _t("Save the picture"), os.path.join(os.path.expanduser("~"), name),
                                                "PNG (*.png)")
         if path:
             if not path.lower().endswith(".png"):
                 path += ".png"
             if self.image().save(path, "PNG"):
-                self._tip("Saved.")
+                self._tip(_t("Saved."))

@@ -48,10 +48,11 @@ def plans_menu(parent):
             _hooked.append(True)
         except (ImportError, AttributeError):
             pass
-    menu = QMenu("Plans", parent)
-    for item in (("Your plans…", flow.open_plans), ("New plan…", flow.open_new),
-                 ("Follow a plan…", plan_flow.open_follow), None,
-                 ("Export cards for my AI…", plan_flow.open_export)):
+    from ..words import t as _t
+    menu = QMenu(_t("Plans"), parent)
+    for item in ((_t("Your plans…"), flow.open_plans), (_t("New plan…"), flow.open_new),
+                 (_t("Follow a plan…"), plan_flow.open_follow), None,
+                 (_t("Export cards for my AI…"), plan_flow.open_export)):
         if item is None:
             menu.addSeparator()
             continue

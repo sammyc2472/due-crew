@@ -16,6 +16,7 @@ from aqt.utils import tooltip
 
 from ..backend.shapes import friend_code_from, invite_code_from
 from . import accent, attach_alive, confirm, copy_text, heading, note, role, run_bg, tone
+from ..words import t as _t
 
 
 def invite_text(friend_code):
@@ -42,12 +43,12 @@ class FriendsDialog(QDialog):
         QTimer.singleShot(0, self._load)
 
     def _build(self):
-        self.setWindowTitle("Friends")
+        self.setWindowTitle(_t("Friends"))
         self.setMinimumWidth(470)  # 3.9.1: the code and its three buttons in the board-look padding
         root = QVBoxLayout(self)
         heading(self, root)
 
-        root.addWidget(role(QLabel("Your code"), "head"))
+        root.addWidget(role(QLabel(_t("Your code")), "head"))
         code_row = QHBoxLayout()
         self.code_label = QLabel("······")
         self.code_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -59,31 +60,31 @@ class FriendsDialog(QDialog):
             f"color: {accent()}; background: {tone('well')};"
             f"border: 1px solid {tone('line')}; border-radius: 6px;")
         code_row.addWidget(self.code_label)
-        copy = QPushButton("Copy")
+        copy = QPushButton(_t("Copy"))
         copy.clicked.connect(self._copy)
         code_row.addWidget(copy)
-        invite = QPushButton("Copy invite")
-        invite.setToolTip("Everything a friend needs, in one paste")
+        invite = QPushButton(_t("Copy invite"))
+        invite.setToolTip(_t("Everything a friend needs, in one paste"))
         invite.clicked.connect(self._copy_invite)
         code_row.addWidget(invite)
         # 2.10: a code also knocks now, so one posted too widely needs a way out
-        self.new_btn = QPushButton("New code")
-        self.new_btn.setToolTip("Retire this code and get a fresh one. Your crew stays.")
+        self.new_btn = QPushButton(_t("New code"))
+        self.new_btn.setToolTip(_t("Retire this code and get a fresh one. Your crew stays."))
         self.new_btn.clicked.connect(self._new_code)
         code_row.addWidget(self.new_btn)
         code_row.addStretch()
         root.addLayout(code_row)
-        root.addWidget(note(QLabel("You're crew once you've both added each other's codes.")))
+        root.addWidget(note(QLabel(_t("You're crew once you've both added each other's codes."))))
 
         root.addSpacing(8)
-        root.addWidget(role(QLabel("Add a friend"), "head"))
+        root.addWidget(role(QLabel(_t("Add a friend")), "head"))
         add_row = QHBoxLayout()
         self.code_input = QLineEdit()
         # 2.9: the whole invite pastes in; the code is taken from it
-        self.code_input.setPlaceholderText("Their code, or paste their invite")
+        self.code_input.setPlaceholderText(_t("Their code, or paste their invite"))
         self.code_input.returnPressed.connect(self._add)
         add_row.addWidget(self.code_input)
-        self.add_btn = QPushButton("Add")
+        self.add_btn = QPushButton(_t("Add"))
         self.add_btn.clicked.connect(self._add)
         add_row.addWidget(self.add_btn)
         root.addLayout(add_row)
@@ -95,15 +96,15 @@ class FriendsDialog(QDialog):
         self.knocks_host.hide()
 
         root.addSpacing(8)
-        root.addWidget(role(QLabel("Your crew"), "head"))
+        root.addWidget(role(QLabel(_t("Your crew")), "head"))
         self.list = QListWidget()
         root.addWidget(self.list)
 
         buttons = QHBoxLayout()
-        self.remove_btn = QPushButton("Remove")
+        self.remove_btn = QPushButton(_t("Remove"))
         self.remove_btn.clicked.connect(self._remove)
         buttons.addWidget(self.remove_btn)
-        self.retry_btn = QPushButton("Retry")
+        self.retry_btn = QPushButton(_t("Retry"))
         self.retry_btn.clicked.connect(self._load)
         self.retry_btn.hide()
         buttons.addWidget(self.retry_btn)
@@ -128,7 +129,7 @@ class FriendsDialog(QDialog):
         self._set_writable(False)
         self.retry_btn.hide()
         self.list.clear()
-        self.list.addItem("Loading…")
+        self.list.addItem(_t("Loading…"))
 
         def job():
             code, people, knocks = self.client.friends_view()  # one request
@@ -138,8 +139,8 @@ class FriendsDialog(QDialog):
         def done(result, err):
             if err or result is None:
                 self.list.clear()
-                self.list.addItem("Couldn't load your crew. "
-                                  "Check your connection and retry.")
+                self.list.addItem(_t("Couldn't load your crew. "
+                                     "Check your connection and retry."))
                 self.retry_btn.show()
                 return
             self.code, self.friends, knocks = result
@@ -171,20 +172,20 @@ class FriendsDialog(QDialog):
         if not self.knocks:
             self.knocks_host.hide()
             return
-        self.knocks_lay.addWidget(role(QLabel("Added you"), "head"))
+        self.knocks_lay.addWidget(role(QLabel(_t("Added you")), "head"))
         for kuid, kname in self.knocks:
             row = QHBoxLayout()
             # server-sourced name: force plain text
             label = QLabel()
             label.setTextFormat(Qt.TextFormat.PlainText)
-            label.setText(f"{kname} added you")
+            label.setText(_t("{who} added you", who=kname))
             row.addWidget(label)
             row.addStretch()
-            add = QPushButton("Add back")
+            add = QPushButton(_t("Add back"))
             add.clicked.connect(
                 lambda _=False, u=kuid, n=kname: self._add_back(u, n))
             row.addWidget(add)
-            ignore = QPushButton("Ignore")
+            ignore = QPushButton(_t("Ignore"))
             ignore.setFlat(True)
             ignore.clicked.connect(
                 lambda _=False, u=kuid: self._ignore_knock(u))
@@ -200,7 +201,7 @@ class FriendsDialog(QDialog):
         def done(ok, err):
             self._set_writable(True)
             if err or not ok:
-                tooltip("Couldn't save. Try again.")
+                tooltip(_t("Couldn't save. Try again."))
                 return
             # they knocked, so I'm already in their list: instantly mutual
             self.friends.append((kuid, kname, True))
@@ -208,7 +209,7 @@ class FriendsDialog(QDialog):
             self.changed = True
             self._render_knocks()
             self._render_list()
-            tooltip(f"You and {html.escape(kname)} are crew.")
+            tooltip(_t("You and {name} are crew.", name=html.escape(kname)))
 
         def job():
             return self.client.add_back(kuid) is not None  # clears the knock too
@@ -226,13 +227,13 @@ class FriendsDialog(QDialog):
     def _render_list(self):
         self.list.clear()
         if not self.friends:
-            self.list.addItem("No one yet. Swap codes with a friend.")
+            self.list.addItem(_t("No one yet. Swap codes with a friend."))
             return
         for _, name, mutual in self.friends:
             if mutual:
                 self.list.addItem(name)
             else:
-                self.list.addItem(f"{name} · waiting")
+                self.list.addItem(_t("{name} · waiting", name=name))
 
     # ---- actions ----
 
@@ -245,7 +246,7 @@ class FriendsDialog(QDialog):
     def _copy(self):
         if self.code:
             copy_text(self.code)
-            tooltip("Copied.")
+            tooltip(_t("Copied."))
 
     def _copy_invite(self):
         """3.5.0: a one-time link; offline, the link carries my code."""
@@ -256,15 +257,15 @@ class FriendsDialog(QDialog):
 
         def done(invite, _err):
             copy_text(invite_text(invite or code))
-            tooltip(INVITE_COPIED if invite else "Invite copied.")
+            tooltip(_t(INVITE_COPIED) if invite else _t("Invite copied."))
         run_bg(self, self.client.create_invite, done)
 
     def _new_code(self):
         if not self.loaded or not self.code:
             return
-        if not confirm(self, "New code",
-                       "Get a new code? This one stops working, and so does any invite "
-                       "with it in. Your crew stays as it is.", "New code"):
+        if not confirm(self, _t("New code"),
+                       _t("Get a new code? This one stops working, and so does any invite "
+                          "with it in. Your crew stays as it is."), _t("New code")):
             return
         old = self.code
         self.new_btn.setEnabled(False)
@@ -272,13 +273,13 @@ class FriendsDialog(QDialog):
         def done(result, err):
             self.new_btn.setEnabled(self.loaded)
             if err or result is None:
-                tooltip("Couldn't reach Due Crew. Your code is unchanged.")
+                tooltip(_t("Couldn't reach Due Crew. Your code is unchanged."))
                 return
             code, problem = result
             if code:
                 self.code = self.new_code = code
                 self._show_code(code)
-            tooltip(problem or "New code. The old one no longer works.")
+            tooltip(problem or _t("New code. The old one no longer works."))
 
         run_bg(self, lambda: self.client.new_friend_code(old), done)
 
@@ -288,20 +289,20 @@ class FriendsDialog(QDialog):
         invite = invite_code_from(self.code_input.text())
         code = "" if invite else friend_code_from(self.code_input.text())
         if not code and not invite:
-            tooltip("That doesn't look like a code. Pasting the whole invite works too.")
+            tooltip(_t("That doesn't look like a code. Pasting the whole invite works too."))
             return
         if self.code and code == self.code:
-            tooltip("That's your own code.")
+            tooltip(_t("That's your own code."))
             return
         self._set_writable(False)
-        self.add_btn.setText("Adding…")
+        self.add_btn.setText(_t("Adding…"))
 
         def done(result, err):
-            self.add_btn.setText("Add")
+            self.add_btn.setText(_t("Add"))
             self._set_writable(True)
             friend, add_err = result if result else (None, None)
             if not friend:
-                tooltip(html.escape(add_err or "Couldn't add. Check your connection."))
+                tooltip(html.escape(add_err or _t("Couldn't add. Check your connection.")))
                 return
             self.friends = [f for f in self.friends if f[0] != friend["user_id"]]
             self.friends.append((friend["user_id"], friend["name"], friend["mutual"]))
@@ -310,14 +311,14 @@ class FriendsDialog(QDialog):
             self._render_list()
             name = html.escape(friend["name"])
             if invite and not friend["mutual"] and not friend.get("knocked"):
-                tooltip(f"{name} isn't in your crew now.")
+                tooltip(_t("{name} isn't in your crew now.", name=name))
             elif friend["mutual"]:
-                tooltip(f"You and {name} are crew.")
+                tooltip(_t("You and {name} are crew.", name=name))
             elif friend.get("knocked"):
                 # 2.9: the add knocked; their board offers Add back
-                tooltip(f"Added {name}. They'll see it on their board.")
+                tooltip(_t("Added {name}. They'll see it on their board.", name=name))
             else:
-                tooltip(f"Added {name}. Send them your code to finish.")
+                tooltip(_t("Added {name}. Send them your code to finish.", name=name))
 
         run_bg(self, lambda: (self.client.redeem_invite(invite) if invite
                               else self.client.add_friend(code)), done)
@@ -327,19 +328,19 @@ class FriendsDialog(QDialog):
             return
         row = self.list.currentRow()
         if row < 0 or row >= len(self.friends):
-            tooltip("Pick someone in the list first.")
+            tooltip(_t("Pick someone in the list first."))
             return
         fid, name, _ = self.friends[row]
         # plain text (confirm): names are server-sourced
-        if not confirm(self, "Remove?", f"Remove {name}?\n\nThey leave your board and "
-                       "stop seeing your stats.", "Remove"):
+        if not confirm(self, _t("Remove?"), _t("Remove {name}?\n\nThey leave your board and "
+                                        "stop seeing your stats.", name=name), _t("Remove")):
             return
         self._set_writable(False)
 
         def done(ok, err):
             self._set_writable(True)
             if err or not ok:
-                tooltip("Couldn't save. Try again.")
+                tooltip(_t("Couldn't save. Try again."))
                 return
             self.friends = [t for t in self.friends if t[0] != fid]
             self.changed = True

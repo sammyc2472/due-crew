@@ -34,6 +34,7 @@ from ..wrap import _deck_deltas
 from ..wrap import _exam_eve_info
 from ..wrap import _wrap_data
 from ..wrap import _wrap_info
+from ..words import t as _t
 
 from .refresh import _board_data, _morning_now, _push_if_stale, _run, refresh_board
 
@@ -157,7 +158,7 @@ def _squad_view_with_bingo(c):
                                              bool(squares) and all(q.get("done") for q in squares),
                                              f'{(bv.get("card") or {}).get("wk")}:{bv.get("squad_id")}'))
             if bingo_flow.new_lines(bv):
-                tooltip("BINGO! Your squad just made a line.", period=4000)
+                tooltip(_t("BINGO! Your squad just made a line."), period=4000)
                 _scrap(lambda sf: sf.moment("bingo", "Your squad made a bingo line", "", "cheer", (_state.get("labels") or [None])[0]))
     return sv
 
@@ -178,7 +179,7 @@ def _bingo_cmd(cmd):
         if bv:
             from ..bingo import share_text
             copy_text(share_text(bv["card"], bv["ev"], bv["squad"]))
-            tooltip("Copied.")
+            tooltip(_t("Copied."))
 
 
 def _board_html(c):

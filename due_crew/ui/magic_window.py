@@ -11,6 +11,7 @@ from aqt.qt import QDialog, QVBoxLayout
 from ..app import cfg
 from ..magic_html import page_html
 from . import attach_alive
+from ..words import t as _t
 
 PREFIX = "dcmagic:"
 WIDTH, START_H, MIN_H = 660, 190, 140  # a box and its filters; it grows with what it finds
@@ -26,7 +27,7 @@ class MagicWindow(QDialog):
         # had left the last window hidden for the rest of the session), as the plan window does
         from aqt.qt import Qt
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        self.setWindowTitle("Magic search")
+        self.setWindowTitle(_t("Magic search"))
         self.setModal(False)
         # round 2 (Sam: "WAY too big and should change size according to content"): as wide
         # as its how-to's two columns, as tall as what's in it (the page says, size)

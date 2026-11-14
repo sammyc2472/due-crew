@@ -16,14 +16,39 @@ The file and the hooks are scrap_flow's; the page board.scrapbook_html."""
 import hashlib
 
 from .backend.shapes import clean_doodle, clean_emoji, clean_note
+from .words import later as _later, t as _t
 
 KINDS = ("pz", "luck", "tip", "cheer", "mine")
 KEEP = 3000          # keepsakes kept in all (a polaroid is a few hundred bytes; the oldest go first)
 HEAD_MAX, SUB_MAX, PART_MAX = 80, 160, 60
 POSES = ("cheer", "hop", "hello")
 WHATS = ("plan", "bingo", "pip", "hook")  # what a moment of mine was (the year page counts plans and what Pip earned)
-MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September",
-          "October", "November", "December")
+MONTHS = (_later("January"), _later("February"), _later("March"), _later("April"), "May", _later("June"), _later("July"),
+          _later("August"), _later("September"), _later("October"), _later("November"), _later("December"))
+_MAY = _later("May (the month, in full)")  # "May" alone is the short month's phrase too (words.MONTHS)
+
+
+def month_said(name):
+    """A month's name (one of MONTHS) in the language in use; anything else as it is."""
+    if name == "May":
+        said = _t(_MAY)
+        return name if said == _MAY else said
+    return _t(name) if name in MONTHS else name
+
+
+def _count(one, many, v):
+    """A count in words: `one` for exactly one, `many` otherwise, its {n} with thousands marked."""
+    return _t(one if int(v) == 1 else many, n=_n(v))
+
+
+def _parts(phrase, **names):
+    """A line said whole and cut in three at its bars: (before, the part in the accent, after)."""
+    for said in (_t(phrase), phrase):  # a translation whose names don't fit is said in English, whole (as words.t does)
+        try:
+            return tuple(x.format(**names) for x in (said.split("|") + ["", ""])[:3])
+        except (KeyError, IndexError, ValueError):
+            continue
+    return ("", "", "")
 
 
 def _text(v, n):
@@ -135,9 +160,9 @@ def month_line(mine, days):
     if mine:
         head = mine[0]["head"]
         more = len(mine) - 1
-        return ("", head, f", and {more} more." if more else ".")
+        return _parts(_later("|{head}|, and {more} more."), head=head, more=more) if more else ("", head, ".")
     if days:
-        return ("", f"{_n(days)} day{'s' if days != 1 else ''}", " you showed up.")
+        return _parts(_later("|{days}| you showed up."), days=_count(_later("{n} day"), _later("{n} days"), days))
     return ("", "", "")
 
 
@@ -145,31 +170,32 @@ def month_sub(days, reviews, cheers):
     """The month's numbers under its line: study days, reviews, cheers (each only when there is one)."""
     bits = []
     if days:
-        bits.append(f"{_n(days)} study day{'s' if days != 1 else ''}")
+        bits.append(_count(_later("{n} study day"), _later("{n} study days"), days))
     if reviews:
-        bits.append(f"{_n(reviews)} review{'s' if reviews != 1 else ''}")
+        bits.append(_count(_later("{n} review"), _later("{n} reviews"), reviews))
     if cheers:
-        bits.append(f"cheered {_n(cheers)} time{'s' if cheers != 1 else ''}")
+        bits.append(_count(_later("cheered {n} time"), _later("cheered {n} times"), cheers))
     return " · ".join(bits)
 
 
 def year_line(year, days, reviews, so_far):
     """The year page's line: (before, the part in the accent, after)."""
     if not days:
-        return (f"{int(year)}{' so far' if so_far else ''}: nothing studied yet.", "", "")
-    return (f"{_n(days)} day{'s' if days != 1 else ''} you showed up, and ", f"{_n(reviews)} review{'s' if reviews != 1 else ''}", ".")
+        return (_t("{year} so far: nothing studied yet.", year=int(year)) if so_far else _t("{year}: nothing studied yet.", year=int(year)), "", "")
+    return _parts(_later("{days} you showed up, and |{reviews}|."), days=_count(_later("{n} day"), _later("{n} days"), days),
+                  reviews=_count(_later("{n} review"), _later("{n} reviews"), reviews))
 
 
 def year_stats(run, plans, c, cheers, earned):
     """The year page's small numbers: [(number, words)], each only when there is one."""
     out = []
-    for n, one, many in ((run, "day, your longest run", "days, your longest run"),
-                         (plans, "plan finished", "plans finished"),
-                         (c.get("pz", 0), "drawing or sign", "drawings and signs"),
-                         (c.get("luck", 0), "good-luck card", "good-luck cards"),
-                         (c.get("tip", 0), "tip that helped", "tips that helped"),
-                         (cheers, "cheer", "cheers"),
-                         (earned, "thing Pip earned", "things Pip earned")):
+    for n, one, many in ((run, _later("day, your longest run"), _later("days, your longest run")),
+                         (plans, _later("plan finished"), _later("plans finished")),
+                         (c.get("pz", 0), _later("drawing or sign"), _later("drawings and signs")),
+                         (c.get("luck", 0), _later("good-luck card"), _later("good-luck cards")),
+                         (c.get("tip", 0), _later("tip that helped"), _later("tips that helped")),
+                         (cheers, _later("cheer"), _later("cheers")),
+                         (earned, _later("thing Pip earned"), _later("things Pip earned"))):
         if n:
-            out.append((_n(n), one if int(n) == 1 else many))
+            out.append((_n(n), _t(one if int(n) == 1 else many)))
     return out

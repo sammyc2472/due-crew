@@ -8,6 +8,7 @@ from . import attach_alive, heading, run_bg
 from . import note as ui_note
 from ..app import feedback_versions as versions
 from ..backend.api import FEEDBACK_MAX
+from ..words import t as _t
 
 
 class FeedbackDialog(QDialog):
@@ -15,19 +16,19 @@ class FeedbackDialog(QDialog):
         super().__init__(parent)
         self.client, self.addon_version, self.on_sent = client, addon_version, on_sent
         attach_alive(self)
-        self.setWindowTitle("Send feedback")
+        self.setWindowTitle(_t("Send feedback"))
         self.setMinimumWidth(420)
         lay = QVBoxLayout(self)
         heading(self, lay)
         self.box = QPlainTextEdit()
-        self.box.setPlaceholderText("What's working, what isn't, what you'd add…")
+        self.box.setPlaceholderText(_t("What's working, what isn't, what you'd add…"))
         self.box.setMinimumHeight(120)
         self.box.textChanged.connect(self._changed)
         lay.addWidget(self.box)
-        self.ver = QCheckBox("Include my Due Crew and Anki versions")
+        self.ver = QCheckBox(_t("Include my Due Crew and Anki versions"))
         self.ver.setChecked(True)
         lay.addWidget(self.ver)
-        note = QLabel("Due Crew sees your name and emoji with it, and can write back to your email. Nobody else sees it.")
+        note = QLabel(_t("Due Crew sees your name and emoji with it, and can write back to your email. Nobody else sees it."))
         lay.addWidget(ui_note(note))
         self.status = QLabel("")
         self.status.setTextFormat(Qt.TextFormat.PlainText)
@@ -35,7 +36,7 @@ class FeedbackDialog(QDialog):
         lay.addWidget(self.status)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         self.send_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
-        self.send_btn.setText("Send")
+        self.send_btn.setText(_t("Send"))
         self.send_btn.setEnabled(False)
         buttons.accepted.connect(self._send)
         buttons.rejected.connect(self.reject)
@@ -47,7 +48,7 @@ class FeedbackDialog(QDialog):
     def _changed(self):
         n = len(self._text())
         self.send_btn.setEnabled(0 < n <= FEEDBACK_MAX)
-        self.status.setText(f"{n:,} of {FEEDBACK_MAX:,} characters: shorten it a little." if n > FEEDBACK_MAX else "")
+        self.status.setText(_t("{n} of {most} characters: shorten it a little.", n=f"{n:,}", most=f"{FEEDBACK_MAX:,}") if n > FEEDBACK_MAX else "")
 
     def _send(self):
         text = self._text()
@@ -55,7 +56,7 @@ class FeedbackDialog(QDialog):
             return
         ver = versions(self.addon_version) if self.ver.isChecked() else ""
         self.send_btn.setEnabled(False)
-        self.status.setText("Sending…")
+        self.status.setText(_t("Sending…"))
 
         def done(status, err):
             if status == 201:
@@ -64,7 +65,7 @@ class FeedbackDialog(QDialog):
                 self.accept()
                 return
             self.send_btn.setEnabled(True)
-            self.status.setText("That's five today. Send more tomorrow." if status == 429
-                                else "Couldn't send it. Check your connection and try again.")
+            self.status.setText(_t("That's five today. Send more tomorrow.") if status == 429
+                                else _t("Couldn't send it. Check your connection and try again."))
 
         run_bg(self, lambda: self.client.send_feedback(text, ver), done)
