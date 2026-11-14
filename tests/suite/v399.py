@@ -1257,3 +1257,20 @@ def test_languages_v3100():
 def settings_model_change(parts):
     from due_crew import settings_model
     return settings_model.change(parts, {})
+
+
+def test_polaroid_tape_is_the_pips_colour():
+    """After 3.9.12 (SC: "the tape on the polaroids should match that user's pip color also"): a doodle drawn in one
+    colour by someone who has since changed theirs is taped in the colour their Pip wears now; the drawing keeps its ink."""
+    draw = {"k": "draw", "s": [[0, 10, 10, 50, 50]]}
+    people = {"dre": {"user_id": "dre", "name": "Dre", "look": [], "accent": "rose"}}
+    item = {"from": "dre", "name": "Dre", "at": "2026-10-29", "a": "purple", "n": "", "d": draw}
+    fr = board.fridge_html([item], people, {"sev": True})
+    rose, purple = board.accent_pair("rose"), board.accent_pair("purple")
+    rgb = lambda c: ",".join(str(int(c.lstrip("#")[i:i + 2], 16)) for i in (0, 2, 4))
+    check("the fridge: taped in the Pip's colour now, the drawing in the ink it came in",
+          f"--ft:rgba({rgb(rose[1])},.6)" in fr and f"--pa:{rose[0]}" in fr and f"--fa:{purple[0]}" in fr and f"rgba({rgb(purple[1])}" not in fr, fr[:300])
+    gone = board.fridge_html([item], {}, {"sev": True})
+    check("the fridge: someone no longer in my crew keeps the colour it came in", f"--ft:rgba({rgb(purple[1])},.6)" in gone)
+    check("the scrapbook's polaroid is taped in the same: its person's colour now, else the one it came in",
+          "background: var(--a)" in srcs.due_src("board/scrapbook.py") and "accent_pair(now or x.get(\"a\"))" in srcs.due_src("board/scrapbook.py"))

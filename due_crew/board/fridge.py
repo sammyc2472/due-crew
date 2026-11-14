@@ -134,7 +134,9 @@ def _fridge_notes(items, people, cfg, gone=None):
         now = e.get("accent") if isinstance(e, dict) and e.get("accent") in ACCENTS else ""
         fa, tape = accent_pair(x["a"] or now)
         pa, pd = accent_pair(now or x["a"])
-        notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{fa};--fd:{tape};--pa:{pa};--pd:{pd};--ft:{_tape(tape)}" title="Drag it anywhere">'
+        # the tape is their Pip's colour too (SC, after 3.9.12: "the tape on the polaroids should match that user's pip
+        # color also"): it was the drawing's ink, so someone who changed colour had a Pip in one and tape in another
+        notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{fa};--fd:{tape};--pa:{pa};--pd:{pd};--ft:{_tape(pd)}" title="Drag it anywhere">'
                      f'<div class="fp">{art}</div>{note}<div class="fw">{pip}<b>{name}</b>{f" · {when}" if when else ""}</div>'
                      f'<a class="fx" href="#" title="Take it down" aria-label="Take {name}’s down" '
                      f'onclick="{_pycmd("fridgedown:" + k)}">&times;</a></div>')
