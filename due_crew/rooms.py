@@ -29,6 +29,7 @@ from aqt.utils import tooltip
 from . import app, board, room_model, sev
 from .app import _state, cfg, client, save_cfg
 from .errs import oops
+from .words import later as _later, t as _t
 
 
 def _closet(do):
@@ -132,7 +133,7 @@ def open_room():
     room = room_model.make_room(client().user_id, start, rounds, round_min, brk_min)
     from .bingo_flow import bump
     bump("rm")  # 3.6
-    _set_room(room, "Room open. Your crew sees it on their next refresh.")
+    _set_room(room, _t("Room open. Your crew sees it on their next refresh."))
 
 
 def join(key):
@@ -141,14 +142,14 @@ def join(key):
         if r and room_model.cmd_key(r) == key and not room_model.is_over(r, _now()):
             from .bingo_flow import bump
             bump("rm")  # 3.6
-            _set_room(dict(r), f"You're in {html.escape(room_model.title(_state['entries'], r))}.")  # a crewmate's name
+            _set_room(dict(r), _t("You're in {room}.", room=html.escape(room_model.title(_state['entries'], r))))  # a crewmate's name
             return
-    tooltip("That room has ended.")
+    tooltip(_t("That room has ended."))
 
 
 def leave():
     _remove_break()
-    _set_room(None, "You left the room.")
+    _set_room(None, _t("You left the room."))
 
 
 def dismiss(key):
@@ -167,7 +168,7 @@ def cheer_room():
     from .social import _send_cheer, cheer_allowed
     now = time.time()
     if now - _room_cheered["at"] < ROOM_CHEER_GAP:
-        tooltip("Cheered just now.")
+        tooltip(_t("Cheered just now."))
         return
     room = my_room()
     if room:
@@ -176,7 +177,7 @@ def cheer_room():
         crew = [tuple(x) for x in (_done() or {}).get("uids") or []]
     emoji = cheer_allowed("\U0001F389")
     if not crew or not emoji:
-        tooltip("Nobody else in the room yet.")
+        tooltip(_t("Nobody else in the room yet."))
         return
     _room_cheered["at"] = now
     for uid, name in crew:
@@ -188,7 +189,7 @@ def share_done():
     d = _done()
     if d:
         copy_text(room_model.done_share(d))
-        tooltip("Copied for the chat.")
+        tooltip(_t("Copied for the chat."))
 
 
 def dismiss_done():
@@ -551,7 +552,7 @@ def on_theme(*_args):
         refresh_widgets()
 
 
-START_WAYS = (("Fifteen minutes, on my own", "fifteen"), ("A room with my crew", "room"))
+START_WAYS = ((_later("Fifteen minutes, on my own"), "fifteen"), (_later("A room with my crew"), "room"))
 
 
 def start_menu():
@@ -562,7 +563,7 @@ def start_menu():
     run = {"fifteen": start_fifteen, "room": open_room}
     menu = QMenu(mw)
     for label, key in START_WAYS:
-        menu.addAction(label).triggered.connect(lambda _=False, k=key: run[k]())
+        menu.addAction(_t(label)).triggered.connect(lambda _=False, k=key: run[k]())
     menu.exec(QCursor.pos())
 
 
@@ -714,7 +715,7 @@ def start_fifteen():
     today opens (unless I'm reviewing already)."""
     cl = client()
     if not cl.signed_in:
-        tooltip("Sign in to Due Crew first.")
+        tooltip(_t("Sign in to Due Crew first."))
         return
     if my_room():
         show_card()  # already in one: here it is
@@ -752,7 +753,7 @@ def take_five():
     fifteen and its question, as ever (the break in place of the card)."""
     cl = client()
     if not cl.signed_in:
-        tooltip("Sign in to Due Crew first.")
+        tooltip(_t("Sign in to Due Crew first."))
         return
     if my_room():
         show_card()
@@ -935,7 +936,7 @@ def milestone_sevs(milestones):
         rest = key in played
         if not rest:
             played[key] = pick("hop")
-        out[uid] = sev.move("hop", played[key], rest=rest, label="Pip: a big streak", look=looks.get(uid))  # 3.8.2: in their look
+        out[uid] = sev.move("hop", played[key], rest=rest, label=_t("Pip: a big streak"), look=looks.get(uid))  # 3.8.2: in their look
     return out
 
 

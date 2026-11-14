@@ -34,6 +34,7 @@ CHIP = {
     "pip": dict,          # a Pip to draw beside it
     "peek": dict,         # who peeks in from the corner: {uids, head, act, pips, pop, side}
     "sevcss": str,        # Pip's sheet, sent once a page
+    "words": dict,        # 3.10.0: its scripts' own words (Show, Not now…) in the language in use; none in English
 }
 PEEK = {"uids": list, "head": str, "act": str, "pips": list, "pop": bool, "side": str}  # side: "left" for what's mine (3.9.12)
 

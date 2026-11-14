@@ -19,6 +19,7 @@ import re
 import secrets
 
 from . import sev as _sev
+from .words import later as _later, t as _t
 
 ROUND_CHOICES = (15, 25, 30, 45, 50)
 BREAK_CHOICES = (5, 10, 15)
@@ -217,7 +218,7 @@ def host_name(entries, room):
 def title(entries, room):
     """ "Dre's room", or "A study room" when the host isn't in my crew."""
     name = host_name(entries, room)
-    return f"{name.split(' ')[0]}’s room" if name else "A study room"
+    return _t("{name}’s room", name=name.split(' ')[0]) if name else _t("A study room")
 
 
 def invites(entries, my_room, dismissed=(), now=None):
@@ -242,10 +243,10 @@ def names_line(members_):
     """ "Dre, Ameya and you" """
     names = [n.split(" ")[0] for _u, n, you in members_ if not you]
     if any(you for _u, _n, you in members_):
-        names.append("you")
+        names.append(_t("you"))
     if not names:
         return ""
-    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + _t(" and ") + names[-1]
 
 
 def duration_text(minutes):
@@ -255,12 +256,53 @@ def duration_text(minutes):
 
 def done_share(done):
     """The chat line for a finished room."""
-    return (f"Studied together on Due Crew: {done['rounds']} rounds, "
-            f"{duration_text(done['minutes'])} with {done['with'] or 'my crew'}.\n"
-            "— Due Crew · Anki add-on 2035408484")
+    return (_t("Studied together on Due Crew: {n} rounds, {time} with {who}.", n=done['rounds'],
+               time=duration_text(done['minutes']), who=done['with'] or _t("my crew"))
+            + "\n— Due Crew · Anki add-on 2035408484")
 
 
 # ---- the widgets ----
+
+# 3.10.0: every phrase room_widget.js says (its W('…'): English is the key there too, a phrase whole, its
+# {names} filled in the page). A phrase added to the script is added here, or it's said in English.
+WIDGET_WORDS = (
+    _later(" and "), _later("Break"), _later("Fifteen"), _later("Fifteen {n}"), _later("fifteen {n} at {time}"), _later("done"),
+    _later("{n} min left"), _later("starts {time}"), _later("Break · round {n} at {time}"),
+    _later("Round {n} of {of} · break {time}"), _later("Round {n} of {of} · ends {time}"),
+    _later("Your fifteen"), _later("Your study room"), _later("break {n} min"), _later("{n} min"),
+    _later("Round {n} of {of}"), _later("round {n} at {time}"), _later("break at {time}"), _later("ends {time}"),
+    _later("Start now"), _later("Stop here"), _later("Cheer the room"), _later("Cheered"), _later("Skip the break"),
+    _later("Stand up, stretch, some water. Look at something far away."),
+    _later("Breathe with Pip: in for four, hold, out for four, hold."),
+    _later("The break waited for you to finish your card."),
+    _later("Fifteen {n} starts at {time}."), _later("Round {n} done. Break."),
+    _later("{who} is on the same break."), _later("{who} are on the same break."), _later("Round {n} starts at {time}."),
+    _later("That’s fifteen."), _later("{n} card"), _later("{n} cards"), _later("{n} card in fifteen {k}"),
+    _later("{n} cards in fifteen {k}"), _later("{n} this session"),
+    _later("That’s eight fifteens: two hours. Enough for one sitting."), _later("A five-minute break, then another fifteen?"),
+    _later("Take five, then another fifteen"), _later("Another fifteen now"),
+    _later("{n} min in ·"), _later("Take five"), _later("Five minutes off, then a fifteen"), _later("Not this time"),
+    _later("Fifteen minutes, now. At the end, one question: a break and another?"), _later("Fifteen?"),
+    _later("On my own, or a room with my crew"), _later("Drag to move"), _later("Show the whole chip"), _later("Tuck it away"),
+    _later("Leave room"), _later("Take five, then another"), _later("That’s eight: two hours. Enough for one sitting."),
+    _later("Fifteen {n} at {time}"), _later("Starts at {time} · {n} rounds"), _later("Round {n} of {of} · {min} min left"),
+)
+
+
+def widget_words():
+    """The script's phrases in the language in use, {English: theirs}; {} in English (it says its own)."""
+    said = {k: _t(k) for k in WIDGET_WORDS}
+    return {k: v for k, v in said.items() if v != k}
+
+
+def _worded(data):
+    """A widget's data with the script's words (`words`), when the language in use isn't English: the
+    English data is as it was."""
+    said = widget_words()
+    if said:
+        data["words"] = said
+    return data
+
 
 # 3.8.1: Pip in a fifteen's widgets, drawn by sev.py and handed over as markup
 FIFTEEN_SEV = ("focus", "ready", "again", "ring", "rest", "stretch", "breathe")
@@ -310,7 +352,7 @@ def seats(ms, entries, my_pair, my_look=()):
     what they have on from the closet (l: names, never markup)."""
     from .closet import clean
     by = {e.get("user_id"): e for e in entries or []}
-    return [{"n": "You" if you else name, "a": list(my_pair if you else _pair_of((by.get(uid) or {}).get("accent"))),
+    return [{"n": _t("You") if you else name, "a": list(my_pair if you else _pair_of((by.get(uid) or {}).get("accent"))),
              "b": _sev.blink(i)[0], "d": _sev.blink(i)[1], "m": _sev.SEAT_MOVES[i % len(_sev.SEAT_MOVES)],
              "l": clean(my_look if you else (by.get(uid) or {}).get("look"))}
             for i, (uid, name, you) in enumerate(ms)]
@@ -333,9 +375,9 @@ def widget_data(room, entries, accent_pair, compact=False, side="right", sev=Tru
         if s["l"] and sevs is not None:  # 3.8.2: a seat whose Pip has something on is its own drawing
             s["k"] = f"seat.{i}"
             sevs[s["k"]] = _sev.svg("idle", s["m"] if s["m"] in _sev.SEAT_MOVES else "idle", look=s["l"])
-    return {"start": int(start.timestamp() * 1000), "rounds": room["rounds"],
+    return _worded({"start": int(start.timestamp() * 1000), "rounds": room["rounds"],
             "round": room["round"] * 60000, "brk": room["brk"] * 60000,
-            "title": "Fifteen" if fifteen else title(entries, room),
+            "title": _t("Fifteen") if fifteen else title(entries, room),
             "names": [] if fifteen else [n.split(" ")[0] if not you else "you" for _u, n, you in ms],
             # faces show each person's own initial, mine included
             "initials": [] if fifteen else [(n.strip()[:1] or "?").upper() for _u, n, _you in ms],
@@ -345,7 +387,7 @@ def widget_data(room, entries, accent_pair, compact=False, side="right", sev=Tru
             "kind": "fifteen" if fifteen else "room", "ask": ASK * 60000, "max": MAX_ROUNDS,
             "sev": sevs, "sevcss": css, "slot": list(_sev.SLOT), "brk_pose": "stretch" if brk_pose == "stretch" else "breathe",
             "vary": turns, "vseed": vary_seed(room) if turns else 0,
-            "cards": cards, "total": total}
+            "cards": cards, "total": total})
 
 
 def start_data(accent_pair, side="right", sev=True, nap=False, compact=False, look=(), sit=0):
@@ -354,8 +396,8 @@ def start_data(accent_pair, side="right", sev=True, nap=False, compact=False, lo
     at 35): the minutes a sitting has passed, and in its place the chip
     says so with Take five (habits_flow.sit_chip); 0, as before."""
     sevs, css, _turns = _sevs(("idle", "nap"), sev and not sit, look=look)
-    return {"accent": list(accent_pair), "side": chip_side(side), "compact": bool(compact),
-            "nap": bool(nap), "sev": sevs, "sevcss": css, "slot": list(_sev.SLOT), "sit": max(0, int(sit or 0))}
+    return _worded({"accent": list(accent_pair), "side": chip_side(side), "compact": bool(compact),
+                    "nap": bool(nap), "sev": sevs, "sevcss": css, "slot": list(_sev.SLOT), "sit": max(0, int(sit or 0))})
 
 
 def fifteen_in_break(host, now=None):
@@ -490,17 +532,17 @@ def fifteen_view(room, now=None):
     mins = max(1, int(-(-p["left"] // 60)))
     cap = room["rounds"] >= MAX_ROUNDS
     if p["state"] == "ask":
-        title = "That\u2019s fifteen."
-        sub = ("That\u2019s eight fifteens: two hours. Enough for one sitting." if cap
-               else "A five-minute break, then another fifteen?")
+        title = _t("That\u2019s fifteen.")
+        sub = (_t("That\u2019s eight fifteens: two hours. Enough for one sitting.") if cap
+               else _t("A five-minute break, then another fifteen?"))
         label, frac = "\u2713", 1.0
     elif p["state"] == "break":
-        title = "Break"
-        sub = f"Fifteen {p['round'] + 1} starts at {_clock(p['until'])}"
+        title = _t("Break")
+        sub = _t("Fifteen {n} starts at {time}", n=p['round'] + 1, time=_clock(p['until']))
         label, frac = str(mins), 1 - p["left"] / p["total"]
     else:
-        title = "Fifteen" + (f" {p['round']}" if p["round"] > 1 else "")
-        sub = f"{mins} min left"
+        title = _t("Fifteen {n}", n=p['round']) if p["round"] > 1 else _t("Fifteen")
+        sub = _t("{n} min left", n=mins)
         label, frac = str(mins), 1 - p["left"] / p["total"]
     return {"fifteen": True, "state": p["state"], "title": title, "sub": sub, "label": label,
             "frac": round(frac, 3), "brk": p["state"] == "break", "cap": cap, "n": p["round"]}
@@ -527,16 +569,21 @@ def board_view(my_room, entries, dismissed=(), done=None, now=None, sev=False, a
             bars.append(max(0.0, min(1.0, (now - t) / span)))
             t += span + datetime.timedelta(minutes=my_room["brk"])
         if p["state"] == "before":
-            sub, label, frac = f"Starts at {_clock(start)} · {my_room['rounds']} rounds of {my_room['round']} min", "·", 0.0
+            sub, label, frac = _t("Starts at {time} · {n} rounds of {min} min", time=_clock(start), n=my_room['rounds'],
+                                  min=my_room['round']), "·", 0.0
         elif p["state"] == "break":
-            sub = f"Break · round {p['round'] + 1} starts at {_clock(p['until'])}"
+            sub = _t("Break · round {n} starts at {time}", n=p['round'] + 1, time=_clock(p['until']))
             # 3.8.1: every ring fills as its time passes, a break's too (the top bar's
             # chip did, this one drained: two directions on one screen); the number is what's left
             label, frac = str(max(1, int(-(-p['left'] // 60)))), 1 - p["left"] / p["total"]
         else:
-            nxt = (f", then a {my_room['brk']}-min break" if p["round"] < my_room["rounds"] and my_room["brk"] else "")
-            sub = (f"Round {p['round']} of {my_room['rounds']} · {max(1, int(-(-p['left'] // 60)))} min left{nxt}"
-                   f" · ends about {_clock(p['end'])}")
+            left = max(1, int(-(-p['left'] // 60)))
+            if p["round"] < my_room["rounds"] and my_room["brk"]:  # each said whole (3.10.0)
+                sub = _t("Round {n} of {of} · {min} min left, then a {brk}-min break · ends about {time}", n=p['round'],
+                         of=my_room['rounds'], min=left, brk=my_room['brk'], time=_clock(p['end']))
+            else:
+                sub = _t("Round {n} of {of} · {min} min left · ends about {time}", n=p['round'], of=my_room['rounds'],
+                         min=left, time=_clock(p['end']))
             label, frac = str(max(1, int(-(-p['left'] // 60)))), 1 - p["left"] / p["total"]
         out["mine"] = {"title": title(entries, my_room), "sub": sub, "label": label, "frac": round(frac, 3),
                        "brk": p["state"] == "break", "bars": [round(b, 3) for b in bars],
@@ -545,9 +592,9 @@ def board_view(my_room, entries, dismissed=(), done=None, now=None, sev=False, a
                        "seats": seats(ms, entries, accent_pair or _pair_of(None), look) if sev else []}
     for room, ms in invites(entries, my_room, dismissed, now):
         p = phase(room, now)
-        when = (f"starts at {_clock(_parse(room['start']))}" if p["state"] == "before"
-                else f"round {max(1, p['round'])} of {room['rounds']}")
-        out["invites"].append({"key": cmd_key(room), "title": title(entries, room),
-                               "sub": f"{room['rounds']} rounds of {room['round']} min · {when}",
+        sub = (_t("{n} rounds of {min} min · starts at {time}", n=room['rounds'], min=room['round'], time=_clock(_parse(room['start'])))
+               if p["state"] == "before"
+               else _t("{n} rounds of {min} min · round {r} of {of}", n=room['rounds'], min=room['round'], r=max(1, p['round']), of=room['rounds']))
+        out["invites"].append({"key": cmd_key(room), "title": title(entries, room), "sub": sub,
                                "line": names_line(ms)})
     return out

@@ -1207,7 +1207,7 @@ def test_what_offers_a_tip_v3912():
     src = open(os.path.join(REPO, "due_crew", "cards.py"), encoding="utf-8").read()
     check("the offer: Again or Hard since yesterday, or slow, or nearly a leech; and an ask still has its Tip",
           "ease IN (1, 2) LIMIT 1" in src and "hooks.slow(_taken(card), _usual(col, day)) or hooks.near_leech(card.lapses, *_leech(col, card))" in src
-          and '"kind": "asked"' in src and '"act": "Tip"' in src)
+          and '"kind": "asked"' in src and '"act": _t("Tip")' in src)
 
 
 def test_languages_v3100():

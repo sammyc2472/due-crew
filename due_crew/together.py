@@ -14,6 +14,7 @@ from aqt.utils import tooltip
 from . import app, board
 from .app import _state, cfg, client, save_cfg
 from .backend.shapes import LIVE_MINUTES, TRICKY_MAX, clean_note, clean_tricky
+from .words import later as _later, t as _t
 from .wrap import _save_wrap, _wrap_data
 
 LUCK_EMOJI = "\U0001F340"   # four-leaf clover
@@ -56,7 +57,7 @@ def keep(luck, tips, my_exam, today):
         for ch in luck:
             store["lines"] = [x for x in store["lines"] if x.get("from") != ch["from"]]
             store["lines"].append({"from": ch["from"], "name": ch["name"], "note": ch["note"]})
-            toasts.append(f"{LUCK_EMOJI} {html.escape(ch['name'])} left you a line for exam morning.")
+            toasts.append(f"{LUCK_EMOJI} " + _t("{name} left you a line for exam morning.", name=html.escape(ch['name'])))
         w["luck"] = store
     if tips:
         store = w.get("tips") if isinstance(w.get("tips"), dict) else {}
@@ -64,8 +65,8 @@ def keep(luck, tips, my_exam, today):
             got = [t for t in store.get(ch["guid"], []) if t.get("from") != ch["from"]]
             got.append({"from": ch["from"], "name": ch["name"], "note": ch["note"], "day": today})
             store[ch["guid"]] = got[-3:]
-            toasts.append(f"{TIP_EMOJI} {html.escape(ch['name'])} left a tip on a card you flagged. "
-                          "It shows when the card comes up.")
+            toasts.append(f"{TIP_EMOJI} " + _t("{name} left a tip on a card you flagged. It shows when the card comes up.",
+                                               name=html.escape(ch['name'])))
         horizon = (datetime.date.fromisoformat(today) - datetime.timedelta(days=TIP_DAYS)).isoformat()
         w["tips"] = {g: [t for t in ts if str(t.get("day", "")) >= horizon]
                      for g, ts in store.items()}
@@ -164,8 +165,8 @@ def send_luck_line(uid):
         if line:
             _send_cheer(uid, entry["name"], LUCK_EMOJI, line, luck=True)
     # plain text: the words hold a crewmate's name
-    sheets.ask_text("Good-luck card", f"A line for {first}'s exam morning. They see it when they open Anki "
-                    "that day, with everyone else's.", go, yes="Send")
+    sheets.ask_text(_t("Good-luck card"), _t("A line for {name}'s exam morning. They see it when they open Anki that day, with everyone else's.",
+                                             name=first), go, yes=_t("Send"))
 
 
 def send_tip(uid, index):
@@ -178,7 +179,7 @@ def send_tip(uid, index):
     text = next((v["text"] for v in tricky_view()
                  if v["uid"] == uid and v["index"] == int(index)), "")
     first = str(entry['name']).split(' ')[0]
-    q = f" {first} asks: “{flag['q']}”" if flag.get("q") else ""
+    q = " " + _t("{name} asks: “{q}”", name=first, q=flag['q']) if flag.get("q") else ""
     from . import sheets
 
     def go(words):
@@ -187,8 +188,8 @@ def send_tip(uid, index):
             _send_cheer(uid, entry["name"], TIP_EMOJI, tip, guid=flag["guid"],
                         then=lambda ok: ok and hide_tipped(uid, flag["guid"]))
     # plain text: the card's words are this computer's own, the ask a crewmate's
-    sheets.ask_text("Send a tip", f"On “{text or 'this card'}”.{q}\n\nOne line; {first} sees it when the card comes up.",
-                    go, yes="Send")
+    sheets.ask_text(_t("Send a tip"), (_t("On “{text}”.", text=text) if text else _t("On “this card”.")) + q + "\n\n"
+                    + _t("One line; {name} sees it when the card comes up.", name=first), go, yes=_t("Send"))
 
 
 def hide_tipped(uid, guid):
@@ -224,7 +225,7 @@ def is_live():
 
 LIVE_KEY = "show_studying"  # Privacy's Show when I'm studying (an account key, on unless turned off)
 LIVE_TOLD = "live_told"     # the board's line about it, put away
-LIVE_NOTE = "New: your crew sees a dot by your name while you\u2019re studying."
+LIVE_NOTE = _later("New: your crew sees a dot by your name while you\u2019re studying.")  # said where it's drawn (board/draw.py)
 
 
 def live_on(c):
@@ -307,13 +308,13 @@ def flag_card(card):
     flags = clean_tricky(cl.session.get("tricky"), _today())
     if any(f["guid"] == note.guid for f in flags):
         flags = [f for f in flags if f["guid"] != note.guid]
-        msg = "Unflagged."
+        msg = _t("Unflagged.")
     else:
         deck = mw.col.decks.name(card.odid or card.did).split("::")[-1]
         flags.append({"guid": note.guid, "text": _plain(note.fields[0] if note.fields else ""),
                       "deck": clean_note(deck, 40), "at": _today()})
         flags = flags[-TRICKY_MAX:]
-        msg = "Flagged for your crew. Anyone with this card can send you a tip."
+        msg = _t("Flagged for your crew. Anyone with this card can send you a tip.")
     cl.session["tricky"] = flags
     cl._save_session()
     app.sync(light=True, fetch=False)
@@ -332,7 +333,7 @@ def unask(index):
     cl._save_session()
     app.swap(cfg())
     app.sync(light=True, fetch=False)
-    tooltip("Taken back.")
+    tooltip(_t("Taken back."))
 
 
 def reviewer_menu(reviewer, menu):
@@ -345,20 +346,20 @@ def reviewer_menu(reviewer, menu):
                   for f in clean_tricky(client().session.get("tricky"), _today()))
     # 3.5.0, K2: one way to ask, on any card, a line optional
     if flagged:
-        action = menu.addAction("Due Crew: take back my ask")
+        action = menu.addAction(_t("Due Crew: take back my ask"))
         action.triggered.connect(lambda: flag_card(card))
     else:
         from . import cards as crew_cards
-        action = menu.addAction("Due Crew: ask my crew about this…")
+        action = menu.addAction(_t("Due Crew: ask my crew about this…"))
         action.triggered.connect(lambda: crew_cards.ask(card))
     # 3.9.11: my own hook on this card (hooks.py), on any card
     from . import hooks
-    hk = menu.addAction("Due Crew: your tip…" if hooks.get(card.note().guid) else "Due Crew: add a tip…")
+    hk = menu.addAction(_t("Due Crew: your tip…") if hooks.get(card.note().guid) else _t("Due Crew: add a tip…"))
     hk.triggered.connect(lambda: __import__("due_crew.cards", fromlist=["hook_edit"]).hook_edit(card))
     # 3.7.3: a card in a plan whose team I'm on can go to the team too
     from . import team_flow
     if team_flow.plan_for_card(card):
-        team = menu.addAction("Due Crew: ask the squad about this…")
+        team = menu.addAction(_t("Due Crew: ask the squad about this…"))
         team.triggered.connect(lambda: team_flow.ask_card(card))
 
 
