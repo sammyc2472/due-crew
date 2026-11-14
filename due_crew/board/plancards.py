@@ -6,6 +6,8 @@ import html as _html
 import re as _re
 
 from .. import views as _views
+from .. import plans as _P
+from ..words import later as _later, t as _t, tn as _tn
 from .base import _ins_dname, _pycmd
 from .pip import PCREW_PIP, squad_pip
 from .planweek import _crew_line, _plan_notes, _week_html
@@ -40,20 +42,20 @@ def _plan_switch(cards, card):
     line ("week 3 of 9 · 6 following"), and Your plans… on it. A name two
     plans share shows their whole titles. The authors' words: escaped."""
     e = _html.escape
-    names = [str(c.get("name") or str(c.get("title") or "Plan").split(" · ")[0]) for c in cards]
+    names = [str(c.get("name") or str(c.get("title") or _t("Plan")).split(" · ")[0]) for c in cards]
     pills = ""
     for c, nm in zip(cards, names):
         word = nm if names.count(nm) == 1 else str(c.get("title") or nm)
         late = 0 if c.get("catch") else int((c.get("status") or {}).get("behind") or 0)
-        dot = f'<i class="dot" title="{late:,} behind"></i>' if late else ""
+        dot = f'<i class="dot" title="{_t("{n} behind", n=f"{late:,}")}"></i>' if late else ""
         on = c is card
         pills += (f'<a href="#" class="{"on" if on else ""}" aria-pressed="{"true" if on else "false"}" '
                   f'title="{e(str(c.get("title") or nm))}" onclick="{_pycmd("planpick:" + str(c.get("id", "")))}">'
                   f'{e(word)}{dot}</a>')
     pid = str(card.get("id", ""))
     return (f'<div class="pk psk"><span class="psw">{pills}</span><span>{e(str(card.get("sub") or ""))}</span>'
-            f'<span class="acts"><a class="pbt" href="#" title="Its weeks and sets, Insights, and your settings for it" '
-            f'onclick="{_pycmd("planyours:" + pid)}">Your plans&hellip;</a></span></div>')
+            f'<span class="acts"><a class="pbt" href="#" title="{_t("Its weeks and sets, Insights, and your settings for it")}" '
+            f'onclick="{_pycmd("planyours:" + pid)}">{_t("Your plans&hellip;")}</a></span></div>')
 
 
 def _you_plans(plans, opened=None, people=None, cfg=None):
@@ -84,38 +86,44 @@ def _load_html(load):
     from .. import plans as P
     e = _html.escape
     ink = lambda i: _LOAD_INK[min(i, len(_LOAD_INK) - 1)]
-    key = '<span><i style="background:var(--dc-faded)"></i>Reviews due</span>' + "".join(
+    key = f'<span><i style="background:var(--dc-faded)"></i>{_t("Reviews due")}</span>' + "".join(
         f'<span><i style="background:{ink(i)}"></i>{e(p["name"])}</span>' for i, p in enumerate(load["plans"]))
     top = max(1, int(load.get("top") or 1))
     rows = ""
     for d in load["days"]:
-        said = f'{d["rev"]:,} reviews' + "".join(
-            f', {n:,} new in {p["name"]}' for n, p in zip(d["parts"], load["plans"]) if n)
+        said = ", ".join([_t("{n} reviews", n=f'{d["rev"]:,}')] + [
+            _t("{n} new in {plan}", n=f"{n:,}", plan=p["name"]) for n, p in zip(d["parts"], load["plans"]) if n])
         width = 100 * d["min"] / top
         inks = ["var(--dc-faded)"] + [ink(i) for i in range(len(d["parts"]))]
         segs = "".join(f'<i style="width:{width * sh:.1f}%;background:{c}"></i>' for sh, c in zip(d["share"], inks) if sh)
-        rows += (f'<div class="lwd{" now" if d["today"] else ""}" title="{e(said)}"><span class="d">{e(d["dow"])} {int(d["num"])}</span>'
+        rows += (f'<div class="lwd{" now" if d["today"] else ""}" title="{e(said)}"><span class="d">{e(_t(d["dow"]))} {int(d["num"])}</span>'
                  f'<span class="st">{segs}</span>'
                  f'<span class="n{" hv" if d["heavy"] else ""}">{P.load_time(d["min"]) if d["min"] else "&ndash;"}</span></div>')
     foot = ""
     back, hint = load.get("back"), load.get("hint")
     if back:
         cmd = _pycmd(f'planmoveback:{back["pid"]}:{back["uid"]}')
-        foot += (f'<div class="lwh"><span>{e(back["name"])} moved to {e(P.fmt_day(back["day"]))}.</span>'
-                 f'<a href="#" onclick="{cmd}">Put it back</a></div>')
+        foot += (f'<div class="lwh"><span>{_t("{name} moved to {day}.", name=e(back["name"]), day=e(P.day_said(back["day"])))}</span>'
+                 f'<a href="#" onclick="{cmd}">{_t("Put it back")}</a></div>')
     if hint:
-        day = "Today" if hint["day"] == load["days"][0]["day"] else P.weekday_or_day(hint["day"], load["days"][0]["day"])
-        across = f' across {hint["plans"]} plans' if hint["plans"] > 1 else ""
-        on_top = f' on top of {hint["rev"]:,} reviews' if hint["rev"] else ""
+        day = _t("Today") if hint["day"] == load["days"][0]["day"] else P.weekday_or_day_said(hint["day"], load["days"][0]["day"])
+        new, rev = f'{hint["new"]:,}', f'{hint["rev"]:,}'
+        if hint["plans"] > 1:
+            what = (_t("{n} new across {plans} plans on top of {rev} reviews.", n=new, plans=hint["plans"], rev=rev) if hint["rev"]
+                    else _t("{n} new across {plans} plans.", n=new, plans=hint["plans"]))
+        else:
+            what = _t("{n} new on top of {rev} reviews.", n=new, rev=rev) if hint["rev"] else _t("{n} new.", n=new)
         mv = hint.get("move")
         link = ""
         if mv:
             cmd = _pycmd(f'planmoveto:{mv["pid"]}:{mv["uid"]}:{int(mv["n"])}')
-            link = (f'<a href="#" title="Changes your days only, never the plan" onclick="{cmd}">'
-                    f'Move {e(mv["name"])} to {e(P.weekday_or_day(mv["to"], load["days"][0]["day"]))}</a>')
-        foot += (f'<div class="lwh"><span><b>{e(day)} is heavy:</b> {hint["new"]:,} new{across}{on_top}.</span>{link}</div>')
-    note = "Times use your own pace per card." if load.get("known") else "Times use a typical pace until there's more of yours to read."
-    return (f'<div class="lw"><div class="pwh"><b>Everything this week</b></div><div class="lwk">{key}</div>{rows}{foot}'
+            link = (f'<a href="#" title="{_t("Changes your days only, never the plan")}" onclick="{cmd}">'
+                    + _t("Move {name} to {day}", name=e(mv["name"]),
+                         day=e(P.weekday_or_day_said(mv["to"], load["days"][0]["day"]))) + '</a>')
+        foot += (f'<div class="lwh"><span><b>{_t("{day} is heavy:", day=e(day))}</b> {what}</span>{link}</div>')
+    note = (_t("Times use your own pace per card.") if load.get("known")
+            else _t("Times use a typical pace until there's more of yours to read."))
+    return (f'<div class="lw"><div class="pwh"><b>{_t("Everything this week")}</b></div><div class="lwk">{key}</div>{rows}{foot}'
             f'<div class="lwx">{note}</div></div>')
 
 
@@ -125,12 +133,13 @@ def _invite_lines(invites):
     e = _html.escape
     out = ""
     for x in invites or []:
-        pid, who, name = str(x.get("id", "")), e(str((x.get("by") or {}).get("name") or "?")), e(str(x.get("name") or "Plan"))
-        said = (f"<b>{who}</b> offered you <b>{name}</b> to keep." if x.get("kind") == "owner"
-                else f"<b>{who}</b> asked you to co-write <b>{name}</b>. Its tags would go on your notes in Anki.")
+        pid, who, name = str(x.get("id", "")), e(str((x.get("by") or {}).get("name") or "?")), e(str(x.get("name") or _t("Plan")))
+        who, name = f"<b>{who}</b>", f"<b>{name}</b>"
+        said = (_t("{who} offered you {name} to keep.", who=who, name=name) if x.get("kind") == "owner"
+                else _t("{who} asked you to co-write {name}. Its tags would go on your notes in Anki.", who=who, name=name))
         out += (f'<div class="dc-wrap inv"><span>&#128221;</span><span>{said}</span><span class="yn">'
-                f'<a class="wc" href="#" onclick="{_pycmd(f"planinvite:{pid}:yes")}">Yes</a>'
-                f'<a class="wc" href="#" onclick="{_pycmd(f"planinvite:{pid}:no")}">No</a></span></div>')
+                f'<a class="wc" href="#" onclick="{_pycmd(f"planinvite:{pid}:yes")}">{_t("Yes")}</a>'
+                f'<a class="wc" href="#" onclick="{_pycmd(f"planinvite:{pid}:no")}">{_t("No")}</a></span></div>')
     return out
 
 
@@ -144,9 +153,9 @@ def _opened_dates(dates):
         return ""
     shown = dates if len(dates) <= 3 else dates[:2]
     out = " &middot; ".join(
-        f'<a class="tp" href="#" title="Browse its new cards" onclick="{_pycmd(f"planopened:{d[0]}:{d[1]}")}">'
+        f'<a class="tp" href="#" title="{_t("Browse its new cards")}" onclick="{_pycmd(f"planopened:{d[0]}:{d[1]}")}">'
         f'{_html.escape(str(d[2]))}</a> {int(d[3]):,}' for d in shown)
-    return ": " + out + (f" and {len(dates) - len(shown)} more" if len(dates) > len(shown) else "")
+    return ": " + (_t("{sets} and {n} more", sets=out, n=len(dates) - len(shown)) if len(dates) > len(shown) else out)
 
 
 def _opened_line(op):
@@ -157,14 +166,21 @@ def _opened_line(op):
     if not n:
         return ""
     # 3.8.0: Sync now while AnkiWeb hasn't had them (a phone gets them from there)
-    sync = (f'<a href="#" title="Anki&rsquo;s sync, so your phone has them" onclick="{_pycmd("plansync")}">Sync now</a>'
+    sync = (f'<a href="#" title="{_t("Anki&rsquo;s sync, so your phone has them")}" onclick="{_pycmd("plansync")}">{_t("Sync now")}</a>'
             if op.get("sync") else "")
-    by = _opened_dates(op.get("dates"))
-    if op.get("decks"):  # Today's lesson, B: each lesson a deck of its own
-        by = f"{by}, in your decks" + ("" if by else ".")
-    return (f'<div class="du-line"><span>This morning opened {n:,} new card{"s" if n != 1 else ""}{by or "."}</span>'
-            f'<span class="acts">{sync}<a href="#" title="They open tomorrow morning" onclick="{_pycmd("plannottoday")}">'
-            f'Not today</a></span></div>')
+    sets = _opened_dates(op.get("dates"))[2:]  # without its ": "
+    if op.get("decks") and sets:  # Today's lesson, B: each lesson a deck of its own
+        said = _P.tn("This morning opened {n} new card: {sets}, in your decks", "This morning opened {n} new cards: {sets}, in your decks",
+                     n, sets=sets)
+    elif op.get("decks"):
+        said = _P.tn("This morning opened {n} new card, in your decks.", "This morning opened {n} new cards, in your decks.", n)
+    elif sets:
+        said = _P.tn("This morning opened {n} new card: {sets}", "This morning opened {n} new cards: {sets}", n, sets=sets)
+    else:
+        said = _P.tn("This morning opened {n} new card.", "This morning opened {n} new cards.", n)
+    return (f'<div class="du-line"><span>{said}</span>'
+            f'<span class="acts">{sync}<a href="#" title="{_t("They open tomorrow morning")}" onclick="{_pycmd("plannottoday")}">'
+            f'{_t("Not today")}</a></span></div>')
 
 
 def _plans_empty_html(plans=None):
@@ -179,21 +195,22 @@ def _plans_empty_html(plans=None):
     plans = plans or {}
     add = ("var v=(document.getElementById('dc-plancode').value||'').trim().slice(0,300);"
            "pycmd('duecrew:planfollowcode:'+encodeURIComponent(v)+'|'+window.dcBK);return false;")
-    out = (f'<div class="dc-pways"><div class="pfw"><input id="dc-plancode" placeholder="A plan&rsquo;s code or link" '
-           f'aria-label="A plan&rsquo;s code or link" onkeydown="if(event.key===\'Enter\'){{{add}}}">'
-           f'<a class="pbt" href="#" onclick="{add}">Follow</a></div>')
+    out = (f'<div class="dc-pways"><div class="pfw"><input id="dc-plancode" placeholder="{_t("A plan&rsquo;s code or link")}" '
+           f'aria-label="{_t("A plan&rsquo;s code or link")}" onkeydown="if(event.key===\'Enter\'){{{add}}}">'
+           f'<a class="pbt" href="#" onclick="{add}">{_t("Follow")}</a></div>')
     ex = plans.get("exam") or {}
     if ex.get("day") and int(ex.get("days") or 0) > 0:
         n = int(ex["days"])
-        out += (f'<div class="pwl"><span>Your exam: <b>{e(_ins_dname(ex["day"], long=True))}</b>, '
-                f'{"tomorrow" if n == 1 else f"in {n:,} days"}</span><span class="acts">'
-                f'<a href="#" title="A new plan that finishes by then" onclick="{_pycmd("planopennew:" + str(ex["day"]))}">'
-                f'Plan the way there</a></span></div>')
-    yours = (f'<a href="#" title="Every plan you write or follow" onclick="{_pycmd("planyours")}">Your plans&hellip;</a>'
+        day = f'<b>{e(_ins_dname(ex["day"], long=True))}</b>'
+        said = _t("Your exam: {day}, tomorrow", day=day) if n == 1 else _t("Your exam: {day}, in {n} days", day=day, n=f"{n:,}")
+        out += (f'<div class="pwl"><span>{said}</span><span class="acts">'
+                f'<a href="#" title="{_t("A new plan that finishes by then")}" onclick="{_pycmd("planopennew:" + str(ex["day"]))}">'
+                f'{_t("Plan the way there")}</a></span></div>')
+    yours = (f'<a href="#" title="{_t("Every plan you write or follow")}" onclick="{_pycmd("planyours")}">{_t("Your plans&hellip;")}</a>'
              if plans.get("writes") else "")
-    return out + (f'<div class="pwl"><span class="mu">Or a plan of your own</span><span class="acts">'
-                  f'<a href="#" onclick="{_pycmd("planopennew")}">Make a plan</a>{yours}'
-                  f'<a href="#" onclick="{_pycmd("planlibrary")}">The library &#8599;</a></span></div></div>')
+    return out + (f'<div class="pwl"><span class="mu">{_t("Or a plan of your own")}</span><span class="acts">'
+                  f'<a href="#" onclick="{_pycmd("planopennew")}">{_t("Make a plan")}</a>{yours}'
+                  f'<a href="#" onclick="{_pycmd("planlibrary")}">{_t("The library")} &#8599;</a></span></div></div>')
 
 
 def _plan_card_html(card, people=None, cfg=None, head=None):
@@ -213,14 +230,14 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
     e = _html.escape
     pid = str(card.get("id", ""))
     out = '<div class="dc-pc">' + (head or (
-        f'<div class="pk"><b>{e(str(card.get("title") or "Plan"))}</b>'
+        f'<div class="pk"><b>{e(str(card.get("title") or _t("Plan")))}</b>'
         f'<span>{e(str(card.get("sub") or ""))}</span>'
-        f'<span class="acts"><a class="pbt" href="#" title="Its weeks and sets, Insights, and your settings for it" '
-        f'onclick="{_pycmd("planyours:" + pid)}">Your plans&hellip;</a></span></div>'))
+        f'<span class="acts"><a class="pbt" href="#" title="{_t("Its weeks and sets, Insights, and your settings for it")}" '
+        f'onclick="{_pycmd("planyours:" + pid)}">{_t("Your plans&hellip;")}</a></span></div>'))
     tabs = card.get("tabs") or {}
     if card.get("no_deck"):
-        out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
-                f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
+        out += (f'<div class="dc-line">{_t("No deck here has this plan&rsquo;s cards yet.")} '
+                f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">{_t("Pick a deck")}</a></div>')
     out += (_plan_path(card) + _exam_ask(card, pid) + _joy_line(card, pid) + _plan_status(card, pid) + _plan_slid(card, pid)
             + (_plan_line(card, pid) or _plan_behind(card, pid) or _joy_caught(card)) + _week_html(card, pid) + _plan_now(card, pid))
     notes = _plan_notes(card, pid)
@@ -231,7 +248,7 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
         # 3.8.0: not in its squad: the crew who follow it, and the way in
         crew = _crew_line(card)
         if not card.get("team_ask"):
-            join = f'<a href="#" onclick="{_pycmd(f"planteamjoin:{pid}:ask")}">Join its squad</a>'
+            join = f'<a href="#" onclick="{_pycmd(f"planteamjoin:{pid}:ask")}">{_t("Join its squad")}</a>'
             crew = f"{crew} &middot; {join}" if crew else join
     if crew:
         out += f'<div class="pcrew">{crew}</div>'
@@ -249,13 +266,15 @@ def _plan_status(card, pid):
     act = ""
     if lesson.get("today"):
         uid = str(lesson["today"])
-        act = f'<a href="#" title="A filtered deck: today&rsquo;s set&rsquo;s new cards and its learning ones due now" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>'
+        act = (f'<a href="#" title="{_t("A filtered deck: today&rsquo;s set&rsquo;s new cards and its learning ones due now")}" '
+               f'onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">{_t("Study")}</a>')
     # 3.9.6: the first morning says so all day, and Pip says let's go just after the words, once
     one = (card.get("joy") or {}).get("day1")
-    first = '<b class="jd1">Day one</b> &middot; ' if one else ""
+    first = f'<b class="jd1">{_t("Day one")}</b> &middot; ' if one else ""
     pip = (f'<span class="jgo" data-joy="go"{_joy_ago(one["ago"])}><span class="jgp" aria-hidden="true">{one["pip"]}</span></span>'
            if one and one.get("ago") is not None and one.get("pip") else "")
-    return (f'<div class="pst"><span>{first}<b>{togo:,}</b> to go today{", in your decks" if lesson else ""}</span>{pip}'
+    said = (_t("{n} to go today, in your decks", n=f"<b>{togo:,}</b>") if lesson else _t("{n} to go today", n=f"<b>{togo:,}</b>"))
+    return (f'<div class="pst"><span>{first}{said}</span>{pip}'
             + (f'<span class="acts">{act}</span>' if act else "") + '</div>')
 
 
@@ -304,16 +323,18 @@ def _plan_path(card):
                 # Sam's pick A (a long plan): a run of sets that don't need me folds into one, with its count under it
                 run, last = ls[i:j], j == len(ls)
                 first, end = str(run[0].get("name") or "?"), str(run[-1].get("name") or "?")
-                said = PATH_FOLD[st].format(n=j - i)
+                said = _t(PATH_FOLD[st], n=j - i)
                 to = run[-1] if st == "done" else run[0]
+                span = _t("{a} to {b}", a=e(first), b=e(end))
                 segs += (f'<i class="run {PATH_WORDS.get(st, "a")}{" rl" if last else ""}" style="flex:{min(j - i, 8)} 1 0" '
-                         f'title="{e(first)} to {e(end)} &middot; {said}" aria-label="{e(first)} to {e(end)}, {said}"{jump(to.get("opens"))}><span>{said}</span></i>')
+                         f'title="{span} &middot; {said}" aria-label="{span}, {said}"{jump(to.get("opens"))}><span>{said}</span></i>')
                 pieces += 1
                 i = j
                 continue
-        word = {"done": "done", "behind": f'{int(x.get("left") or 0):,} left', "skip": "skipped",
-                "catch": f'catching up &middot; {int(x.get("left") or 0):,} left',
-                "now": "today" + (f' &middot; {int(x.get("left") or 0):,} to go' if x.get("left") else "")}.get(
+        left = f'{int(x.get("left") or 0):,}'
+        word = {"done": _t("done"), "behind": _t("{n} left", n=left), "skip": _t("skipped"),
+                "catch": _t("catching up &middot; {n} left", n=left),
+                "now": _t("today &middot; {n} to go", n=left) if x.get("left") else _t("today")}.get(
             st, _ins_dname(x.get("opens"), long=True))
         cls = PATH_WORDS.get(st, "a") + (" t" if x.get("today") and st == "done" else "")
         play, inner = _joy_seg(card.get("joy"), str(x.get("uid") or ""), st)
@@ -324,20 +345,23 @@ def _plan_path(card):
     ev = bool(end.get("event"))
     when = _ins_dname(end.get("day"), long=True)
     if ev:
-        segs += f'<em title="{e(str(end.get("name") or "Exam"))} &middot; {when}"></em>'
-    said = ", ".join(f"{n[k]} {w}" for k, w in (("done", "done"), ("behind", "behind"), ("catch", "catching up"),
-                                                 ("now", "today"), ("ahead", "to come"), ("skip", "skipped")) if n.get(k))
-    said += f', then {e(str(end.get("name") or "Exam"))} on {when}' if ev else ""
+        segs += f'<em title="{e(str(end.get("name") or _t("Exam")))} &middot; {when}"></em>'
+    said = ", ".join(_t(w, n=n[k]) for k, w in PATH_SAID if n.get(k))
+    if ev:
+        said = _t("{sets}, then {name} on {day}", sets=said, name=e(str(end.get("name") or _t("Exam"))), day=when)
     gap = "" if pieces <= 30 else " g2" if pieces <= 60 else " g1" if pieces <= 120 else " g0"
     gap += " fold" if keep is not None else ""
-    right = (f'{e(str(end.get("name") or "Exam"))} &middot; {when}' if ev else f"Ends {when}" if when else "")
+    right = (f'{e(str(end.get("name") or _t("Exam")))} &middot; {when}' if ev else _t("Ends {day}", day=when) if when else "")
     segs = segs.replace(' tabindex="-1" data-rove', ' tabindex="0" data-rove', 1)  # the path's one stop
-    return (f'<div class="ppath{gap}" role="group" aria-label="Sets: {said}. Arrow keys move along them.">{segs}</div>'
+    return (f'<div class="ppath{gap}" role="group" aria-label="{_t("Sets: {sets}. Arrow keys move along them.", sets=said)}">{segs}</div>'
             f'<div class="ppl"><span>{_ins_dname(p.get("first"), long=True)}</span><span>{right}</span></div>')
 
 
 PATH_FOLD_PAST = 16  # Sam's pick: a plan longer than this folds the sets that don't need me
-PATH_FOLD = {"done": "{n} done", "ahead": "{n} to come", "skip": "{n} skipped"}
+PATH_FOLD = {"done": _later("{n} done"), "ahead": _later("{n} to come"), "skip": _later("{n} skipped")}
+# the path said to a screen reader: how many sets in each state
+PATH_SAID = (("done", _later("{n} done")), ("behind", _later("{n} behind")), ("catch", _later("{n} catching up")),
+             ("now", _later("{n} today")), ("ahead", _later("{n} to come")), ("skip", _later("{n} skipped")))
 
 
 def _path_keep(ls, p, joy=None):
@@ -394,22 +418,23 @@ def _joy_line(card, pid):
     set's names are the author's: escaped here."""
     e = _html.escape
     j = card.get("joy") or {}
-    share = lambda key: (f'<a href="#" title="As text or a picture" '  # noqa: E731
-                         f'onclick="{_pycmd(f"planjoyshare:{pid}:{key}")}">Share</a>')
+    share = lambda key: (f'<a href="#" title="{_t("As text or a picture")}" '  # noqa: E731
+                         f'onclick="{_pycmd(f"planjoyshare:{pid}:{key}")}">{_t("Share")}</a>')
     if j.get("fin"):
-        return (f'<div class="pst jfin"><span><b>Finished</b> &middot; {e(str(j["fin"].get("words") or ""))}</span>'
+        return (f'<div class="pst jfin"><span><b>{_t("Finished")}</b> &middot; {e(str(j["fin"].get("words") or ""))}</span>'
                 f'<span class="acts">{share("fin")}</span></div>')
     ln = j.get("line") or {}
     key = ln.get("key")
     if key not in ("half", "threeq", "last"):
         return ""
-    name = e(str(card.get("name") or "the plan"))
-    words = {"half": f"Halfway through {name}", "threeq": f"Three-quarters through {name}", "last": f"The last set of {name}"}[key]
-    sub = (f'{e(str(ln.get("name") or ""))}, today' if key == "last"
-           else f'{int(ln.get("n") or 0):,} of {int(ln.get("of") or 0):,} sets')
+    name = e(str(card.get("name") or _t("the plan")))
+    words = (_t("Halfway through {name}", name=name) if key == "half" else _t("Three-quarters through {name}", name=name)
+             if key == "threeq" else _t("The last set of {name}", name=name))
+    sub = (_t("{name}, today", name=e(str(ln.get("name") or ""))) if key == "last"
+           else _t("{n} of {of} sets", n=f'{int(ln.get("n") or 0):,}', of=f'{int(ln.get("of") or 0):,}'))
     play = f' data-joy="line"{_joy_ago(ln["ago"])}' if ln.get("ago") is not None else ""
     return (f'<div class="pst jml"{play}><span><b>{words}</b> &middot; {sub}</span><span class="acts">{share(key)}'
-            f'<a class="jx" href="#" title="Not now" onclick="{_pycmd(f"planjoyx:{pid}:{key}")}">&times;</a></span></div>')
+            f'<a class="jx" href="#" title="{_t("Not now")}" onclick="{_pycmd(f"planjoyx:{pid}:{key}")}">&times;</a></span></div>')
 
 
 def _joy_caught(card):
@@ -420,9 +445,11 @@ def _joy_caught(card):
     if not c.get("uids"):
         return ""
     more = int(c.get("more") or 0)
-    name = _html.escape(str(c.get("name") or "?")) + (f" and {more} more" if more else "")
+    name = _html.escape(str(c.get("name") or "?"))
+    name = _t("{name} and {n} more", name=name, n=more) if more else name
     play = f' data-joy="tada"{_joy_ago(c["ago"])}' if c.get("ago") is not None else ""
-    return (f'<div class="pst jcu"><span><b>Caught up</b> &middot; {name}, all {int(c.get("n") or 0):,} seen</span>'
+    seen = _t("{name}, all {n} seen", name=name, n=f'{int(c.get("n") or 0):,}')
+    return (f'<div class="pst jcu"><span><b>{_t("Caught up")}</b> &middot; {seen}</span>'
             f'<span class="acts"><span class="jta" aria-hidden="true"{play}>&#127881;</span></span></div>')
 
 
@@ -438,12 +465,12 @@ def _exam_ask(card, pid):
     day = e(_ins_dname(a["day"], long=True))
     yes, no = _pycmd(f"planexam:yes:{pid}"), _pycmd(f"planexam:no:{pid}")
     if a.get("was"):
-        return (f'<div class="pst pex"><span>{e(a["ename"])} moved to <b>{day}</b>. Move your exam too?</span>'
-                f'<span class="acts"><a href="#" onclick="{yes}">Move mine</a>'
-                f'<a href="#" onclick="{no}">Keep {e(_ins_dname(a["was"], long=True))}</a></span></div>')
-    return (f'<div class="pst pex"><span>{e(a["ename"])} is <b>{day}</b>. Make it your exam?</span>'
-            f'<span class="acts"><a href="#" title="Your exam in Settings: the countdown your crew sees, and the good-luck card" '
-            f'onclick="{yes}">Make it mine</a><a href="#" onclick="{no}">Not now</a></span></div>')
+        return (f'<div class="pst pex"><span>{_t("{name} moved to {day}. Move your exam too?", name=e(a["ename"]), day=f"<b>{day}</b>")}</span>'
+                f'<span class="acts"><a href="#" onclick="{yes}">{_t("Move mine")}</a>'
+                f'<a href="#" onclick="{no}">{_t("Keep {day}", day=e(_ins_dname(a["was"], long=True)))}</a></span></div>')
+    return (f'<div class="pst pex"><span>{_t("{name} is {day}. Make it your exam?", name=e(a["ename"]), day=f"<b>{day}</b>")}</span>'
+            f'<span class="acts"><a href="#" title="{_t("Your exam in Settings: the countdown your crew sees, and the good-luck card")}" '
+            f'onclick="{yes}">{_t("Make it mine")}</a><a href="#" onclick="{no}">{_t("Not now")}</a></span></div>')
 
 
 def _plan_slid(card, pid):
@@ -452,9 +479,9 @@ def _plan_slid(card, pid):
     n = int(card.get("slid") or 0)
     if n <= 0:
         return ""
-    return (f'<div class="pst"><span>Your dates moved {n} day{"s" if n != 1 else ""} later</span>'
-            f'<span class="acts"><a href="#" title="Your dates back where they were" '
-            f'onclick="{_pycmd("planunslide:" + pid)}">Undo</a></span></div>')
+    return (f'<div class="pst"><span>{_tn("Your dates moved {n} day later", "Your dates moved {n} days later", n)}</span>'
+            f'<span class="acts"><a href="#" title="{_t("Your dates back where they were")}" '
+            f'onclick="{_pycmd("planunslide:" + pid)}">{_t("Undo")}</a></span></div>')
 
 
 def _plan_behind(card, pid):
@@ -467,10 +494,12 @@ def _plan_behind(card, pid):
     if not b.get("left") or card.get("catch") or (card.get("session") or {}).get("ask"):
         return ""
     more = int(b.get("more") or 0)
-    name = _html.escape(str(b.get("name") or "?")) + (f" and {more} more" if more else "")
-    return (f'<div class="pst pbh"><span class="late">Behind &middot; {name}, {int(b["left"]):,} left</span>'
-            f'<span class="acts"><a href="#" title="Slide your dates, fit it in, or skip what&rsquo;s left" '
-            f'onclick="{_pycmd("planbehind:" + pid)}">Behind&hellip;</a></span></div>')
+    name = _html.escape(str(b.get("name") or "?"))
+    name = _t("{name} and {n} more", name=name, n=more) if more else name
+    left = _t("{name}, {n} left", name=name, n=f'{int(b["left"]):,}')
+    return (f'<div class="pst pbh"><span class="late">{_t("Behind")} &middot; {left}</span>'
+            f'<span class="acts"><a href="#" title="{_t("Slide your dates, fit it in, or skip what&rsquo;s left")}" '
+            f'onclick="{_pycmd("planbehind:" + pid)}">{_t("Behind&hellip;")}</a></span></div>')
 
 
 def _plan_line(card, pid):
@@ -485,19 +514,23 @@ def _plan_line(card, pid):
         return ""
     e = _html.escape
     n, left = len(rows), int(ln.get("left") or 0)
-    out = (f'<div class="pln"><div class="plh"><span><b>Catching up</b> &middot; {n} day{"s" if n != 1 else ""}, {left:,} new</span>'
-           f'<span class="acts"><a href="#" title="Open each day as it comes again" onclick="{_pycmd("planlineoff:" + pid)}">Don&rsquo;t wait</a></span></div>')
+    out = (f'<div class="pln"><div class="plh"><span><b>{_t("Catching up")}</b> &middot; '
+           f'{_tn("{n} day, {new} new", "{n} days, {new} new", n, new=f"{left:,}")}</span>'
+           f'<span class="acts"><a href="#" title="{_t("Open each day as it comes again")}" onclick="{_pycmd("planlineoff:" + pid)}">'
+           f'{_t("Don&rsquo;t wait")}</a></span></div>')
     for i, r in enumerate(rows):
         uid = str(r.get("uid") or "")
         seen = int(r.get("total") or 0) - int(r.get("left") or 0)
-        count = f'{int(r.get("left") or 0):,} left' if r.get("opened") and seen > 0 else f'{int(r.get("left") or 0):,} new'
+        count = (_t("{n} left", n=f'{int(r.get("left") or 0):,}') if r.get("opened") and seen > 0
+                 else _t("{n} new", n=f'{int(r.get("left") or 0):,}'))
         out += (f'<div class="plr"><span class="d">{e(str(r.get("when") or ""))}</span><b>{e(str(r.get("name") or "?"))}</b>'
                 f'<span class="n">{count}</span>'
-                f'<a class="go{" on" if i == 0 else ""}" href="#" title="A deck of its new cards" onclick="{_pycmd(f"planlinestudy:{pid}:{uid}")}">Study</a>'
-                f'<a class="ig" href="#" title="Leave it out. The week has Undo skip." onclick="{_pycmd(f"planskip:{pid}:{uid}")}">Ignore</a></div>')
+                f'<a class="go{" on" if i == 0 else ""}" href="#" title="{_t("A deck of its new cards")}" onclick="{_pycmd(f"planlinestudy:{pid}:{uid}")}">{_t("Study")}</a>'
+                f'<a class="ig" href="#" title="{_t("Leave it out. The week has Undo skip.")}" onclick="{_pycmd(f"planskip:{pid}:{uid}")}">{_t("Ignore")}</a></div>')
     for r in ln.get("next") or []:
-        out += (f'<div class="plr wait"><span class="d">Today</span><b>{e(str(r.get("name") or "?"))}</b>'
-                f'<span class="n">{int(r.get("total") or 0):,} new &middot; waiting</span></div>')
+        waits = _t("{n} new &middot; waiting", n=f'{int(r.get("total") or 0):,}')
+        out += (f'<div class="plr wait"><span class="d">{_t("Today")}</span><b>{e(str(r.get("name") or "?"))}</b>'
+                f'<span class="n">{waits}</span></div>')
     return out + "</div>"
 
 
@@ -507,24 +540,28 @@ def _plan_now(card, pid):
     exam's cards at risk (card["ins"], from Insights), with Study."""
     e = _html.escape
     if card.get("paused"):
-        return (f'<div class="pn"><span>No new cards while it&rsquo;s paused.</span>'
-                f'<span class="acts"><a href="#" onclick="{_pycmd("planresume:" + pid)}">Resume now</a></span></div>')
+        return (f'<div class="pn"><span>{_t("No new cards while it&rsquo;s paused.")}</span>'
+                f'<span class="acts"><a href="#" onclick="{_pycmd("planresume:" + pid)}">{_t("Resume now")}</a></span></div>')
     out = _own_html(card.get("own"), pid) if card.get("own") else ""
     out += _quiz_line(card, pid)
     kind = (card.get("session") or {}).get("kind")
     if kind in ("rest", "catchup", "taper"):
-        word = {"rest": "a rest day", "catchup": "in its catch-up week", "taper": "in its taper"}[kind]
-        out += f'<div class="pn"><span>Today is {word}: reviews, and no new cards.</span></div>'
+        word = (_t("Today is a rest day: reviews, and no new cards.") if kind == "rest"
+                else _t("Today is in its catch-up week: reviews, and no new cards.") if kind == "catchup"
+                else _t("Today is in its taper: reviews, and no new cards."))
+        out += f'<div class="pn"><span>{word}</span></div>'
     ins = card.get("ins") or {}
     n = int(ins.get("n") or 0)
     if n and ins.get("did"):
         did = int(ins["did"])
         wd, dn = _ins_day(ins.get("day"))
-        when = (f'<b>{e(str(ins["name"]))}</b> on {wd} {dn}' if ins.get("name") else f"{wd} {dn}")
-        out += (f'<div class="pn"><span><a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
-                f'{n:,} card{"s" if n != 1 else ""}</a> Anki won&rsquo;t show you before {when}</span>'
+        when = (_t("{name} on {day}", name=f'<b>{e(str(ins["name"]))}</b>', day=f"{wd} {dn}") if ins.get("name") else f"{wd} {dn}")
+        cards = (f'<a class="tp" href="#" title="{_t("Browse them")}" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
+                 f'{_P.tn("{n} card", "{n} cards", n)}</a>')
+        out += (f'<div class="pn"><span>{_t("{cards} Anki won&rsquo;t show you before {when}", cards=cards, when=when)}</span>'
                 # 3.9.5 (Sam's FSRS rule): a deck only before a date
-                + (f'<span class="acts"><a href="#" title="A filtered deck of them, the most missed first" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {n:,}</a></span>'
+                + (f'<span class="acts"><a href="#" title="{_t("A filtered deck of them, the most missed first")}" '
+                   f'onclick="{_pycmd(f"insstudy:{did}:h")}">{_t("Study {n}", n=f"{n:,}")}</a></span>'
                    if ins.get("name") else "") + '</div>')
     return out
 
@@ -541,12 +578,13 @@ def _quiz_line(card, pid):
     pf = card.get("prep") or {}
     left = int(pf.get("left") or 0) if pf.get("day") == qz.get("day") and pf.get("name") == qz.get("name") else 0
     n = int(qz.get("open") or 0)
-    when = "today" if qz.get("today") else f'on {e(str(qz.get("when") or ""))}'
-    return (f'<div class="pn"><span>For <b>{e(str(qz.get("name") or "?"))}</b> {when}'
-            + (f' &middot; {left} more day{"s" if left != 1 else ""} of prep' if left else "")
-            + f' &middot; {n:,} card{"s" if n != 1 else ""} open from its sets</span>'
-            f'<span class="acts"><a href="#" title="A filtered deck: its sets&rsquo; open cards, the shakiest first" '
-            f'onclick="{_pycmd(f"planquiz:{pid}:" + str(qz.get("id") or ""))}">Study for it</a></span></div>')
+    name = f'<b>{e(str(qz.get("name") or "?"))}</b>'
+    what = _t("For {name} today", name=name) if qz.get("today") else _t("For {name} on {day}", name=name, day=e(str(qz.get("when") or "")))
+    return (f'<div class="pn"><span>{what}'
+            + (' &middot; ' + _tn("{n} more day of prep", "{n} more days of prep", left) if left else "")
+            + ' &middot; ' + _P.tn("{n} card open from its sets", "{n} cards open from its sets", n) + '</span>'
+            f'<span class="acts"><a href="#" title="{_t("A filtered deck: its sets&rsquo; open cards, the shakiest first")}" '
+            f'onclick="{_pycmd(f"planquiz:{pid}:" + str(qz.get("id") or ""))}">{_t("Study for it")}</a></span></div>')
 
 
 def _own_html(ow, pid):
@@ -560,21 +598,23 @@ def _own_html(ow, pid):
     rows = ow.get("open") or []
     if rows:  # 3.9.10: what I opened and haven't finished, as the line on a dated plan: Study or Ignore
         left = sum(int(r.get("left") or 0) for r in rows)
-        out += (f'<div class="pln"><div class="plh"><span><b>Open</b> &middot; {len(rows)} set{"s" if len(rows) != 1 else ""}, {left:,} new</span></div>')
+        out += (f'<div class="pln"><div class="plh"><span><b>{_t("Open")}</b> &middot; '
+                f'{_tn("{n} set, {new} new", "{n} sets, {new} new", len(rows), new=f"{left:,}")}</span></div>')
         for i, r in enumerate(rows):
             uid = str(r.get("uid") or "")
-            out += (f'<div class="plr"><b>{e(str(r.get("name") or "?"))}</b><span class="n">{int(r.get("left") or 0):,} new</span>'
-                    f'<a class="go{" on" if i == 0 else ""}" href="#" title="A deck of its new cards" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>'
-                    f'<a class="ig" href="#" title="Leave it out. The week has Undo skip." onclick="{_pycmd(f"planskip:{pid}:{uid}")}">Ignore</a></div>')
+            new = _t("{n} new", n=f'{int(r.get("left") or 0):,}')
+            out += (f'<div class="plr"><b>{e(str(r.get("name") or "?"))}</b><span class="n">{new}</span>'
+                    f'<a class="go{" on" if i == 0 else ""}" href="#" title="{_t("A deck of its new cards")}" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">{_t("Study")}</a>'
+                    f'<a class="ig" href="#" title="{_t("Leave it out. The week has Undo skip.")}" onclick="{_pycmd(f"planskip:{pid}:{uid}")}">{_t("Ignore")}</a></div>')
         out += "</div>"
     out += '<div class="pnx">'
     nx = ow.get("next")
     if nx:
         n = int(nx.get("n") or 0)
-        out += (f'<div class="nx"><span class="nx1"><span class="lbl">Up next</span> <b>{e(str(nx.get("name") or "?"))}</b>'
-                + (f' <small>{n:,} new</small>' if n else "") + '</span>'
-                f'<span class="nx2"><a class="bt" href="#" onclick="{_pycmd("planpaceopen:" + pid)}">Open</a>'
-                f'<a class="bt2" href="#" onclick="{_pycmd("planpacestudy:" + pid)}">Open and study</a></span></div>')
+        out += (f'<div class="nx"><span class="nx1"><span class="lbl">{_t("Up next")}</span> <b>{e(str(nx.get("name") or "?"))}</b>'
+                + (f' <small>{_t("{n} new", n=f"{n:,}")}</small>' if n else "") + '</span>'
+                f'<span class="nx2"><a class="bt" href="#" onclick="{_pycmd("planpaceopen:" + pid)}">{_t("Open")}</a>'
+                f'<a class="bt2" href="#" onclick="{_pycmd("planpacestudy:" + pid)}">{_t("Open and study")}</a></span></div>')
         then, more = ow.get("then") or [], int(ow.get("more") or 0)
         items = ow.get("then_items") or []
         if items:
@@ -582,21 +622,23 @@ def _own_html(ow, pid):
             then = []
             for x in items:
                 go = _pycmd(f"planpaceopen:{pid}:{x.get('uid') or ''}")
-                then.append(f'<a class="nx3" href="#" title="Open it now, ahead of the rest" onclick="{go}">'
+                then.append(f'<a class="nx3" href="#" title="{_t("Open it now, ahead of the rest")}" onclick="{go}">'
                             f'{e(str(x.get("name") or "?"))}</a> {int(x.get("n") or 0):,}')
         else:
             then = [e(str(x)) for x in then]
         if then:
-            out += f'<div class="pq">Then {" &middot; ".join(then)}{f" &middot; {more:,} more" if more else ""}</div>'
+            sets = " &middot; ".join(then + ([_t("{n} more", n=f"{more:,}")] if more else []))
+            out += f'<div class="pq">{_t("Then {sets}", sets=sets)}</div>'
     else:
-        out += '<div class="pq">Every set of it is open.</div>'
+        out += f'<div class="pq">{_t("Every set of it is open.")}</div>'
     if ow.get("last"):
         out += (f'<div class="pnl">{e(str(ow["last"]))} '
-                f'<a href="#" onclick="{_pycmd("planpaceundo:" + pid)}">Undo</a></div>')
+                f'<a href="#" onclick="{_pycmd("planpaceundo:" + pid)}">{_t("Undo")}</a></div>')
     elif ow.get("back"):
         b = ow["back"]
-        out += (f'<div class="pq"><a href="#" onclick="{_pycmd("planpaceback:" + pid)}">Put back {e(str(b.get("name") or "?"))}</a>'
-                f' &middot; {int(b.get("n") or 0):,} not seen yet</div>')
+        put, unseen = _t("Put back {name}", name=e(str(b.get("name") or "?"))), _t("{n} not seen yet", n=f'{int(b.get("n") or 0):,}')
+        out += (f'<div class="pq"><a href="#" onclick="{_pycmd("planpaceback:" + pid)}">{put}</a>'
+                f' &middot; {unseen}</div>')
     return out + "</div>"
 
 
@@ -613,16 +655,16 @@ def _squad_line(pid, tabs, people=None, cfg=None):
     if not s:
         return ""
     emojis, who, people = s.get("faces") or [], s.get("who") or [], people or {}
-    pips = [squad_pip(u, (people.get(u) or {}).get("name") or "A squadmate", (people.get(u) or {}).get("you"),
+    pips = [squad_pip(u, (people.get(u) or {}).get("name") or _t("A squadmate"), (people.get(u) or {}).get("you"),
                       people, cfg, PCREW_PIP, k)
             for k, u in enumerate(who[:len(emojis)])] if cfg is not None and len(who) >= len(emojis) else []
     faces = (f'<span class="pips">{"".join(pips)}</span>' if pips and all(pips)
              else "".join(e(str(x)) for x in emojis))
     n, of = int(s.get("shown") or 0), int(s.get("of") or 0)
-    out = f'{faces} Squad: {n} of {of} showed up' if n else f'Squad: {of} in it'
+    out = f'{faces} ' + _t("Squad: {n} of {of} showed up", n=n, of=of) if n else _t("Squad: {n} in it", n=of)
     last, unread = s.get("last"), int(tabs.get("unread") or 0)
-    go = (f'{e(str(last.get("name") or "?"))} asked' if last and unread
-          else f'{unread} new' if unread else "Open")
+    go = (_t("{name} asked", name=e(str(last.get("name") or "?"))) if last and unread
+          else _t("{n} new", n=unread) if unread else _t("Open"))
     return out.strip() + f' &middot; <a href="#" onclick="{_pycmd(f"squadplan:{pid}")}">{go} &rsaquo;</a>'
 
 
@@ -630,12 +672,12 @@ def _team_ago(at, now=None):
     import time as _time
     d = max(0, int((now or _time.time()) - int(at or 0)))
     if d < 60:
-        return "now"
+        return _t("now")
     if d < 3600:
-        return f"{d // 60}m"
+        return _t("{n}m", n=d // 60)
     if d < 86400:
-        return f"{d // 3600}h"
-    return "yesterday" if d < 2 * 86400 else f"{d // 86400}d"
+        return _t("{n}h", n=d // 3600)
+    return _t("yesterday") if d < 2 * 86400 else _t("{n}d", n=d // 86400)
 
 
 def _offer_banners(offers):
@@ -644,9 +686,9 @@ def _offer_banners(offers):
     out = ""
     for o in offers or []:
         oid = str(o.get("id", ""))
-        out += (f'<div class="dc-wrap"><span>&#128197;</span>'
-                f'<span><b>{e(str(o.get("owner") or "?"))}</b> offered {e(str(o.get("squad") or ""))} '
-                f'a plan: {e(str(o.get("name") or ""))}</span>'
-                f'<a class="wc" href="#" onclick="{_pycmd("planlook:" + oid)}">Look</a>'
-                f'<a class="wx" href="#" title="Not now" onclick="{_pycmd("planofferx:" + oid)}">&times;</a></div>')
+        out += ('<div class="dc-wrap"><span>&#128197;</span>'
+                + '<span>' + _t("{who} offered {squad} a plan: {name}", who=f'<b>{e(str(o.get("owner") or "?"))}</b>',
+                                squad=e(str(o.get("squad") or "")), name=e(str(o.get("name") or ""))) + '</span>'
+                f'<a class="wc" href="#" onclick="{_pycmd("planlook:" + oid)}">{_t("Look")}</a>'
+                f'<a class="wx" href="#" title="{_t("Not now")}" onclick="{_pycmd("planofferx:" + oid)}">&times;</a></div>')
     return out
