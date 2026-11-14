@@ -174,7 +174,7 @@ def _live_line(cfg):
     from .. import errs_flow, together
     if errs_flow.note_due(cfg) or not together.live_note_due(cfg):
         return ""
-    return (f'<div class="dc-calm"><span>{together.LIVE_NOTE}</span><span class="sp"></span>'
+    return (f'<div class="dc-calm"><span>{_t(together.LIVE_NOTE)}</span><span class="sp"></span>'
             f'<a href="#" onclick="{_pycmd("livesee")}">Privacy</a>'
             f'<a href="#" onclick="{_pycmd("livetold")}">Got it</a></div>')
 

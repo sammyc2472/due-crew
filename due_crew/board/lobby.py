@@ -50,7 +50,9 @@ def room_html(room):
     for inv in (room.get("invites") or [])[:2]:
         key = str(inv.get("key", ""))
         line = str(inv.get("line") or "")
-        here = (_t("{who} is in", who=e(line)) if " and " not in line else _t("{who} are in", who=e(line))) if line else ""
+        # one or several by the count the view brings (3.10.0: " and " is said in the language in use); the word, without one
+        many = int(inv["n"]) > 1 if isinstance(inv.get("n"), int) else " and " in line
+        here = (_t("{who} are in", who=e(line)) if many else _t("{who} is in", who=e(line))) if line else ""
         out += (f'<div class="dc-wrap"><span class="rdot"></span><span><b>{e(str(inv.get("title", "")))}</b>'
                 f' &middot; {e(str(inv.get("sub", "")))}'
                 f'{" &middot; " + here if here else ""}'
