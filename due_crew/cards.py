@@ -273,18 +273,21 @@ def my_peek_pip():
         return None
     from . import sev
     from .board import accent_pair, my_look
-    return {"svg": sev.slot(sev.svg("peek", look=my_look(c), label="Your Pip"), PEEK_PIP), "a": list(accent_pair(c.get("accent")))}
+    return {"svg": sev.slot(sev.svg("peek", look=my_look(c), label="Your Pip"), PEEK_PIP), "a": list(accent_pair(c.get("accent"))),
+            # 3.9.12: the same Pip holding a note out, for my own tip once it's opened
+            "held": sev.slot(sev.svg("again", look=my_look(c), label="Your Pip"), PEEK_PIP)}
 
 
-def peek_pip(uid):
+def peek_pip(uid, pose="peek"):
     """3.9.0: a crewmate's Pip waving as it peeks in (sev.py's own markup,
-    their look; a name only in its label, escaped), or None."""
+    their look; a name only in its label, escaped), or None. pose (3.9.12): "again" is the same Pip
+    holding a note out, a tip's once it's opened."""
     import html
     from . import sev
     e = next((e for e in _state["entries"] or [] if e.get("user_id") == uid and not e.get("you")), None)
     if e is None:
         return None
-    return sev.slot(sev.svg("peek", look=e.get("look"), label=html.escape(f'{e.get("name") or "?"}’s Pip', quote=True)), PEEK_PIP)
+    return sev.slot(sev.svg(pose, look=e.get("look"), label=html.escape(f'{e.get("name") or "?"}’s Pip', quote=True)), PEEK_PIP)
 
 def tip_list(info, local_tips, names, hidden=None):
     """The tips on one card, each person once: [{from, name, text, helped}].
@@ -547,16 +550,32 @@ _FLOAT_JS = """(function () {
       g.onfinish = g.oncancel = function () { grow.style.boxSizing = was[0]; grow.style.overflow = was[1]; };
       [head, acts].forEach(function (x) { x.animate([{opacity: 0}, {opacity: 0, offset: 0.4}, {opacity: getComputedStyle(x).opacity}], {duration: 320}); });
     }
+    if (fig && note && peek.pips[0].held) {  // the note's in their hand now (a note has one Pip: its writer's)
+      fig.textContent = '';
+      pip(fig, {pip: {svg: peek.pips[0].held, a: peek.pips[0].a}, sevcss: D.sevcss}, night, '');
+    }
     if (pad) { pad.style.height = (box.offsetHeight + 12) + 'px'; } else { check(); }
   }
+  // 3.9.12 (SC): a tip someone left is a note, a crewmate's or my own ("same for when you leave a tip for yourself")
+  var note = !!peek && (D.kind === 'tip' || D.kind === 'hook');
   said();
   var fig = null, bub = null;
   if (peek) {
     // 3.9.0 (Sam: a tip "looks too similar" to who knows it): a tip's bubble wears its tipper's colour
     // round its edge, their Pip's (mine with Pip off); who knows it keeps the plain line
-    var edge = D.kind === 'tip' ? 'border:2px solid ' + (withPip ? peek.pips[0].a[night ? 1 : 0] : acc) + ';' : '';
+    // 3.9.12 (SC: "more than just the message ... let's go with it's a sticky note"): a crewmate's tip is a note, not a
+    // speech bubble: a wash of their colour, a folded corner, a small Tip over its words; their Pip waves while it's
+    // folded and holds the note out once it's opened (open(), above)
+    var tint = note ? (withPip ? peek.pips[0].a[night ? 1 : 0] : acc) : '';
+    var edge = note ? 'position:relative;border:1px solid ' + tint + ';background:color-mix(in srgb, ' + tint + ' 13%, ' + c.bg + ');rotate:-1.5deg;' : '';
     bub = el('div', 'margin-bottom:' + (withPip ? '26px' : '0') + ';max-width:220px;display:grid;gap:4px;padding:8px 11px;' +
-      'border-radius:' + (withPip ? (left ? '12px 12px 12px 4px' : '12px 12px 4px 12px') : '12px') + ';transform-origin:' + (left ? '0' : '100%') + ' 100%;' + card + edge);
+      'border-radius:' + (note ? '4px 12px 4px 4px' : withPip ? (left ? '12px 12px 12px 4px' : '12px 12px 4px 12px') : '12px') + ';transform-origin:' + (left ? '0' : '100%') + ' 100%;' + card + edge);
+    if (note) {
+      bub.setAttribute('data-note', '1');
+      bub.appendChild(el('span', 'position:absolute;top:-1px;right:-1px;width:13px;height:13px;border-radius:0 12px 0 4px;' +
+        'background:linear-gradient(225deg, transparent 50%, ' + tint + ' 50%);', ''));
+      bub.appendChild(el('span', 'justify-self:start;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:' + tint + ';', 'Tip'));
+    }
     bub.appendChild(head); bub.appendChild(acts);
     box.appendChild(bub);
   }
@@ -564,7 +583,8 @@ _FLOAT_JS = """(function () {
     fig = el('span', 'position:relative;display:inline-flex;align-items:flex-end;gap:2px;line-height:0;');
     fig.setAttribute('data-fig', '1');
     for (var i = peek.pips.length - 1; i >= 0; i--) {  // the first who knows it nearest the corner
-      pip(fig, {pip: peek.pips[i], sevcss: D.sevcss}, night, '--sv-b:' + (+peek.pips[i].b || 4.6) + 's;--sv-d:' + (+peek.pips[i].d || 0) + 's;');
+      var drawn = note && D.open && peek.pips[i].held ? {svg: peek.pips[i].held, a: peek.pips[i].a} : peek.pips[i];
+      pip(fig, {pip: drawn, sevcss: D.sevcss}, night, '--sv-b:' + (+peek.pips[i].b || 4.6) + 's;--sv-d:' + (+peek.pips[i].d || 0) + 's;');
     }
     box.appendChild(fig);
   } else if (!peek) {
@@ -763,6 +783,9 @@ def on_answer(card, opened=False):
             from .sev import blink
             uids = peek.pop("uids", None) or []
             drawn = [{"svg": peek_pip(u), "a": pips[u]["a"]} for u in uids if u in pips]
+            if view.get("kind") == "tip":  # 3.9.12 (SC): waving while the note is folded, the note in hand once it's opened
+                for p, u in zip(drawn, [u for u in uids if u in pips]):
+                    p["held"] = peek_pip(u, "again")
             if uids == [ME]:  # 3.9.12: what's mine peeks in with my own Pip, in my colour and look
                 drawn = [p for p in [my_peek_pip()] if p]
             # each blinking on its own clock, as a room's seats (Sam: side by side they blinked as one)
