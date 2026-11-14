@@ -13,6 +13,7 @@ from aqt.qt import (
 
 from . import attach_alive, heading, note, run_bg
 from .. import plans as P
+from ..words import t as _t
 
 TEXT_MAX = 280  # the server's: one line, 1 to 280
 
@@ -26,33 +27,33 @@ class RemarkDialog(QDialog):
         self.client, self.card, self.on_done = client, [str(guid), int(ord_)], on_done
         self.plans = []
         attach_alive(self)
-        self.setWindowTitle("Note for the plan's followers")
+        self.setWindowTitle(_t("Note for the plan's followers"))
         self.setMinimumWidth(440)
         root = QVBoxLayout(self)
         heading(self, root)
         form = QFormLayout()
         self.plan = QComboBox()
         self.plan.currentIndexChanged.connect(self._plan_changed)
-        form.addRow("Plan", self.plan)
+        form.addRow(_t("Plan"), self.plan)
         self.text = QLineEdit()
         self.text.setMaxLength(TEXT_MAX)
-        self.text.setPlaceholderText("One line, shown with this card")
+        self.text.setPlaceholderText(_t("One line, shown with this card"))
         self.text.textChanged.connect(lambda *_: self._ready())
-        form.addRow("Note", self.text)
+        form.addRow(_t("Note"), self.text)
         root.addLayout(form)
         self.where = QLabel("")
         self.where.setTextFormat(Qt.TextFormat.PlainText)  # plan names come from the server
         root.addWidget(note(self.where))
-        self.status = QLabel("Looking for your plans…")
+        self.status = QLabel(_t("Looking for your plans…"))
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         self.status.setWordWrap(True)
         root.addWidget(self.status)
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
-        self.remove_btn = QPushButton("Take it off")
+        self.remove_btn = QPushButton(_t("Take it off"))
         self.remove_btn.setVisible(False)
         self.remove_btn.clicked.connect(lambda: self._send(remove=True))
         self.buttons.addButton(self.remove_btn, QDialogButtonBox.ButtonRole.ActionRole)
-        self.save_btn = QPushButton("Save")
+        self.save_btn = QPushButton(_t("Save"))
         self.save_btn.setDefault(True)
         self.save_btn.setEnabled(False)
         self.save_btn.clicked.connect(lambda: self._send(remove=False))
@@ -65,11 +66,11 @@ class RemarkDialog(QDialog):
 
     def _loaded(self, plans):
         if plans is None:
-            self.status.setText("Couldn't reach Due Crew. Check your connection.")
+            self.status.setText(_t("Couldn't reach Due Crew. Check your connection."))
             return
         self.plans = plans
         if not plans:
-            self.status.setText("Only a plan's author or co-authors write notes for its followers.")
+            self.status.setText(_t("Only a plan's author or co-authors write notes for its followers."))
             return
         self.status.setText("")
         self.plan.blockSignals(True)
@@ -95,8 +96,11 @@ class RemarkDialog(QDialog):
         had = self._existing(p)
         self.text.setText((had or {}).get("text") or "")
         self.remove_btn.setVisible(bool(had))
-        self.where.setText(f"Everyone following {p.get('name') or 'it'} sees it when this card comes up. "
-                           "Only the card's ID goes to the plan; its text stays here." if p else "")
+        self.where.setText("" if not p else
+                           _t("Everyone following {plan} sees it when this card comes up. "
+                              "Only the card's ID goes to the plan; its text stays here.", plan=p["name"]) if p.get("name") else
+                           _t("Everyone following it sees it when this card comes up. "
+                              "Only the card's ID goes to the plan; its text stays here."))
         self._ready()
 
     def _ready(self):
@@ -114,7 +118,7 @@ class RemarkDialog(QDialog):
             return
         self.save_btn.setEnabled(False)
         self.remove_btn.setEnabled(False)
-        self.status.setText("Taking it off…" if remove else "Saving…")
+        self.status.setText(_t("Taking it off…") if remove else _t("Saving…"))
         cl, pid, card = self.client, p["id"], list(self.card)
 
         def job():
@@ -133,16 +137,17 @@ class RemarkDialog(QDialog):
             if got is None:
                 self.save_btn.setEnabled(True)
                 self.remove_btn.setEnabled(True)
-                self.status.setText({403: "Only the plan's author or co-authors write notes for its followers.",
-                                     404: "That note is gone already." if remove else "That plan is gone.",
-                                     400: "That note didn't take. Try it shorter, on one line.",
-                                     409: "That's more than the plan holds: 300 notes a plan."}.get(
-                    status, "Couldn't save it. Check your connection."))
+                self.status.setText({403: _t("Only the plan's author or co-authors write notes for its followers."),
+                                     404: _t("That note is gone already.") if remove else _t("That plan is gone."),
+                                     400: _t("That note didn't take. Try it shorter, on one line."),
+                                     409: _t("That's more than the plan holds: 300 notes a plan.")}.get(
+                    status, _t("Couldn't save it. Check your connection.")))
                 return
             if self.on_done:
-                name = p.get("name") or "the plan"
-                self.on_done(f"Took the note off this card in {name}." if remove
-                             else f"Saved. Everyone following {name} sees it when this card comes up.")
+                name = p.get("name")
+                self.on_done((_t("Took the note off this card in {plan}.", plan=name) if name else _t("Took the note off this card in the plan.")) if remove
+                             else _t("Saved. Everyone following {plan} sees it when this card comes up.", plan=name) if name
+                             else _t("Saved. Everyone following the plan sees it when this card comes up."))
             self.accept()
 
         run_bg(self, job, done)

@@ -21,6 +21,7 @@ from aqt import mw
 
 from . import app, board
 from .errs import oops
+from .words import t as _t
 
 _open = {}  # id -> {"view": ..., "then": ..., "gen": app.generation}
 
@@ -51,9 +52,10 @@ def confirm_check(title, text, yes, check, then, checked=True, danger=False):
         then(ticked)
 
 
-def ask_text(title, text, then, value="", most=280, hint="", yes="Save"):
+def ask_text(title, text, then, value="", most=280, hint="", yes=None):
     """One line: then(words), as typed (the caller cleans them). The board's
-    box takes at most `most`."""
+    box takes at most `most`. yes: the button's word (Save)."""
+    yes = _t("Save") if yes is None else yes
     if _board(dict(title=title, text=text, yes=yes, field={"kind": "text", "value": value, "max": most, "hint": hint}),
               lambda a: then(str(a.get("text") or "")[:most])):
         return
@@ -63,7 +65,7 @@ def ask_text(title, text, then, value="", most=280, hint="", yes="Save"):
         then(str(words or "")[:most])
 
 
-def ask_item(title, text, items, then, at=0, yes="OK", notes=None, yes_each=None, no_label=None):
+def ask_item(title, text, items, then, at=0, yes=None, notes=None, yes_each=None, no_label=None):
     """One of items: then(index). Plans, end to end (Behind…): notes, a
     quiet line under each item; yes_each, the button's word for each
     (it follows the pick); no_label, the board's Cancel says this ("Not
@@ -71,6 +73,7 @@ def ask_item(title, text, items, then, at=0, yes="OK", notes=None, yes_each=None
     items = [str(x) for x in items]
     if not items:
         return
+    yes = _t("OK") if yes is None else yes
     field = {"kind": "pick", "items": items, "at": at}
     if notes:
         field["notes"] = [str(x) for x in notes]

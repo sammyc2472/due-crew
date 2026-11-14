@@ -13,7 +13,7 @@ from aqt import mw
 
 from . import app, errs
 from .errs import wanted as on
-from .words import later
+from .words import later, t as _t
 
 FILE = "errs.json"
 SAVE_MS = 10000   # a count is on disk this long after, at most
@@ -85,12 +85,12 @@ def _today():
 def _sending(c):
     """(errs part or None, why none goes): what the next sync would carry."""
     if not on(c):
-        return None, "Nothing goes: Send what went wrong, and what gets used is off."
+        return None, _t("Nothing goes: Send what went wrong, and what gets used is off.")
     cl = app.client()
     if not cl.signed_in:
-        return None, "Nothing goes while you're signed out."
+        return None, _t("Nothing goes while you're signed out.")
     if cl.session.get("errs_ok") is not True:
-        return None, "Nothing yet: Due Crew's server doesn't take them yet."
+        return None, _t("Nothing yet: Due Crew's server doesn't take them yet.")
     return errs.part(errs.current(), _today(), app.ADDON_VERSION), ""
 
 
@@ -125,7 +125,7 @@ def see_what_went():
     c = app.cfg()
     errs.switch(on(c))
     part, why = _sending(c)
-    sheets.confirm(errs.SHEET_TITLE, errs.sheet_text(part, why), "OK", lambda: None)
+    sheets.confirm(errs.SHEET_TITLE, errs.sheet_text(part, why), _t("OK"), lambda: None)
 
 
 # ---- 3.9.9: what gets used, said once ----

@@ -8,8 +8,9 @@ from aqt.qt import (
     QRadioButton, QSpinBox, QTime, QTimeEdit, QVBoxLayout,
 )
 
-from . import attach_alive, heading, note
+from . import attach_alive, heading, laid, note
 from ..room_model import BREAK_CHOICES, MAX_ROUNDS, ROUND_CHOICES, duration_text
+from ..words import t as _t
 
 
 class RoomDialog(QDialog):
@@ -17,37 +18,32 @@ class RoomDialog(QDialog):
         super().__init__(parent)
         self.result_room = None  # (start UTC, rounds, round min, break min)
         attach_alive(self)
-        self.setWindowTitle("Open a study room")
+        self.setWindowTitle(_t("Open a study room"))
         self.setMinimumWidth(420)
         root = QVBoxLayout(self)
         heading(self, root)
 
         row = QHBoxLayout()
-        row.addWidget(QLabel("Rounds"))
         self.rounds = QSpinBox()
         self.rounds.setRange(1, MAX_ROUNDS)
         self.rounds.setValue(4)
-        row.addWidget(self.rounds)
-        row.addWidget(QLabel("of"))
         self.length = QComboBox()
         for m in ROUND_CHOICES:
-            self.length.addItem(f"{m} min", m)
+            self.length.addItem(_t("{n} min", n=m), m)
         self.length.setCurrentIndex(ROUND_CHOICES.index(25))
-        row.addWidget(self.length)
-        row.addWidget(QLabel("with"))
         self.brk = QComboBox()
         for m in BREAK_CHOICES:
-            self.brk.addItem(f"{m} min", m)
-        row.addWidget(self.brk)
-        row.addWidget(QLabel("breaks"))
+            self.brk.addItem(_t("{n} min", n=m), m)
+        # one phrase around the three boxes
+        laid(row, _t("Rounds {n} of {length} with {pause} breaks"), n=self.rounds, length=self.length, pause=self.brk)
         row.addStretch()
         root.addLayout(row)
 
         when = QHBoxLayout()
-        when.addWidget(QLabel("Starts"))
-        self.now = QRadioButton("Now")
+        when.addWidget(QLabel(_t("Starts")))
+        self.now = QRadioButton(_t("Now"))
         self.now.setChecked(True)
-        self.later = QRadioButton("At a time")
+        self.later = QRadioButton(_t("At a time"))
         group = QButtonGroup(self)
         group.addButton(self.now)
         group.addButton(self.later)
@@ -73,7 +69,7 @@ class RoomDialog(QDialog):
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
                                    | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Open room")
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText(_t("Open room"))
         buttons.accepted.connect(self._open)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
@@ -83,9 +79,9 @@ class RoomDialog(QDialog):
 
     def _update_note(self, *_):
         rounds, length, brk = self._choice()
-        self.note.setText(f"About {duration_text(rounds * length + (rounds - 1) * brk)}. "
-                          "Your crew sees it on their board and can join any time. "
-                          "A break waits until you finish the card you're on.")
+        self.note.setText(_t("About {time}. "
+                             "Your crew sees it on their board and can join any time. "
+                             "A break waits until you finish the card you're on.", time=duration_text(rounds * length + (rounds - 1) * brk)))
 
     def _open(self):
         from ..rooms import start_at

@@ -18,6 +18,7 @@ from aqt.qt import (
 from . import attach_alive, heading, run_bg
 from . import note as ui_note
 from .. import plans as P
+from ..words import t as _t
 
 BIG = 2 * 1024 * 1024  # past this, most AI chats want it in parts
 
@@ -35,7 +36,7 @@ class ExportDialog(QDialog):
         self.on_saved = on_saved
         self.plans = [p for p in followed or [] if p.get("doc")]
         attach_alive(self)
-        self.setWindowTitle("Export cards for my AI")
+        self.setWindowTitle(_t("Export cards for my AI"))
         self.setMinimumWidth(440)
         root = QVBoxLayout(self)
         heading(self, root)
@@ -43,26 +44,26 @@ class ExportDialog(QDialog):
         self.plan = QComboBox()
         self.deck = QComboBox()
         self.scope = QComboBox()
-        form.addRow("Plan", self.plan)
-        form.addRow("Deck", self.deck)
-        form.addRow("Cards", self.scope)
+        form.addRow(_t("Plan"), self.plan)
+        form.addRow(_t("Deck"), self.deck)
+        form.addRow(_t("Cards"), self.scope)
         root.addLayout(form)
         self.size = QLabel("")
         self.size.setWordWrap(True)
         root.addWidget(self.size)
-        self.plain = QCheckBox("Leave out formatting and images (smaller)")
+        self.plain = QCheckBox(_t("Leave out formatting and images (smaller)"))
         self.plain.setChecked(True)
         root.addWidget(self.plain)
         # 3.8.1: the plan itself at the top of the file, as comment lines (never card text)
-        self.with_plan = QCheckBox("With the plan (its sets, tags, notes and what overlaps)")
+        self.with_plan = QCheckBox(_t("With the plan (its sets, tags, notes and what overlaps)"))
         self.with_plan.setChecked(True)
         root.addWidget(self.with_plan)
-        note = QLabel("Saved as a file on this computer, for you to attach to your AI chat. "
-                      "Due Crew doesn't send it anywhere.")
+        note = QLabel(_t("Saved as a file on this computer, for you to attach to your AI chat. "
+                         "Due Crew doesn't send it anywhere."))
         root.addWidget(ui_note(note))
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         self.go = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
-        self.go.setText("Export…")
+        self.go.setText(_t("Export…"))
         self.buttons.accepted.connect(self._export)
         self.buttons.rejected.connect(self.reject)
         root.addWidget(self.buttons)
@@ -86,7 +87,7 @@ class ExportDialog(QDialog):
         self.plan.clear()
         for p in self.plans:
             self.plan.addItem(P.plan_title(p), p["id"])
-        self.plan.addItem("None: a whole deck", "")
+        self.plan.addItem(_t("None: a whole deck"), "")
         i = self.plan.findData(keep) if keep is not None else -1
         self.plan.setCurrentIndex(i if i >= 0 else 0)
         self.plan.blockSignals(False)
@@ -129,10 +130,10 @@ class ExportDialog(QDialog):
         self.scope.blockSignals(True)
         self.scope.clear()
         if p:
-            self.scope.addItem("What the plan's sets open", "dates")
+            self.scope.addItem(_t("What the plan's sets open"), "dates")
             if ((p["doc"].get("pace") or {}).get("cover")):
-                self.scope.addItem("What the plan covers", "cover")
-        self.scope.addItem("The whole deck", "deck")
+                self.scope.addItem(_t("What the plan covers"), "cover")
+        self.scope.addItem(_t("The whole deck"), "deck")
         self.scope.blockSignals(False)
         self._update()
 
@@ -150,13 +151,13 @@ class ExportDialog(QDialog):
     def _update(self, *_):
         nids = self._nids()
         if not nids:
-            self.size.setText("Nothing to export here.")
+            self.size.setText(_t("Nothing to export here."))
             self.go.setEnabled(False)
             return
         size = P.export_size(self.col, nids)
-        line = f"{len(nids):,} notes · about {_kb(size)}."
-        line += (" That's big for one AI chat: try what the plan's sets open, or a smaller deck."
-                 if size > BIG else " Most AI chats take a file this size.")
+        line = _t("{n} notes · about {size}.", n=f"{len(nids):,}", size=_kb(size))
+        line += " " + (_t("That's big for one AI chat: try what the plan's sets open, or a smaller deck.")
+                       if size > BIG else _t("Most AI chats take a file this size."))
         self.size.setText(line)
         self.go.setEnabled(True)
 
@@ -168,7 +169,7 @@ class ExportDialog(QDialog):
         base = re.sub(r"[^A-Za-z0-9]+", "-", (p or {}).get("name") or self.deck.currentText() or "cards").strip("-") or "cards"
         desk = os.path.join(os.path.expanduser("~"), "Desktop")
         start = os.path.join(desk if os.path.isdir(desk) else os.path.expanduser("~"), f"{base[:60]}-cards.txt")
-        path, _ = QFileDialog.getSaveFileName(self, "Export cards for my AI", start, "Text (*.txt)")
+        path, _ = QFileDialog.getSaveFileName(self, _t("Export cards for my AI"), start, _t("Text") + " (*.txt)")
         if not path:
             return
         save(self.col, nids, path, self.plain.isChecked(), self.on_saved, plan_lines=self.plan_lines())
