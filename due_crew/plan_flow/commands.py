@@ -9,6 +9,7 @@ from aqt.utils import tooltip
 
 from .. import app
 from .. import plans as P
+from ..words import t as _t
 from ..app import _bg
 from ..app import _state
 from ..app import cfg
@@ -48,7 +49,7 @@ def exam_answer(pid, mine):
         c["exam_from"] = {"pid": ask["pid"], "day": ask["day"]}
     save_cfg(c)
     if mine:
-        tooltip(f"Your exam: {P.fmt_day(ask['day'])}.")
+        tooltip(_t("Your exam: {day}.", day=P.day_said(ask["day"])))
     if app.swap:
         app.swap(c)
 
@@ -251,13 +252,13 @@ def answer_invite(pid, yes):
         if gen != app.generation:
             return  # another profile or account since
         _got, status = res if res else (None, 0)
-        name = html.escape(inv.get("name") or "the plan")
+        name = html.escape(inv.get("name") or _t("the plan"))
         if status == 404:
-            tooltip(f"That invite to {name} was taken back.")
+            tooltip(_t("That invite to {name} was taken back.", name=name))
         elif status != 200:
-            tooltip("Couldn't reach Due Crew. Check your connection." if not status else "That didn't go through. Try again later.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection.") if not status else _t("That didn't go through. Try again later."))
         elif yes:
-            tooltip(f"{name} is yours now." if inv.get("kind") == "owner" else f"You co-write {name} now.")
+            tooltip(_t("{name} is yours now.", name=name) if inv.get("kind") == "owner" else _t("You co-write {name} now.", name=name))
         app.swap(cfg())
 
     _bg(lambda: cl.answer_plan_invite(pid, yes), done)
@@ -270,7 +271,7 @@ def undo_morning(put_off_too=False):
     on tomorrow's morning."""
     opened = _pcfg().get("plans_opened") or {}
     if not _undo_ok(opened.get("label")):
-        tooltip("Anki has done something since. Use Edit › Undo.")
+        tooltip(_t("Anki has done something since. Use Edit › Undo."))
         app.swap(cfg())
         return
 

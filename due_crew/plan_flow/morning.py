@@ -12,6 +12,7 @@ from aqt.utils import tooltip
 
 from .. import app
 from .. import plans as P
+from ..words import t as _t
 from .. import schedule as S
 from ..app import _bg
 from ..app import _state
@@ -50,8 +51,15 @@ def opened_line(res):
     """The toast: "Due Crew opened Renal physiology: 204 cards", escaped."""
     if not res or not res["n"]:
         return None
-    what = res["names"][0] if len(res["names"]) == 1 else f"{len(res['names'])} sets"
-    return f"Due Crew opened {html.escape(what)}: {res['n']:,} card{'s' if res['n'] != 1 else ''}"
+    what = res["names"][0] if len(res["names"]) == 1 else _t("{n} sets", n=len(res["names"]))
+    return P.tn("Due Crew opened {what}: {n} card", "Due Crew opened {what}: {n} cards", res["n"], what=html.escape(what))
+
+
+def _tags_said(name, new):
+    """A plan's tags that came today, as the toast says them (escaped): the first three, "and more" past them."""
+    tags = ", ".join(html.escape(x) for x in new[:3])
+    return (_t("{name}'s tags are in your Anki: {tags} and more.", name=name, tags=tags) if len(new) > 3
+            else _t("{name}'s tags are in your Anki: {tags}.", name=name, tags=tags))
 
 
 def _open_now(plan_list, mode=None, everything=False, toast=True):
@@ -155,8 +163,7 @@ def apply_tags(plan_list, toast=True):
         if res["new"]:
             st["tag_news"] = {"day": today, "names": res["new"][:6], "more": max(0, len(res["new"]) - 6),
                               "missing": int(sum(res["missing"].values()))}
-            said.append(f"{html.escape(p.get('name') or 'A plan')}'s tags are in your Anki: "
-                        + ", ".join(html.escape(x) for x in res["new"][:3]) + (" and more" if len(res["new"]) > 3 else "") + ".")
+            said.append(_tags_said(html.escape(p.get("name") or _t("A plan")), res["new"]))
     if changed:
         c["plans"] = state
         _psave(c)
@@ -219,8 +226,7 @@ def apply_authored_tags(toast=True):
         mine[pid] = {"deck_id": did, "tags_sig": sig, "tags_day": today, **({"tags": applied} if applied else {})}
         changed = True
         if res["new"]:
-            said.append(f"{html.escape(a.get('name') or 'Your plan')}'s tags are in your Anki: "
-                        + ", ".join(html.escape(x) for x in res["new"][:3]) + (" and more" if len(res["new"]) > 3 else "") + ".")
+            said.append(_tags_said(html.escape(a.get("name") or _t("Your plan")), res["new"]))
     if changed:
         c["authored_tags"], c["plans"] = mine, followed
         _psave(c)
@@ -357,7 +363,7 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
             for pid in backs:
                 QTimer.singleShot(0, lambda pid=pid: back(pid))
         if built and toast:
-            tooltip(f"Due Crew built {html.escape(built[0])}.", period=5000)
+            tooltip(_t("Due Crew built {name}.", name=html.escape(built[0])), period=5000)
         if away:
             from aqt.qt import QTimer
             QTimer.singleShot(0, lambda: welcome_back(list(away)))
@@ -553,7 +559,7 @@ def offer_hold(pids, ask=None, words=None):
         if not got:
             continue
         p, cids, own = got
-        name = p.get("name") or "The plan"
+        name = p.get("name") or _t("The plan")
         if ask is not None:
             if ask(name, len(cids)):
                 _hold(pid)
@@ -600,14 +606,14 @@ def _hold(pid):
 
 def _hold_words(name, n, own=False):
     """offer_hold's question (plain text: the plan's name is the author's)."""
-    cards = f"{n:,} card{'s' if n != 1 else ''}"
+    cards = P.tn("{n} card", "{n} cards", n)
     if own:
-        text = (f"{name} is new on this computer. Hold back {cards} of its later sets until you open them?"
-                "\n\nOne undo step; stopping the plan opens them again.")
+        text = (_t("{name} is new on this computer. Hold back {cards} of its later sets until you open them?", name=name, cards=cards)
+                + "\n\n" + _t("One undo step; stopping the plan opens them again."))
     else:
-        text = (f"{name} is new on this computer. Hold back {cards} of its later sets until their day?"
-                "\n\nThey open on their day. One undo step; stopping the plan opens them again.")
-    return "Hold back later cards", text, "Hold back"
+        text = (_t("{name} is new on this computer. Hold back {cards} of its later sets until their day?", name=name, cards=cards)
+                + "\n\n" + _t("They open on their day. One undo step; stopping the plan opens them again."))
+    return _t("Hold back later cards"), text, _t("Hold back")
 
 
 def send_ids():
@@ -794,7 +800,7 @@ def study_date(pid, uid):
         idx = P.DeckIndex(mw.col, st["deck_id"])
     cids = P.new_and_due(idx, idx.match(u, _swap(st), doc))
     if not cids:
-        tooltip("Nothing new or due in it.")
+        tooltip(_t("Nothing new or due in it."))
         return
     name = _deck_name(u.get('name') or 'date')
     back = _free(mw.col, cids, name)
@@ -837,7 +843,7 @@ def study_day(pid, day):
     when = "Today" if day == today else _day_words(day)
     cids, n_new, n_due = P.day_cards(idx, doc, day, today, st.get("applied"), _swap(st))
     if not cids:
-        tooltip("Nothing new or due today in this plan." if day == today else f"Nothing new or due from {when}.")
+        tooltip(_t("Nothing new or due today in this plan.") if day == today else _t("Nothing new or due from {day}.", day=P.day_said(day)))
         return
     name = _deck_name(f"{str(p.get('name') or 'Plan')} · {when}")
     back = _free(mw.col, cids, name)
@@ -858,10 +864,12 @@ def study_day(pid, day):
             inn = set(mw.col.db.list("SELECT id FROM cards WHERE did = ?", did))
             n_due = len(inn & set(idx.due_now))
             n_new = len(inn) - n_due
-        bits = [f"{n_new:,} new"] if n_new else []
-        bits += [f"{n_due:,} due"] if n_due else []
+        bits = [_t("{n} new", n=f"{n_new:,}")] if n_new else []
+        bits += [_t("{n} due", n=f"{n_due:,}")] if n_due else []
         if bits:
-            tooltip(f"{'Today' + chr(8217) + 's' if day == today else when + ':'} {' and '.join(bits)}, in a filtered deck.")
+            what = _t(" and ").join(bits)
+            tooltip(_t("Today’s {what}, in a filtered deck.", what=what) if day == today
+                    else _t("{day}: {what}, in a filtered deck.", day=P.day_said(day), what=what))
 
 
 def _day_words(day):
@@ -901,7 +909,7 @@ def study_quiz(pid, eid):
     if ev is None:
         return
     if not cids:
-        tooltip("None of its cards are open yet.")
+        tooltip(_t("None of its cards are open yet."))
         return
     name = _deck_name(f"Before {ev.get('name') or 'the quiz'}")  # 3.9.5: named for what it's before
     if _filtered(mw.col, name, cids, order=QUIZ_ORDER, until=str(ev.get("day") or "") or None):

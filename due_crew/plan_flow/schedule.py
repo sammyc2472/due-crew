@@ -5,6 +5,7 @@ from aqt.utils import tooltip
 
 from .. import app
 from .. import plans as P
+from ..words import t as _t, tn as _tn
 from .. import schedule as S
 from ..app import _bg
 from ..app import _state
@@ -61,7 +62,7 @@ def push_back(pid):
 
     def done(got):
         if got is False:
-            tooltip("Couldn't reach Due Crew. Check your connection.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         c = _pcfg()
         state = _state_cfg(c)
@@ -71,7 +72,7 @@ def push_back(pid):
             _psave(c)
         refresh_progress()
         app.swap(cfg())
-        tooltip(f"Your dates moved {ask['push']} day{'s' if ask['push'] != 1 else ''} later. The plan's stay put.")
+        tooltip(_tn("Your dates moved {n} day later. The plan's stay put.", "Your dates moved {n} days later. The plan's stay put.", ask["push"]))
     _bg(lambda: cl.set_schedule(pid, new), done)
 
 
@@ -114,14 +115,14 @@ def open_schedule(pid, then=None):
 
     def done(got):
         if got is False:
-            tooltip("Couldn't reach Due Crew. Check your connection.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection."))
         elif then is None:
             fresh = next((x for x in followed() if x["id"] == pid), None)
             if fresh and not fresh.get("paused"):
                 _open_now([fresh], toast=False)  # today's share, on the new schedule
             refresh_progress()
             app.swap(cfg())
-            tooltip("Schedule saved." if want else "Schedule off: sets open whole, as the plan has them.")
+            tooltip(_t("Schedule saved.") if want else _t("Schedule off: sets open whole, as the plan has them."))
         if then:
             then()
     _bg(lambda: cl.set_schedule(pid, want), done)
@@ -133,7 +134,7 @@ def open_everything(pid):
         return
     res = _open_now([p], everything=True)
     if res is not None and not res["n"]:
-        tooltip("Everything in this plan is already open.")
+        tooltip(_t("Everything in this plan is already open."))
     app.swap(cfg())
 
 
@@ -160,7 +161,7 @@ def change_deck(pid):
     current = st.get("deck_id") if st else best
     at = next((i for i, (d, _n) in enumerate(choices) if d == current), 0)
     # plain text: the plan's name is the author's
-    sheets.ask_item("Change deck", f"Run {p.get('name') or 'the plan'} on", [n for _d, n in choices],
+    sheets.ask_item(_t("Change deck"), _t("Run {name} on", name=p.get("name") or _t("the plan")), [n for _d, n in choices],
                     lambda i: _run_on(pid, choices[i][0]), at=at)
 
 
@@ -201,7 +202,7 @@ def set_paused(pid, paused):
 
     def done(res):
         if res is None:
-            tooltip("Couldn't reach Due Crew. Check your connection.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         if not paused:
             _resume(pid)
@@ -238,16 +239,17 @@ def stop_following(pid):
     if p is None:
         return
     from .. import sheets
-    text = ("Cards already open stay open"
-            + (", and the ones it held back open too" if (_state_cfg().get(pid) or {}).get("held") else "")
-            + ". The crew stops seeing your progress on this plan.")
-    title = f"Stop following {p.get('name') or 'this plan'}?"
+    text = (_t("Cards already open stay open, and the ones it held back open too. The crew stops seeing your progress on this plan.")
+            if (_state_cfg().get(pid) or {}).get("held")
+            else _t("Cards already open stay open. The crew stops seeing your progress on this plan."))
+    title = _t("Stop following {name}?", name=p.get("name") or _t("this plan"))
     if (_state_cfg().get(pid) or {}).get("tags"):
         # 3.8.0: its tags stay only if I say so (they stop updating)
-        sheets.confirm_check(title, text, "Stop", f"Take {p.get('name') or 'its'}'s tags off your notes too",
-                             lambda untag: _stop(pid, untag))
+        untag = (_t("Take {name}'s tags off your notes too", name=p["name"]) if p.get("name")
+                 else _t("Take its's tags off your notes too"))  # the English as it always was; the others say it right
+        sheets.confirm_check(title, text, _t("Stop"), untag, lambda untag: _stop(pid, untag))
     else:
-        sheets.confirm(title, text, "Stop", lambda: _stop(pid, False))
+        sheets.confirm(title, text, _t("Stop"), lambda: _stop(pid, False))
 
 
 def _stop(pid, untag):
@@ -258,7 +260,7 @@ def _stop(pid, untag):
 
     def done(ok):
         if not ok:
-            tooltip("Couldn't reach Due Crew. Check your connection.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         pc = _pcfg()
         state = _state_cfg(pc)

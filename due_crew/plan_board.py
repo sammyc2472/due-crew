@@ -23,6 +23,7 @@ from urllib.parse import unquote
 
 from . import plan_flow as F
 from . import plans as P
+from .words import t as _t, tn as _tn
 
 _DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
 
@@ -52,12 +53,12 @@ def behind(pid):
         F.app.swap(F.cfg())  # it isn't behind any more: the card catches up
         return
     p, path, b, waiting = got
-    sheet = P.behind_sheet(str(p.get("name") or "the plan"), b, path, waiting, shift=int(p.get("shift") or 0))
+    sheet = P.behind_sheet(str(p.get("name") or _t("the plan")), b, path, waiting, shift=int(p.get("shift") or 0))
     ways = sheet["ways"]
     from . import sheets
     sheets.ask_item(sheet["title"], sheet["text"], [w["label"] for w in ways],
                     lambda i: _take(pid, ways[i]), yes=ways[0]["yes"],
-                    notes=[w["note"] for w in ways], yes_each=[w["yes"] for w in ways], no_label="Not now")
+                    notes=[w["note"] for w in ways], yes_each=[w["yes"] for w in ways], no_label=_t("Not now"))
 
 
 def _take(pid, way):
@@ -79,12 +80,12 @@ def fit(pid, waiting):
     def then(typed):
         d = P.fit_days(typed)
         if d is None:
-            F.tooltip(f"A number of days, {lo} to {hi}.")
+            F.tooltip(_t("A number of days, {lo} to {hi}.", lo=lo, hi=hi))
             return
         F.start_catch(pid, d, P.fit_extra(waiting, d))
-    sheets.ask_text("Fit it in over how many days?",
-                    f"{lo} to {hi}. Three days is about {a:,} more new a day; a week, about {b:,}.",
-                    then, value=str(start), most=2, hint="days", yes="Fit it in")
+    sheets.ask_text(_t("Fit it in over how many days?"),
+                    _t("{lo} to {hi}. Three days is about {a} more new a day; a week, about {b}.", lo=lo, hi=hi, a=f"{a:,}", b=f"{b:,}"),
+                    then, value=str(start), most=2, hint=_t("days"), yes=_t("Fit it in"))
 
 
 def slide(pid, days):
@@ -100,10 +101,10 @@ def slide(pid, days):
 
     def done(res):
         if res is None:
-            F.tooltip("Couldn't reach Due Crew. Check your connection.")
+            F.tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         _slid(pid, {"day": F._today(), "days": int(days), "from": was})  # the card's Undo, for today
-        F.tooltip(f"Your dates moved {days} day{'s' if days != 1 else ''} later. The plan's stay put.")
+        F.tooltip(_tn("Your dates moved {n} day later. The plan's stay put.", "Your dates moved {n} days later. The plan's stay put.", days))
         F.app.swap(F.cfg())
 
     F._bg(lambda: cl.set_days(pid, shift=shift), done)
@@ -135,10 +136,10 @@ def unslide(pid):
 
     def done(res):
         if res is None:
-            F.tooltip("Couldn't reach Due Crew. Check your connection.")
+            F.tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         _slid(pid, None)
-        F.tooltip("Your dates are back where they were.")
+        F.tooltip(_t("Your dates are back where they were."))
         F.app.swap(F.cfg())
 
     F._bg(lambda: cl.set_days(pid, shift=max(0, int(rec.get("from") or 0))), done)
@@ -156,9 +157,10 @@ def skip(pid, uids):
 
     def done(res):
         if res is None:
-            F.tooltip("Couldn't reach Due Crew. Check your connection.")
+            F.tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
-        F.tooltip(f"Skipped. {'Its' if len(uids) == 1 else 'Their'} cards stay open in your deck; the week has Undo skip.")
+        F.tooltip(_tn("Skipped. Its cards stay open in your deck; the week has Undo skip.",
+                      "Skipped. Their cards stay open in your deck; the week has Undo skip.", len(uids)))
         F.app.swap(F.cfg())
 
     F._bg(lambda: cl.set_days(pid, skipped=have + uids), done)

@@ -7,6 +7,7 @@ from aqt import mw
 
 from .. import app
 from .. import plans as P
+from ..words import t as _t, tn as _tn, weekday as _weekday
 from .. import schedule as S
 from ..app import _state
 from ..app import cfg
@@ -675,7 +676,7 @@ def _short_day(iso, today):
         d, t = datetime.date.fromisoformat(iso), datetime.date.fromisoformat(today)
     except ValueError:
         return str(iso)
-    return f"{d:%a}" if 0 <= (d - t).days < 7 else P.fmt_day(iso)
+    return _weekday(d.weekday()) if 0 <= (d - t).days < 7 else P.day_said(iso)
 
 
 def card_view(plan, st, prog, today, session=None, week_offset=0):
@@ -690,20 +691,20 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
                   shift=int(plan.get("shift") or 0), skipped=plan.get("skipped") or (), moved=plan.get("moved"),
                   sched=bool(plan.get("sched")))
     if plan.get("paused"):
-        sub = f"paused until {P.fmt_day(plan['until'])}" if plan.get("until") else "paused"
+        sub = _t("paused until {day}", day=P.day_said(plan["until"])) if plan.get("until") else _t("paused")
     elif week == 0 and us:
-        sub = f"starts {P.fmt_day(us[0]['opens'])}"
+        sub = _t("starts {day}", day=P.day_said(us[0]["opens"]))
     elif st and P.joy_finished(path):  # 3.9.6: the finish line, kept on the card
         n = len(P.joy_sets(path))
-        sub = f"all {n} set{'s' if n != 1 else ''} done"
+        sub = _tn("all {n} set done", "all {n} sets done", n)
     else:
-        sub = f"set {path['at']} of {path['of']}" if path["at"] else f"week {week} of {weeks}"
+        sub = _t("set {n} of {of}", n=path["at"], of=path["of"]) if path["at"] else _t("week {n} of {of}", n=week, of=weeks)
     if int(plan.get("shift") or 0):
-        sub += f" · your dates +{int(plan['shift'])} day{'s' if int(plan['shift']) != 1 else ''}"
+        sub += " · " + _tn("your dates +{n} day", "your dates +{n} days", int(plan["shift"]))
     if int(plan.get("early") or 0) and not plan.get("paused"):
         n = int(plan["early"])  # 3.3, C2 (on the Today box until 3.8.0)
-        sub += f" · opens {n} day{'s' if n != 1 else ''} early"
-    sub += f" · {int(plan.get('followers') or 0):,} following"
+        sub += " · " + _tn("opens {n} day early", "opens {n} days early", n)
+    sub += " · " + _t("{n} following", n=f"{int(plan.get('followers') or 0):,}")
     followers = int(plan.get("followers") or 0)
     crew = plan.get("crewDone")  # 3.9.5: only from three people counted; none, no crew count
     rows = []
@@ -713,9 +714,9 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
     for u in open_units:
         o, s, t = (prog or {}).get(u["id"], [0, 0, 0])
         done = int(crew.get(u["id"]) or 0) if isinstance(crew, dict) else None
-        bits = [f"crew {done:,}/{followers:,}"] if done is not None else []
+        bits = [_t("crew {n}/{of}", n=f"{done:,}", of=f"{followers:,}")] if done is not None else []
         if u["id"] == now_id and u.get("due") and u["due"] >= today:
-            bits.append(f"due {_short_day(u['due'], today)}")
+            bits.append(_t("due {day}", day=_short_day(u["due"], today)))
         rows.append({"name": u.get("name") or "?", "uid": u["id"], "state": "now" if u["id"] == now_id else "open",
                      "seen": [s, t], "crew": [done, followers] if done is not None else None, "n": " · ".join(bits),
                      "missing": not t})
@@ -729,10 +730,10 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
         mine_opens = P._later(u.get("opens"), shift) if shift else u.get("opens")
         if u["id"] in skipped and week_ago <= str(mine_opens or "") <= horizon:
             rows.append({"name": u.get("name") or "?", "uid": u["id"], "state": "skip", "seen": None, "crew": None,
-                         "n": "skipped", "missing": False})
+                         "n": _t("skipped"), "missing": False})
     if nxt:
         rows.append({"name": nxt.get("name") or "?", "uid": nxt["id"], "state": "later", "seen": None, "crew": None,
-                     "n": f"opens {P.fmt_day(nxt['opens'])}", "missing": False})
+                     "n": _t("opens {day}", day=P.day_said(nxt["opens"])), "missing": False})
     # G2: what Not today put off to tomorrow
     later = {k: v for k, v in ((st or {}).get("later") or {}).items() if str(v) > today}
     by_id = {u["id"]: u for u in P.units(doc)}
@@ -769,17 +770,17 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
         line = line if line["rows"] else None
         for r in (line or {}).get("rows") or []:
             d = S.d(r["day"])
-            r["when"] = f"{d:%a} {d.day}"
+            r["when"] = f"{_weekday(d.weekday())} {d.day}"
     if not (no_deck or plan.get("paused") or own):
         left = lambda u: max(0, int(_t3(prog, u)[2]) - int(_t3(prog, u)[1]))
         behind = P.behind_of(path, today)
         status = {"togo": sum(left(u) for u in us if str(u.get("opens") or "") == today),
                   "behind": behind["left"] if behind else 0,
-                  "since": P.weekday_or_day(behind["since"], today) if behind else ""}
+                  "since": P.weekday_or_day_said(behind["since"], today) if behind else ""}
     if own:  # 3.8.0: no Behind at my own pace; what's next, and where the plan is
-        sub = f"at your pace · {followers:,} following"
+        sub = _t("at your pace") + " · " + _t("{n} following", n=f"{followers:,}")
         waiting, catch, session = 0, None, None
-    return {"id": plan["id"], "title": P.plan_title(plan), "name": str(plan.get("name") or "Plan"), "sub": sub, "rows": rows,
+    return {"id": plan["id"], "title": P.plan_title(plan), "name": str(plan.get("name") or _t("Plan")), "sub": sub, "rows": rows,
             "own": own_view(plan, st, prog, today) if own else None,
             "lines": [] if no_deck or plan.get("paused") or own else P.ahead_behind(doc, prog or {}, today),
             "change": change, "no_deck": no_deck, "paused": bool(plan.get("paused")),
@@ -828,8 +829,8 @@ def _shut_dates(plan, st, prog):
 
 
 def offers_view(offers, squad_names, following_ids, dismissed):
-    return [{"id": o["id"], "owner": o.get("ownerName") or "?", "name": o.get("name") or "Plan",
-             "squad": squad_names.get(o.get("squad"), "your squad")}
+    return [{"id": o["id"], "owner": o.get("ownerName") or "?", "name": o.get("name") or _t("Plan"),
+             "squad": squad_names.get(o.get("squad"), _t("your squad"))}
             for o in offers or [] if o["id"] not in following_ids and o["id"] not in dismissed][:2]
 
 

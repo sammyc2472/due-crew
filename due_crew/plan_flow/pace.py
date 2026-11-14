@@ -8,6 +8,7 @@ from aqt.utils import tooltip
 
 from .. import app
 from .. import plans as P
+from ..words import t as _t, tn as _tn
 from .. import schedule as S
 from ..app import _bg
 from ..app import _state
@@ -59,7 +60,7 @@ def open_next(pid, study=False, uid=None):
             else P.up_next(p["doc"], st.get("applied"), prog))
     if not left:
         if not uid:
-            tooltip("Every set of this plan is open.")
+            tooltip(_t("Every set of this plan is open."))
         return
     u = left[0]
     # 3.8.1: a date further down Up next, opened first: the line says ahead of which
@@ -84,7 +85,7 @@ def open_next(pid, study=False, uid=None):
     if res["n"]:
         _after_change()
     else:
-        tooltip(f"Nothing in {html.escape(str(u.get('name') or 'it'))} to open: it's open already.")
+        tooltip(_t("Nothing in {name} to open: it's open already.", name=html.escape(str(u.get("name") or _t("it")))))
     refresh_progress()
     if study and lesson_deck_on(pid):
         did = _lesson_did(pid, u["id"])  # B: Open and study goes to the lesson's own deck
@@ -153,7 +154,7 @@ def own_undo(pid):
     latest step, then the date is as it was."""
     last = _pcfg().get("own_last") or {}
     if last.get("pid") != pid or not _undo_ok(last.get("label")):
-        tooltip("Anki has done something since. Use Edit › Undo.")
+        tooltip(_t("Anki has done something since. Use Edit › Undo."))
         app.swap(cfg())
         return
 
@@ -206,17 +207,18 @@ def set_own(pid, own):
 
     def done(res):
         if res is None:
-            tooltip("Couldn't reach Due Crew. Check your connection.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         if was and not own:
             _resume(pid)
         elif own and not was:
             offer_hold([pid], words=lambda name, n, _own: (
-                "Hold back the rest",
-                f"{name}: {n:,} card{'s' if n != 1 else ''} of sets you haven't opened are open already. "
-                "Hold them back until you open their set?\n\nOne undo step; stopping the plan opens them again.",
-                "Hold back"))
-            tooltip("Nothing opens by itself now. Open the next set from You › Plans.", period=5000)
+                _t("Hold back the rest"),
+                P.tn("{name}: {n} card of sets you haven't opened are open already. Hold them back until you open their set?",
+                     "{name}: {n} cards of sets you haven't opened are open already. Hold them back until you open their set?", n, name=name)
+                + "\n\n" + _t("One undo step; stopping the plan opens them again."),
+                _t("Hold back")))
+            tooltip(_t("Nothing opens by itself now. Open the next set from You › Plans."), period=5000)
         app.swap(cfg())
 
     _bg(lambda: cl.set_own(pid, own or None), done)
@@ -237,20 +239,25 @@ def own_view(plan, st, prog, today):
     ol = (_pcfg().get("own_last") or {}) if mw else {}
     if ol.get("pid") == plan["id"] and ol.get("day") == today and mw and mw.col and _undo_ok(ol.get("label")):
         n = int(ol.get("n") or 0)
-        ahead = f" (ahead of {ol['ahead']})" if ol.get("ahead") else ""  # 3.8.1: a later date, opened first
-        last = (f"Opened {ol.get('name') or '?'}{ahead} · {n:,} card{'s' if n != 1 else ''}, first in line."
-                if ol.get("kind") == "open" else f"Put back {ol.get('name') or '?'} · {n:,} card{'s' if n != 1 else ''}.")
+        name = ol.get("name") or "?"
+        if ol.get("kind") != "open":
+            last = P.tn("Put back {name} · {n} card.", "Put back {name} · {n} cards.", n, name=name)
+        elif ol.get("ahead"):  # 3.8.1: a later date, opened first
+            last = P.tn("Opened {name} (ahead of {other}) · {n} card, first in line.",
+                        "Opened {name} (ahead of {other}) · {n} cards, first in line.", n, name=name, other=ol["ahead"])
+        else:
+            last = P.tn("Opened {name} · {n} card, first in line.", "Opened {name} · {n} cards, first in line.", n, name=name)
     back = None
     lu = P.own_last(doc, days)
     if lu and not last and P.opened_here(applied, lu, prog):
-        o, s2, _t = (prog.get(lu["id"]) or [0, 0, 0])[:3]
+        o, s2, _tot = (prog.get(lu["id"]) or [0, 0, 0])[:3]
         if int(o) > int(s2):
             back = {"name": str(lu.get("name") or "?"), "n": int(o) - int(s2)}
     # 3.9.10 (Sam: the own-pace card "to match"): what I opened and haven't finished, a row each, Study or Ignore;
     # the lines measuring me against the author's dates (where the plan is, my pace, the finish) are gone
     opened = []
     for u in P.units(doc):
-        o, s3, _t = (int(x or 0) for x in (list(prog.get(u["id"]) or []) + [0, 0, 0])[:3])
+        o, s3, _tot = (int(x or 0) for x in (list(prog.get(u["id"]) or []) + [0, 0, 0])[:3])
         if o > s3 and P.opened_here(applied, u, prog):
             opened.append({"uid": u["id"], "name": str(u.get("name") or "?"), "left": o - s3})
     return {"mode": plan.get("own"), "open": opened,
@@ -272,7 +279,7 @@ def set_skip(pid, uid, on):
 
     def done(got):
         if got is None:
-            tooltip("Couldn't reach Due Crew. Check your connection.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         if not on and not got.get("paused"):
             _open_now([x for x in followed() if x["id"] == pid])
@@ -293,12 +300,12 @@ def move_menu(pid, uid):
     ev = P.event_of(p["doc"], u)  # 3.8.1: by the event's id (its name never matched)
     from aqt.qt import QCursor, QMenu
     menu = QMenu(mw)
-    head = menu.addAction(f"Move {u.get('name') or 'this set'} to")
+    head = menu.addAction(_t("Move {name} to", name=u.get("name") or _t("this set")))
     head.setEnabled(False)
     for k in range(1, 8):
         day = P._later(u["opens"], k)
         late = ev and str(ev.get("day") or "9999") <= day
-        a = menu.addAction(f"{P.fmt_day(day)}" + (f" · after {ev.get('name')}" if late else ""))
+        a = menu.addAction(P.day_said(day) + (" · " + _t("after {name}", name=ev.get("name")) if late else ""))
         a.triggered.connect(lambda _=False, n=have + k: move_date(pid, uid, n))
     menu.exec(QCursor.pos())
 
@@ -316,7 +323,7 @@ def move_date(pid, uid, days):
 
     def done(got):
         if got is None:
-            tooltip("Couldn't reach Due Crew. Check your connection.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         if not got.get("paused"):
             _open_now([x for x in followed() if x["id"] == pid], toast=False)
@@ -325,7 +332,7 @@ def move_date(pid, uid, days):
             p = next((x for x in followed() if x["id"] == pid), None)
             mu = next((x for x in P.units((p or {}).get("doc")) if x["id"] == uid), None)
             if mu:
-                tooltip(f"{html.escape(str(u.get('name') or 'It'))} moved to {P.fmt_day(mu['opens'])}.")
+                tooltip(_t("{name} moved to {day}.", name=html.escape(str(u.get("name") or _t("It"))), day=P.day_said(mu["opens"])))
         app.swap(cfg())
 
     _bg(lambda: cl.set_days(pid, moved=moved), done)
@@ -336,19 +343,23 @@ def reset_lines(p):
     out = []
     shift = int(p.get("shift") or 0)
     if shift:
-        out.append(f"Your dates run {shift} day{'s' if shift != 1 else ''} later: back on time")
+        out.append(_tn("Your dates run {n} day later: back on time", "Your dates run {n} days later: back on time", shift))
     names = {u["id"]: str(u.get("name") or "?") for u in P.units(p.get("doc"))}
     sk = [names.get(u, "?") for u in p.get("skipped") or [] if u in names]
     if sk:
-        out.append(f"{len(sk)} skipped set{'s come' if len(sk) != 1 else ' comes'} back: " + ", ".join(sk[:3])
-                   + (f" and {len(sk) - 3} more" if len(sk) > 3 else ""))
+        out.append(_tn("{n} skipped set comes back: {sets}", "{n} skipped sets come back: {sets}", len(sk), sets=_first3(sk)))
     mv = [names.get(u, "?") for u in (p.get("moved") or {}) if u in names]
     if mv:
-        out.append(f"{len(mv)} moved set{'s go' if len(mv) != 1 else ' goes'} back: " + ", ".join(mv[:3])
-                   + (f" and {len(mv) - 3} more" if len(mv) > 3 else ""))
+        out.append(_tn("{n} moved set goes back: {sets}", "{n} moved sets go back: {sets}", len(mv), sets=_first3(mv)))
     if p.get("paused") or p.get("until") or p.get("since"):
-        out.append("Your pause ends")
+        out.append(_t("Your pause ends"))
     return out
+
+
+def _first3(names):
+    """The first three names, "and 2 more" past them."""
+    sets = ", ".join(names[:3])
+    return _t("{sets} and {n} more", sets=sets, n=len(names) - 3) if len(names) > 3 else sets
 
 
 def reset_days(pid):
@@ -362,9 +373,9 @@ def reset_days(pid):
     if not lines:
         return
     from .. import sheets
-    sheets.confirm("Reset to default?", "\n".join("\u2022 " + x for x in lines)
-                   + "\n\nCards already open stay open. Sets that come back and have passed count as behind.",
-                   "Reset", lambda: _reset_days(pid))
+    sheets.confirm(_t("Reset to default?"), "\n".join("\u2022 " + x for x in lines)
+                   + "\n\n" + _t("Cards already open stay open. Sets that come back and have passed count as behind."),
+                   _t("Reset"), lambda: _reset_days(pid))
 
 
 def _reset_days(pid):
@@ -372,10 +383,10 @@ def _reset_days(pid):
 
     def done(got):
         if got is None:
-            tooltip("Couldn't reach Due Crew. Check your connection.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         _open_now([x for x in followed() if x["id"] == pid], toast=False)
-        tooltip("Back to the plan's days.")
+        tooltip(_t("Back to the plan's days."))
         app.swap(cfg())
 
     _bg(lambda: cl.set_days(pid, shift=0, skipped=[], moved={}, paused=False, until=None, since=None), done)
@@ -392,14 +403,14 @@ def pause_until(pid):
     from_away = away_to >= today and str(c.get("away_from") or "") <= away_to
     until = away_to if from_away else S.iso(S.d(today) + datetime.timedelta(days=7))
     from ..ui.days_dialog import ask_pause
-    got = ask_pause(mw, p.get("name") or "Plan", today, until, from_away)
+    got = ask_pause(mw, p.get("name") or _t("Plan"), today, until, from_away)
     if not got:
         return
     cl = client()
 
     def done(res):
         if res is None:
-            tooltip("Couldn't reach Due Crew. Check your connection.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         app.swap(cfg())
 
@@ -422,13 +433,13 @@ def back(pid):
     if n_units and days:
         ev = P.prep_for(mine(p)["doc"], today)
         from ..ui.days_dialog import ask_back
-        choice = ask_back(mw, n_units, days, (ev["name"], P.fmt_day(ev["day"])) if ev else None)
+        choice = ask_back(mw, n_units, days, (ev["name"], P.day_said(ev["day"])) if ev else None)
     shift = int(p.get("shift") or 0) + (days if choice == "push" else 0)
     cl = client()
 
     def done(res):
         if res is None:
-            tooltip("Couldn't reach Due Crew. Check your connection.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         _open_now([x for x in followed() if x["id"] == pid])
         app.swap(cfg())
@@ -442,14 +453,14 @@ def set_shift(pid):
     if p is None:
         return
     from ..ui.days_dialog import ask_shift
-    n = ask_shift(mw, p.get("name") or "Plan", int(p.get("shift") or 0))
+    n = ask_shift(mw, p.get("name") or _t("Plan"), int(p.get("shift") or 0))
     if n is None or n == int(p.get("shift") or 0):
         return
     cl = client()
 
     def done(res):
         if res is None:
-            tooltip("Couldn't reach Due Crew. Check your connection.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         if not res.get("paused"):
             _open_now([x for x in followed() if x["id"] == pid])  # fewer days may make a date due now
@@ -519,17 +530,17 @@ def catch_menu(pid):
     today = _today()
     n = P.waiting_new(p["doc"], prog, today)
     if not n:
-        tooltip("Nothing's waiting from earlier sets now.")
+        tooltip(_t("Nothing's waiting from earlier sets now."))
         app.swap(cfg())
         return
     from aqt.qt import QCursor, QMenu
     menu = QMenu(mw)
     for days in (3, 5, 7):
         extra = -(-n // days)
-        a = menu.addAction(f"Over {days} days (+{extra:,} new a day)")
+        a = menu.addAction(_t("Over {days} days (+{n} new a day)", days=days, n=f"{extra:,}"))
         a.triggered.connect(lambda _=False, d=days, x=extra: start_catch(pid, d, x))
     menu.addSeparator()
-    menu.addAction("Push my dates back…").triggered.connect(lambda: set_shift(pid))
+    menu.addAction(_t("Push my dates back…")).triggered.connect(lambda: set_shift(pid))
     menu.exec(QCursor.pos())
 
 
@@ -540,14 +551,14 @@ def start_catch(pid, days, extra):
     if not st:
         return
     if mw.col and _paused(mw.col, st.get("deck_id")):
-        tooltip("New cards are stopped in this deck. Turn them back on in Insights first.")
+        tooltip(_t("New cards are stopped in this deck. Turn them back on in Insights first."))
         return
     st["catch"] = {"until": S.iso(S.d(_today()) + datetime.timedelta(days=days - 1)), "extra": int(extra)}
     c["plans"] = state
     _psave(c)
     apply_catch()
     _after_change()
-    tooltip(f"Anki shows {int(extra):,} more new cards a day in this deck for {days} days.")
+    tooltip(_t("Anki shows {n} more new cards a day in this deck for {days} days.", n=f"{int(extra):,}", days=days))
     app.swap(cfg())
 
 
@@ -588,7 +599,7 @@ def set_early(pid, days):
 
     def done(ok):
         if not ok:
-            tooltip("Couldn't reach Due Crew. Check your connection.")
+            tooltip(_t("Couldn't reach Due Crew. Check your connection."))
             return
         p = next((x for x in followed() if x["id"] == pid), None)
         if p and not p.get("paused"):
@@ -613,8 +624,8 @@ def new_plan_menu():
     one way to start one; or on duecrew.com)."""
     from aqt.qt import QCursor, QMenu
     menu = QMenu(mw)
-    menu.addAction("New plan…").triggered.connect(lambda: _planner_flow().open_new())
-    menu.addAction("On duecrew.com ↗").triggered.connect(lambda: open_site("/plans"))
+    menu.addAction(_t("New plan…")).triggered.connect(lambda: _planner_flow().open_new())
+    menu.addAction(_t("On duecrew.com") + " ↗").triggered.connect(lambda: open_site("/plans"))
     menu.exec(QCursor.pos())
 
 
@@ -624,47 +635,47 @@ def plan_menu(pid):
         return
     from aqt.qt import QCursor, QMenu
     menu = QMenu(mw)
-    menu.addAction("Open in Your plans").triggered.connect(lambda: open_yours(pid))  # 3.9.3
+    menu.addAction(_t("Open in Your plans")).triggered.connect(lambda: open_yours(pid))  # 3.9.3
     menu.addSeparator()
     if p.get("sched"):  # 3.3: new follows do the plan's days; a 3.2 schedule can still change or go
-        menu.addAction("My schedule…").triggered.connect(lambda: open_schedule(pid))
-    how = menu.addMenu("How its cards open")  # 3.8.0: at my own pace
-    for val, label in (("", "On the plan's dates"), ("ready", "When I'm ready"),
-                       ("next", "When I'm ready, the next once I've seen most of the last")):
+        menu.addAction(_t("My schedule…")).triggered.connect(lambda: open_schedule(pid))
+    how = menu.addMenu(_t("How its cards open"))  # 3.8.0: at my own pace
+    for val, label in (("", _t("On the plan's dates")), ("ready", _t("When I'm ready")),
+                       ("next", _t("When I'm ready, the next once I've seen most of the last"))):
         a = how.addAction(label)
         a.setCheckable(True)
         a.setChecked((p.get("own") or "") == val)
         a.triggered.connect(lambda _=False, val=val: set_own(pid, val))
-    menu.addAction("Open everything now").triggered.connect(lambda: open_everything(pid))
+    menu.addAction(_t("Open everything now")).triggered.connect(lambda: open_everything(pid))
     n_held = held_count(pid)  # 3.8.1: what Hold back (or Put back) keeps shut, and why
     if n_held:
-        menu.addAction(f"Held back: {n_held:,} card{'s' if n_held != 1 else ''}…").triggered.connect(lambda: show_held(pid))
-    early = menu.addMenu("Open early")  # 3.3, C2: for studying on a phone
+        menu.addAction(P.tn("Held back: {n} card…", "Held back: {n} cards…", n_held)).triggered.connect(lambda: show_held(pid))
+    early = menu.addMenu(_t("Open early"))  # 3.3, C2: for studying on a phone
     early.setEnabled(not P.own_pace(p))
-    for n, label in ((0, "Off"), (1, "1 day"), (2, "2 days"), (3, "3 days"), (5, "5 days"), (7, "7 days")):
-        a = early.addAction(label)
+    for n in (0, 1, 2, 3, 5, 7):
+        a = early.addAction(_tn("{n} day", "{n} days", n) if n else _t("Off"))
         a.setCheckable(True)
         a.setChecked(int(p.get("early") or 0) == n)
         a.triggered.connect(lambda _=False, n=n: set_early(pid, n))
     # G3: skip a date I already know (the ones around now and ahead)
-    skip = menu.addMenu("Skip a set")
+    skip = menu.addMenu(_t("Skip a set"))
     today = _today()
     week_ago = S.iso(S.d(today) - datetime.timedelta(days=7))
     ahead = [u for u in P.units(p["doc"]) if str(u.get("opens") or "") >= week_ago][:20]
     for u in ahead:
-        a = skip.addAction(f"{u.get('name') or '?'} · {P.fmt_day(u['opens'])}")
+        a = skip.addAction(f"{u.get('name') or '?'} · {P.day_said(u['opens'])}")
         a.triggered.connect(lambda _=False, uid=u["id"]: set_skip(pid, uid, True))
     skip.setEnabled(bool(ahead))
-    menu.addAction("Push my dates back…").triggered.connect(lambda: set_shift(pid))  # G4, G7
-    menu.addAction("Change deck…").triggered.connect(lambda: change_deck(pid))
+    menu.addAction(_t("Push my dates back…")).triggered.connect(lambda: set_shift(pid))  # G4, G7
+    menu.addAction(_t("Change deck…")).triggered.connect(lambda: change_deck(pid))
     if reset_lines(_raw(pid) or {}):  # 3.7.6: only once something's changed
-        menu.addAction("Reset to default…").triggered.connect(lambda: reset_days(pid))
+        menu.addAction(_t("Reset to default…")).triggered.connect(lambda: reset_days(pid))
     menu.addSeparator()
     if p.get("paused"):
-        menu.addAction("Resume").triggered.connect(lambda: back(pid) if p.get("since") else set_paused(pid, False))
+        menu.addAction(_t("Resume")).triggered.connect(lambda: back(pid) if p.get("since") else set_paused(pid, False))
     else:
-        menu.addAction("Pause until…").triggered.connect(lambda: pause_until(pid))
-    menu.addAction("Stop following").triggered.connect(lambda: stop_following(pid))
+        menu.addAction(_t("Pause until…")).triggered.connect(lambda: pause_until(pid))
+    menu.addAction(_t("Stop following")).triggered.connect(lambda: stop_following(pid))
     menu.exec(QCursor.pos())
 
 
