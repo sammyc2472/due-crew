@@ -863,7 +863,7 @@ def test_crew_menu_pictures():
                             "labels": []})
     check("no Crew menu: Friends has the code and Copy invite; Crew › Decks starts sharing a deck",
           not hasattr(board, "crew_menu_items") and "def _crew_menu" not in text and '"crewmenu"' not in text
-          and 'QPushButton("Copy invite")' in fd
+          and 'QPushButton(_t("Copy invite"))' in fd
           and ('<div class="dc-add"><a href="#" title="Pick the decks your crew sees" onclick="pycmd(\'duecrew:decks|' + board.BOARD_KEY + "'); return false;\">+ Share a deck</a>") in dk
           and "Matching decks pair up" not in dk, dk[-300:])
     import due_crew as dc

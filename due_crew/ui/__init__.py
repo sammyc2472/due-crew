@@ -17,6 +17,7 @@ from aqt import mw
 from aqt.qt import QApplication
 
 from ..backend.shapes import AuthError, TransportError
+from ..words import later as _later, t as _t
 
 
 def copy_text(text):
@@ -192,6 +193,22 @@ def heading(dialog, layout, text=None):
     layout.insertWidget(0, label)
     dialog.setWindowTitle("Due Crew")
     return label
+
+
+def laid(row, phrase, **boxes):
+    """3.10.0: a phrase said around its boxes ("Rounds {n} of {length}"), into a row: the words between
+    as labels, each box where its {name} stands, so a language puts them in its own order. A box the
+    phrase leaves out goes last."""
+    import re
+    from aqt.qt import QLabel
+    left = dict(boxes)
+    for bit in re.split(r"(\{[a-z_]+\})", str(phrase)):
+        if bit[:1] == "{" and bit[1:-1] in left:
+            row.addWidget(left.pop(bit[1:-1]))
+        elif bit.strip():
+            row.addWidget(QLabel(bit.strip()))
+    for box in left.values():
+        row.addWidget(box)
 
 
 def note(label):
@@ -913,12 +930,12 @@ def ask_item(parent, title, label, items, current=0):
 def shared_words(cfg):
     """The numbers the Privacy switches share, as words for a sentence:
     "reviews, time, retention, and streak". '' when none are."""
-    words = [w for key, w in (("share_reviews", "reviews"), ("share_time", "time"),
-                              ("share_retention", "retention"), ("share_streak", "streak"))
+    words = [_t(w) for key, w in (("share_reviews", _later("reviews")), ("share_time", _later("time")),
+                                  ("share_retention", _later("retention")), ("share_streak", _later("streak")))
              if cfg.get(key, True)]
     if len(words) <= 2:
-        return " and ".join(words)
-    return ", ".join(words[:-1]) + f", and {words[-1]}"
+        return _t(" and ").join(words)
+    return _t("{most}, and {last}", most=", ".join(words[:-1]), last=words[-1])
 
 
 def attach_alive(dialog):

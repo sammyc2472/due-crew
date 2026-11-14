@@ -11,6 +11,7 @@ from aqt.qt import QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QPushButton, 
 
 from . import attach_alive, sev_label, title
 from . import note as ui_note
+from ..words import month as _month, t as _t, tn as _tn, weekday as _weekday
 
 
 def _day(iso):
@@ -18,7 +19,7 @@ def _day(iso):
         d = datetime.date.fromisoformat(str(iso))
     except ValueError:
         return str(iso)
-    return f"{d:%a} {d.day} {d:%b}"
+    return f"{_weekday(d.weekday())} {d.day} {_month(d.month)}"
 
 
 def days_words(days):
@@ -26,12 +27,11 @@ def days_words(days):
     with more than four "… between Mon 5 Oct and Fri 16 Oct."."""
     days = [str(x) for x in days]
     n = len(days)
-    head = f"{n} day{'s' if n != 1 else ''} with no study in Anki"
     if n > 4:
-        return f"{head} between {_day(days[0])} and {_day(days[-1])}."
+        return _t("{n} days with no study in Anki between {first} and {last}.", n=n, first=_day(days[0]), last=_day(days[-1]))
     if n == 1:
-        return f"{head}: {_day(days[0])}."
-    return f"{head}: " + ", ".join(_day(x) for x in days[:-1]) + f" and {_day(days[-1])}."
+        return _t("1 day with no study in Anki: {day}.", day=_day(days[0]))
+    return _t("{n} days with no study in Anki: {days} and {last}.", n=n, days=", ".join(_day(x) for x in days[:-1]), last=_day(days[-1]))
 
 
 class AwayDialog(QDialog):
@@ -42,35 +42,35 @@ class AwayDialog(QDialog):
         attach_alive(self)
         self.choice = None
         n = len(days)
-        self.setWindowTitle("Welcome back")
+        self.setWindowTitle(_t("Welcome back"))
         self.setMinimumWidth(430)
         root = QVBoxLayout(self)
         words = QVBoxLayout()
         top = QHBoxLayout()
-        self.sev = sev_label("hello", 64, "Pip, waving") if sev else None
+        self.sev = sev_label("hello", 64, _t("Pip, waving")) if sev else None
         if self.sev is not None:
             top.addWidget(self.sev, 0, Qt.AlignmentFlag.AlignTop)
             top.addSpacing(8)
         top.addLayout(words, 1)
         root.addLayout(top)
-        words.addWidget(title(f"Welcome back to {name}"))
+        words.addWidget(title(_t("Welcome back to {name}", name=name)))
         self.setWindowTitle("Due Crew")  # the window says what it is (ui.heading)
-        self.body = QLabel(f"{days_words(days)} "
-                           f"{n_dates:,} set{'s' if n_dates != 1 else ''} would open now: "
-                           f"{n_cards:,} new card{'s' if n_cards != 1 else ''}.")
+        cards = _t("{n} new card", n=1) if n_cards == 1 else _t("{n} new cards", n=f"{n_cards:,}")
+        self.body = QLabel(days_words(days) + " " + (_t("{n} set would open now: {cards}.", n=1, cards=cards) if n_dates == 1
+                                                     else _t("{n} sets would open now: {cards}.", n=f"{n_dates:,}", cards=cards)))
         self.body.setTextFormat(Qt.TextFormat.PlainText)
         self.body.setWordWrap(True)
         words.addWidget(self.body)
-        note = QLabel("Pushing moves only your dates; the plan and its events stay put. "
-                      "Not today opens nothing and asks again tomorrow morning.")
+        note = QLabel(_t("Pushing moves only your dates; the plan and its events stay put. "
+                         "Not today opens nothing and asks again tomorrow morning."))
         note.setTextFormat(Qt.TextFormat.PlainText)
         words.addWidget(ui_note(note))
         buttons = QDialogButtonBox()
-        buttons.addButton("Not today", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
-        self.push_btn = QPushButton(f"Push my dates back {n} day{'s' if n != 1 else ''}")
+        buttons.addButton(_t("Not today"), QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
+        self.push_btn = QPushButton(_tn("Push my dates back {n} day", "Push my dates back {n} days", n))
         self.push_btn.clicked.connect(lambda: self._go("push"))
         buttons.addButton(self.push_btn, QDialogButtonBox.ButtonRole.ActionRole)
-        self.open_btn = QPushButton("Open them")
+        self.open_btn = QPushButton(_t("Open them"))
         self.open_btn.setDefault(True)
         self.open_btn.clicked.connect(lambda: self._go("open"))
         buttons.addButton(self.open_btn, QDialogButtonBox.ButtonRole.AcceptRole)

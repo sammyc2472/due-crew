@@ -7,10 +7,11 @@ from aqt.qt import QCheckBox, QDialog, QDialogButtonBox, QLineEdit, QPushButton,
 
 from . import attach_alive, heading, note
 from ..backend.shapes import NOTE_MAX
+from ..words import later as _later, t as _t
 
-SHARE_WORDS = "Share with my crew"
+SHARE_WORDS = _later("Share with my crew")  # both said with _t where shown
 # 3.9.12 (SC: "Never the card itself." doesn't make sense): who reads it, and that only the tip goes
-SHARE_NOTE = "Friends who have this card see your tip when they miss it. Only the tip is sent."
+SHARE_NOTE = _later("Friends who have this card see your tip when they miss it. Only the tip is sent.")
 
 
 class HookDialog(QDialog):
@@ -22,28 +23,28 @@ class HookDialog(QDialog):
         super().__init__(parent)
         attach_alive(self)
         self.result_words, self.result_shared = None, bool(shared)
-        self.setWindowTitle("Your tip" if words else "Add a tip")
+        self.setWindowTitle(_t("Your tip") if words else _t("Add a tip"))
         self.setMinimumWidth(460)
         root = QVBoxLayout(self)
         heading(self, root)
         self.text = QLineEdit(words)
         self.text.setMaxLength(NOTE_MAX)
-        self.text.setPlaceholderText("What makes this card stick? One line.")
+        self.text.setPlaceholderText(_t("What makes this card stick? One line."))
         root.addWidget(self.text)
-        self.share = QCheckBox(SHARE_WORDS)
+        self.share = QCheckBox(_t(SHARE_WORDS))
         self.share.setChecked(bool(shared) and bool(signed_in))
         self.share.setEnabled(bool(signed_in))
         root.addWidget(self.share)
         from aqt.qt import QLabel
-        why = QLabel(SHARE_NOTE if signed_in else "Kept on this computer. Sign in to share tips with your crew.")
+        why = QLabel(_t(SHARE_NOTE) if signed_in else _t("Kept on this computer. Sign in to share tips with your crew."))
         why.setWordWrap(True)
         root.addWidget(note(why))
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
-        self.remove_btn = QPushButton("Take it off")
+        self.remove_btn = QPushButton(_t("Take it off"))
         self.remove_btn.clicked.connect(lambda: self._done(""))
         self.buttons.addButton(self.remove_btn, QDialogButtonBox.ButtonRole.ActionRole)
         self.remove_btn.setVisible(bool(words))  # after it's in the box, which shows what it's given
-        self.save_btn = QPushButton("Save")
+        self.save_btn = QPushButton(_t("Save"))
         self.save_btn.setDefault(True)
         self.save_btn.clicked.connect(lambda: self._done(self.text.text()))
         self.buttons.addButton(self.save_btn, QDialogButtonBox.ButtonRole.AcceptRole)

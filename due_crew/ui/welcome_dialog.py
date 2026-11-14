@@ -11,6 +11,7 @@ from aqt.utils import tooltip
 
 from ..backend.shapes import friend_code_from, invite_code_from, long_code_from
 from . import accent, attach_alive, copy_text, logo_label, note, run_bg, shared_words, title, tone
+from ..words import t as _t
 
 
 class WelcomeDialog(QDialog):
@@ -33,12 +34,12 @@ class WelcomeDialog(QDialog):
         if logo is not None:
             root.addWidget(logo)
 
-        root.addWidget(title(f"You're in, {client.display_name or 'friend'}."))  # plain text: a name
+        root.addWidget(title(_t("You're in, {name}.", name=client.display_name or _t("friend"))))  # plain text: a name
         root.addSpacing(4)
 
         grid = QGridLayout()
         grid.setColumnStretch(0, 1)
-        grid.addWidget(QLabel("Invite a friend"), 0, 0)
+        grid.addWidget(QLabel(_t("Invite a friend")), 0, 0)
         self.code_label = QLabel("······")
         self.code_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.code_label.setStyleSheet(
@@ -46,24 +47,24 @@ class WelcomeDialog(QDialog):
             f"letter-spacing: 2px; padding: 5px 10px; color: {accent()};"
             f"background: {tone('bg')}; border: 1px solid {tone('line')}; border-radius: 6px;")
         grid.addWidget(self.code_label, 0, 1)
-        self.copy_btn = QPushButton("Copy invite")
+        self.copy_btn = QPushButton(_t("Copy invite"))
         self.copy_btn.setEnabled(False)
         self.copy_btn.clicked.connect(self._copy)
         grid.addWidget(self.copy_btn, 0, 2)
 
-        grid.addWidget(QLabel("Have a code?"), 1, 0)
+        grid.addWidget(QLabel(_t("Have a code?")), 1, 0)
         self.code_input = QLineEdit()
-        self.code_input.setPlaceholderText("Paste an invite or a code")
+        self.code_input.setPlaceholderText(_t("Paste an invite or a code"))
         self.code_input.setMinimumWidth(170)
         self.code_input.returnPressed.connect(self._add)
         grid.addWidget(self.code_input, 1, 1)
-        self.add_btn = QPushButton("Add")
+        self.add_btn = QPushButton(_t("Add"))
         self.add_btn.setEnabled(False)
         self.add_btn.clicked.connect(self._add)
         grid.addWidget(self.add_btn, 1, 2)
 
-        grid.addWidget(QLabel("A class or study group?"), 2, 0)
-        squads = QPushButton("Join a squad…")
+        grid.addWidget(QLabel(_t("A class or study group?")), 2, 0)
+        squads = QPushButton(_t("Join a squad…"))
         squads.clicked.connect(lambda: self.open_squads())
         grid.addWidget(squads, 2, 1, 1, 2, Qt.AlignmentFlag.AlignRight)
         root.addLayout(grid)
@@ -76,18 +77,18 @@ class WelcomeDialog(QDialog):
         line.setFrameShadow(QFrame.Shadow.Sunken)
         root.addWidget(line)
         words = shared_words(cfg)
-        seen = (f"Your crew and squads will see your {words}." if words
-                else "Your crew and squads will see which days you studied.")
+        seen = (_t("Your crew and squads will see your {words}.", words=words) if words
+                else _t("Your crew and squads will see which days you studied."))
         root.addWidget(note(QLabel(seen)))
-        self.show_up_box = QCheckBox("Just show up instead: only which days you studied")
+        self.show_up_box = QCheckBox(_t("Just show up instead: only which days you studied"))
         self.show_up_box.setChecked(bool(cfg.get("show_up")))
         self.offered = bool(words)
         self.show_up_box.setVisible(self.offered)
         root.addWidget(self.show_up_box)
 
         buttons = QDialogButtonBox()
-        later = buttons.addButton("Later", QDialogButtonBox.ButtonRole.RejectRole)
-        done = buttons.addButton("Done", QDialogButtonBox.ButtonRole.AcceptRole)
+        later = buttons.addButton(_t("Later"), QDialogButtonBox.ButtonRole.RejectRole)
+        done = buttons.addButton(_t("Done"), QDialogButtonBox.ButtonRole.AcceptRole)
         done.setDefault(True)
         later.setAutoDefault(False)
         buttons.accepted.connect(self._done)
@@ -104,7 +105,7 @@ class WelcomeDialog(QDialog):
 
         def done(result, err):
             if err or not result:
-                self.status.setText("Couldn't reach Due Crew. The Friends dialog has all of this.")
+                self.status.setText(_t("Couldn't reach Due Crew. The Friends dialog has all of this."))
                 return
             self.code, self.friends, self.loaded = result
             self.code_label.setText(self.code or "?")
@@ -122,7 +123,7 @@ class WelcomeDialog(QDialog):
 
         def done(invite, _err):
             copy_text(friend_invite(invite or code))
-            tooltip(INVITE_COPIED if invite else "Invite copied.")
+            tooltip(_t(INVITE_COPIED) if invite else _t("Invite copied."))
         run_bg(self, self.client.create_invite, done)
 
     def _plan_or_squad(self, code):
@@ -152,10 +153,10 @@ class WelcomeDialog(QDialog):
             if longer:
                 self._plan_or_squad(longer)
             else:
-                self.status.setText("That doesn't look like a code. Pasting the whole invite works too.")
+                self.status.setText(_t("That doesn't look like a code. Pasting the whole invite works too."))
             return
         if code and code == self.code:
-            self.status.setText("That's your own code.")
+            self.status.setText(_t("That's your own code."))
             return
         self.add_btn.setEnabled(False)
         cl = self.client
@@ -164,20 +165,20 @@ class WelcomeDialog(QDialog):
             self.add_btn.setEnabled(True)
             friend, add_err = result if result else (None, None)
             if not friend:
-                self.status.setText(add_err or "Couldn't add. Check your connection.")
+                self.status.setText(add_err or _t("Couldn't add. Check your connection."))
                 return
             self.friends.append(friend["user_id"])
             self.changed = True
             self.code_input.clear()
             name = friend["name"]
             if invite and not friend["mutual"] and not friend.get("knocked"):
-                self.status.setText(f"{name} isn't in your crew now.")
+                self.status.setText(_t("{name} isn't in your crew now.", name=name))
             elif friend["mutual"]:
-                self.status.setText(f"You and {name} are crew.")
+                self.status.setText(_t("You and {name} are crew.", name=name))
             elif friend.get("knocked"):
-                self.status.setText(f"Added {name}. They'll see it on their board.")
+                self.status.setText(_t("Added {name}. They'll see it on their board.", name=name))
             else:
-                self.status.setText(f"Added {name}. Send them your code to finish.")
+                self.status.setText(_t("Added {name}. Send them your code to finish.", name=name))
 
         run_bg(self, lambda: cl.redeem_invite(invite) if invite else cl.add_friend(code), done)
 

@@ -32,6 +32,7 @@ from .sync import _on_sync_done
 from .commands import _swap
 from .windows import open_closet, open_friends, open_scrapbook
 from .settings import open_feedback, open_settings
+from ..words import later as _later, t as _t
 
 
 SHARE_KEYS = ("show_up", "share_reviews", "share_time", "share_retention", "share_streak",
@@ -126,17 +127,17 @@ def _tools_menu():
         return  # a second profile open: the submenu is already there
     from .. import planner
     menu = QMenu("Due Crew", mw)
-    for item in (("Study what’s next", due_flow.study_today),
-                 ("Magic search…", open_magic), None,  # 3.9.7
-                 ("Friends…", open_friends),
-                 ("Squads…", open_squads),
+    for item in ((_later("Study what’s next"), due_flow.study_today),
+                 (_later("Magic search…"), open_magic), None,  # 3.9.7
+                 (_later("Friends…"), open_friends),
+                 (_later("Squads…"), open_squads),
                  ("Pip Party…", open_game_night),  # 3.9.5: the You bubble on it; shown when it is (gamenight_flow.shown)
                  "plans", None,  # 3.9.3: Plans ▸, the plan windows among its entries
-                 ("Settings…", open_settings),
-                 ("Pip’s closet…", lambda: open_closet()),
-                 ("Scrapbook…", lambda: open_scrapbook()),
-                 ("Show on the Decks screen", _toggle_board),
-                 ("Send feedback…", open_feedback)):
+                 (_later("Settings…"), open_settings),
+                 (_later("Pip’s closet…"), lambda: open_closet()),
+                 (_later("Scrapbook…"), lambda: open_scrapbook()),
+                 (_later("Show on the Decks screen"), _toggle_board),
+                 (_later("Send feedback…"), open_feedback)):
         if item is None:
             menu.addSeparator()
             continue
@@ -144,9 +145,11 @@ def _tools_menu():
             menu.addMenu(planner.plans_menu(menu))
             continue
         label, fn = item
-        action = QAction(label, mw)
+        action = QAction(_t(label), mw)
         action.triggered.connect(lambda _=False, fn=fn: fn())
         menu.addAction(action)
+        # 3.10.0: made once, before a profile's language is known, and kept through a change of it: said again at each open
+        menu.aboutToShow.connect(lambda a=action, label=label: a.setText(_t(label)))
         if fn is _toggle_board:
             action.setCheckable(True)
             menu.aboutToShow.connect(lambda a=action: a.setChecked(bool(cfg().get("show_leaderboard", True))))
@@ -169,7 +172,7 @@ def open_magic(text=""):
     """3.9.7: Magic search, unless Settings › Study has it off."""
     errs.used("magic")
     if not magic_flow.on():
-        tooltip("Magic search is off: Settings › Study turns it on.")
+        tooltip(_t("Magic search is off: Settings › Study turns it on."))
         return
     magic_flow.open_search(text)
 

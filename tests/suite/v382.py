@@ -1547,7 +1547,7 @@ def test_scrapbook_v3910():
         SF._BOOK.update(path=None, data=None, disk=None)
     src = srcs.glue_src()
     check("its ways in: the foot's Scrapbook, Tools › Due Crew › Scrapbook… (Your year… is gone), the December line",
-          '("Scrapbook…", lambda: open_scrapbook())' in src and "Your year…" not in src)
+          '(_later("Scrapbook…"), lambda: open_scrapbook())' in src and "Your year…" not in src)
 
 
 def test_banner_actions_sit_together_v390():
@@ -3181,8 +3181,8 @@ def test_sheets_v391():
                                                                       "together.py", "plan_flow.py", "squads.py", "cards.py")}
     check("sheets: what the board asks goes through them: status, name, sign out, delete, a to-do, the plan squad, "
           "a good-luck line, a tip, hold back, reset, change deck, stop following, the founder's tools",
-          all(k in src[f] for f, k in (("social.py", 'sheets.ask_text("Status"'), ("__init__.py", 'sheets.ask_text("Display name"'),
-                                       ("__init__.py", 'sheets.confirm("Sign out?"'), ("__init__.py", 'sheets.confirm("Delete account?"'),
+          all(k in src[f] for f, k in (("social.py", 'sheets.ask_text("Status"'), ("__init__.py", 'sheets.ask_text(_t("Display name")'),
+                                       ("__init__.py", 'sheets.confirm(_t("Sign out?")'), ("__init__.py", 'sheets.confirm(_t("Delete account?")'),
                                        ("due_flow.py", 'sheets.ask_text("Edit to-do"'), ("team_flow.py", 'sheets.confirm("Join this plan'),
                                        ("team_flow.py", 'sheets.ask_text("Reply"'), ("team_flow.py", 'sheets.ask_text("Ask the squad"'),
                                        ("together.py", 'sheets.ask_text("Good-luck card"'), ("together.py", 'sheets.ask_text("Send a tip"'),

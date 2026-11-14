@@ -6,8 +6,10 @@ with the words a search finds it by. Every one passes clean_emoji (the
 suite checks), so any pick can be sent. Pure data; the drawing is
 board.cheer_overlay_js's."""
 
+from .words import later as _later, t as _t
+
 GROUPS = (
-    ("Faces", (
+    (_later("Faces"), (
         ("😀", "grin happy smile"), ("😄", "smile happy joy"), ("😁", "beam grin"), ("😂", "laugh tears lol"),
         ("🤣", "rofl laugh rolling"), ("😊", "blush smile happy"), ("🙂", "smile ok"), ("😉", "wink"),
         ("😍", "love eyes heart"), ("🥰", "adore love hearts"), ("😘", "kiss love"), ("😎", "cool sunglasses"),
@@ -18,7 +20,7 @@ GROUPS = (
         ("😭", "cry sob"), ("😬", "grimace yikes"), ("🫠", "melt"), ("🤯", "mind blown wow"), ("😱", "scream shock"),
         ("🤠", "cowboy yeehaw"), ("👻", "ghost boo"), ("💀", "skull dead"), ("🤖", "robot"), ("👽", "alien"),
     )),
-    ("Hands", (
+    (_later("Hands"), (
         ("👍", "thumbs up yes good"), ("👏", "clap applause bravo"), ("🙌", "raise hands hooray"), ("🙏", "thanks please pray"),
         ("🤝", "handshake deal"), ("✌️", "peace victory"), ("🤞", "fingers crossed luck"), ("🤟", "love you"),
         ("👊", "fist bump"), ("✊", "fist power"), ("💪", "strong muscle flex"), ("👋", "wave hi hello bye"),
@@ -27,7 +29,7 @@ GROUPS = (
         ("🧑‍⚕️", "doctor health"), ("🧑‍🔬", "scientist lab"), ("🏃", "run fast"), ("🧘", "calm yoga breathe"),
         ("💃", "dance"), ("🕺", "dance disco"),
     )),
-    ("Hearts", (
+    (_later("Hearts"), (
         ("❤️", "red heart love"), ("🧡", "orange heart"), ("💛", "yellow heart"), ("💚", "green heart"),
         ("💙", "blue heart"), ("💜", "purple heart"), ("🖤", "black heart"), ("🤍", "white heart"),
         ("💖", "sparkling heart love"), ("💞", "hearts love"), ("💯", "hundred perfect"), ("✨", "sparkles magic"),
@@ -35,7 +37,7 @@ GROUPS = (
         ("🔥", "fire lit streak hot"), ("💥", "boom bang"), ("✅", "check done yes"), ("✔️", "tick done"),
         ("🎯", "target bullseye goal"), ("🆗", "ok"), ("🆒", "cool"),
     )),
-    ("Party", (
+    (_later("Party"), (
         ("🎉", "party popper tada celebrate"), ("🎊", "confetti celebrate"), ("🎈", "balloon party"),
         ("🎁", "gift present"), ("🏆", "trophy win champion"), ("🥇", "gold medal first"), ("🏅", "medal"),
         ("👑", "crown king queen"), ("🎂", "cake birthday"), ("🍾", "champagne bottle pop"), ("🥂", "cheers toast"),
@@ -43,7 +45,7 @@ GROUPS = (
         ("🎸", "guitar rock"), ("🎮", "game controller"), ("🎲", "dice game"), ("🧩", "puzzle piece"),
         ("🏁", "finish flag done"), ("🚀", "rocket launch fast"), ("🌈", "rainbow"),
     )),
-    ("Study", (
+    (_later("Study"), (
         ("📚", "books study"), ("📖", "open book read"), ("📝", "memo notes write"), ("✏️", "pencil"), ("🖊️", "pen"),
         ("📓", "notebook"), ("🗂️", "cards dividers index"), ("📇", "card index flashcards"), ("🧪", "test tube lab"),
         ("🔬", "microscope science"), ("🩺", "stethoscope doctor"), ("💊", "pill pharm medicine"), ("🧬", "dna genetics"),
@@ -52,7 +54,7 @@ GROUPS = (
         ("🍵", "tea"), ("🎧", "headphones music focus"), ("💡", "idea bulb"), ("🗓️", "calendar plan"),
         ("📈", "chart up progress"), ("🔖", "bookmark"),
     )),
-    ("Nature", (
+    (_later("Nature"), (
         ("🐶", "dog puppy"), ("🐱", "cat kitty"), ("🐻", "bear"), ("🐼", "panda"), ("🐨", "koala"), ("🦊", "fox"),
         ("🐸", "frog"), ("🐧", "penguin"), ("🦉", "owl wise night"), ("🐝", "bee busy"), ("🦋", "butterfly"),
         ("🐢", "turtle slow steady"), ("🐙", "octopus"), ("🦄", "unicorn magic"), ("🐉", "dragon"), ("🦖", "dino t-rex"),
@@ -61,7 +63,7 @@ GROUPS = (
         ("🍀", "clover luck"), ("🌵", "cactus"), ("🌳", "tree"), ("☀️", "sun sunny"), ("🌙", "moon night"),
         ("⛅", "cloud sun"), ("🌊", "wave sea"), ("❄️", "snow cold"), ("🍂", "leaves autumn fall"),
     )),
-    ("Food", (
+    (_later("Food"), (
         ("🍕", "pizza"), ("🍩", "donut doughnut"), ("🍪", "cookie"), ("🧁", "cupcake"), ("🍰", "cake slice"),
         ("🍫", "chocolate"), ("🍿", "popcorn"), ("🍦", "ice cream"), ("🍓", "strawberry"), ("🍎", "apple"),
         ("🍌", "banana"), ("🍉", "watermelon"), ("🥑", "avocado"), ("🌮", "taco"), ("🍜", "noodles ramen"),
@@ -72,5 +74,6 @@ GROUPS = (
 
 
 def view():
-    """[[group, [[emoji, words], ...]], ...] for the window's JSON."""
-    return [[name, [list(x) for x in items]] for name, items in GROUPS]
+    """[[group, [[emoji, words], ...]], ...] for the window's JSON: a group's name in the language in
+    use; the words a search finds an emoji by stay English."""
+    return [[_t(name), [list(x) for x in items]] for name, items in GROUPS]
