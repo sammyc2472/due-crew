@@ -2448,7 +2448,7 @@ def test_plan_tags_glue_v380():
     finally:
         F._pcfg, F._psave, dc_mw().col, F._today, F.tooltip = saved
     menu = srcs.flow_src()
-    check("tags: Browse's menu has it, signed in", 'menu.addAction("Due Crew: tag for a plan…")' in menu
+    check("tags: Browse's menu has it, signed in", 'menu.addAction(_t("Due Crew: tag for a plan…"))' in menu
           and menu.index('if not client().signed_in') < menu.index('"Due Crew: tag for a plan…"'))
 
 

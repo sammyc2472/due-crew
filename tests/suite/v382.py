@@ -3186,8 +3186,8 @@ def test_sheets_v391():
                                        ("due_flow.py", 'sheets.ask_text("Edit to-do"'), ("team_flow.py", 'sheets.confirm("Join this plan'),
                                        ("team_flow.py", 'sheets.ask_text("Reply"'), ("team_flow.py", 'sheets.ask_text("Ask the squad"'),
                                        ("together.py", 'sheets.ask_text("Good-luck card"'), ("together.py", 'sheets.ask_text("Send a tip"'),
-                                       ("plan_flow.py", "sheets.confirm(title, text, yes"), ("plan_flow.py", 'sheets.confirm("Reset to default?"'),
-                                       ("plan_flow.py", 'sheets.ask_item("Change deck"'), ("plan_flow.py", "sheets.confirm_check(title, text, \"Stop\""),
+                                       ("plan_flow.py", "sheets.confirm(title, text, yes"), ("plan_flow.py", 'sheets.confirm(_t("Reset to default?")'),
+                                       ("plan_flow.py", 'sheets.ask_item(_t("Change deck")'), ("plan_flow.py", "sheets.confirm_check(title, text, _t(\"Stop\")"),
                                        ("squads.py", 'sheets.confirm("Block?"'), ("squads.py", 'sheets.confirm("Remove?"')))
           and not any(x in t for t in src.values() for x in ("QInputDialog", "askUser", "getText(")))
     node = shutil.which("node")

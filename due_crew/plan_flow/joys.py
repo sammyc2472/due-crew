@@ -7,6 +7,7 @@ from aqt.utils import tooltip
 
 from .. import app
 from .. import plans as P
+from ..words import t as _t
 from ..app import _state
 from ..app import cfg
 from ..errs import oops
@@ -81,9 +82,9 @@ def _joy_pips(view, pid):
         if key not in moves:
             moves[key] = rooms.pick("hop")
         pop["pip"] = re.sub(r'<rect class="cf"[^>]*/>', "", sev.move("hop", moves[key], rest=pop["ago"] > 1.5, look=look,
-                                                                      label="Pip: a set done"))
+                                                                      label=_t("Pip: a set done")))
     if one and one.get("ago") is not None:
-        one["pip"] = sev.move("ready", "ready", rest=one["ago"] > 1.5, look=look, label="Pip: day one")
+        one["pip"] = sev.move("ready", "ready", rest=one["ago"] > 1.5, look=look, label=_t("Pip: day one"))
     return view
 
 
@@ -129,7 +130,7 @@ def _finish_view(pid, plan, f):
     look, a hat or costume off for the grad cap that lands on it) and its
     accent; Pip off, no Pip."""
     from .. import board, rooms
-    out = {"pid": pid, "name": str(f.get("name") or plan.get("name") or "the plan"),
+    out = {"pid": pid, "name": str(f.get("name") or plan.get("name") or _t("the plan")),
            "sets": int(f.get("sets") or 0), "cards": int(f.get("cards") or 0), "weeks": int(f.get("weeks") or 0),
            "a": list(board.accent_pair(cfg().get("accent"))), "pip": None}
     if rooms.sev_on():
@@ -139,8 +140,8 @@ def _finish_view(pid, plan, f):
                 if closet.BY[k]["slot"] != closet.COSTUME and "head" not in closet.places(k)]
         cf = lambda s: re.sub(r'<rect class="cf"[^>]*/>', "", s)  # noqa: E731
         out["pip"] = {"hop": cf(sev.move("hop", "hop", rest=True, look=bare, label="Pip")),
-                      "jump": cf(sev.move("hop", "jump", look=bare, label="Pip: finished")),
-                      "still": sev.svg("hop", rest=True, look=bare + ["gradcap"], label="Pip in its grad cap"),
+                      "jump": cf(sev.move("hop", "jump", look=bare, label=_t("Pip: finished"))),
+                      "still": sev.svg("hop", rest=True, look=bare + ["gradcap"], label=_t("Pip in its grad cap")),
                       "cap": ART["gradcap"][0]}
     return out
 
@@ -184,13 +185,13 @@ def joy_share(pid, key):
     from .. import sharecard
     from ..ui import copy_text
     num = P.joy_numbers(card["path"])
-    name = str(card.get("name") or "the plan")
+    name = str(card.get("name") or _t("the plan"))
     text = P.joy_text(key, name, num, line, cards=sharecard.privacy(c)["reviews"])
 
     def as_text():
         copy_text(text)
-        tooltip("Copied.")
-    _joy_menu([("As text", as_text), ("As a picture…", lambda: joy_picture(pid, key, card))])
+        tooltip(_t("Copied."))
+    _joy_menu([(_t("As text"), as_text), (_t("As a picture…"), lambda: joy_picture(pid, key, card))])
 
 
 def joy_picture(pid, key, card):
@@ -200,11 +201,11 @@ def joy_picture(pid, key, card):
     from ..ui.share_card_dialog import ShareCardDialog
     num = P.joy_numbers(card["path"])
     line = (card.get("joy") or {}).get("line") or {}
-    brow = {"fin": "Finished", "half": "Halfway", "threeq": "Three-quarters", "last": "The last set"}[key]
-    d = SC.plan(str(card.get("name") or "the plan"), num["sets"], num["sets"] if key == "fin" else num["done"],
+    brow = {"fin": _t("Finished"), "half": _t("Halfway"), "threeq": _t("Three-quarters"), "last": _t("The last set")}[key]
+    d = SC.plan(str(card.get("name") or _t("the plan")), num["sets"], num["sets"] if key == "fin" else num["done"],
                 num["cards"] if key == "fin" else num["seen"], num["weeks"], brow=brow, sev=sev_on(), cap=key == "fin",
                 last=str(line.get("name") or "") if key == "last" else "")
-    pic = {"kind": "plan", "title": "Share this plan", "sizes": ("story",), "file": f"due-crew-plan-{pid}", "data": d}
+    pic = {"kind": "plan", "title": _t("Share this plan"), "sizes": ("story",), "file": f"due-crew-plan-{pid}", "data": d}
     dlg = ShareCardDialog(mw, lambda _k: pic, priv=SC.privacy(cfg()), tooltip=tooltip)
     _state["share_card"] = dlg  # kept while it's open
     dlg.show()
