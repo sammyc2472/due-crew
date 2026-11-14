@@ -25,6 +25,13 @@ from . import due as D
 from . import plans as P
 from .app import _state, cfg, save_cfg
 from .errs import oops
+from .words import lang as _lang, later as _later, t as _t
+
+
+def _tn(one, many, count, **names):
+    """words.tn with the count's comma ("1,204 cards"): {n} is the count unless it's given."""
+    names.setdefault("n", f"{int(count):,}")
+    return _t(one if int(count) == 1 else many, **names)
 
 AGAIN_MIN = 10  # today's misses before the box suggests going over them
 LEECH_MIN = 3  # new leeches this week before it suggests a look
@@ -381,7 +388,7 @@ def suggestions(c, today):
     _pc, st = _day_state()
     gone = set(st.get("dismissed") or [])
     # every render asks; the answer changes only when the collection does
-    key = (getattr(mw.col, "mod", None), _today(), tuple(sorted(gone)), bool(c.get("due_leeches")))
+    key = (getattr(mw.col, "mod", None), _today(), tuple(sorted(gone)), bool(c.get("due_leeches")), _lang())
     hit = _state.get("due_suggest")
     if key[0] is not None and hit and hit[0] == key:
         return list(hit[1])
@@ -396,7 +403,7 @@ def suggestions(c, today):
                 "WHERE (' ' || lower(n.tags) || ' ') LIKE '% leech %' "
                 "AND c.id IN (SELECT cid FROM revlog WHERE id >= ? AND ease = 1)", week) or 0)
             if lee >= LEECH_MIN and "leeches" not in gone:
-                out.append({"key": "leeches", "text": f"{lee:,} new leeches this week", "go": "See them"})
+                out.append({"key": "leeches", "text": _t("{n} new leeches this week", n=f"{lee:,}"), "go": _t("See them")})
     except Exception:
         oops()
     _state["due_suggest"] = (key, out[:2])
@@ -459,8 +466,8 @@ def notes():
     _pc, st = _day_state()
     n = len(st.get("recovered") or [])
     # 3.9.3 (Sam): one card is "it": "Recovered 1 leech as a new card · See it"
-    text = f"Recovered {n:,} leeches as new cards" if n != 1 else "Recovered 1 leech as a new card"
-    return [{"key": "recovered", "text": text, "go": "See them" if n != 1 else "See it"}] \
+    text = _t("Recovered {n} leeches as new cards", n=f"{n:,}") if n != 1 else _t("Recovered 1 leech as a new card")
+    return [{"key": "recovered", "text": text, "go": _t("See them") if n != 1 else _t("See it")}] \
         if n and "recovered" not in (st.get("dismissed") or []) else []
 
 
@@ -614,7 +621,7 @@ def leech_plan(col, out=()):
     return deck, eight, extra, counts
 
 
-def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX, cids=None, reach="deck", out=()):
+def recover_leeches(col, label=_later("Due Crew: recover leeches"), cap=RECOVER_MAX, cids=None, reach="deck", out=()):
     """Leeches back as new cards: the leech tag off, unsuspended, and reset
     (Anki's own Forget, back to their place among the new cards), as one
     undo step. A leech: leech_sets' (by its deck's leech count; reach
@@ -630,7 +637,7 @@ def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX, cid
     pos = None
     if hasattr(col, "add_custom_undo_entry"):
         try:
-            pos = col.add_custom_undo_entry(label)
+            pos = col.add_custom_undo_entry(_t(label))
         except Exception:
             pos = None
     col.tags.bulk_remove(nids, "leech")
@@ -692,14 +699,20 @@ def ask_reach(n, counts):
     fresh too (one undo step), or Not these (Recover keeps to 8 lapses)."""
     from . import sheets
     gen = app.generation
-    count = (f"your deck's leech count ({counts[0]} lapses)" if len(counts) == 1 else "your decks' leech counts")
-    them = "them" if n != 1 else "it"
-    sheets.confirm(f"Learn {n:,} more leech{'es' if n != 1 else ''} fresh?",
-                   f"Anki tagged {them} at {count} and kept {them} in your reviews. Recover took only suspended "
-                   f"leeches and ones at 8 lapses. Edit › Undo puts {them} back.",
-                   "Learn them fresh" if n != 1 else "Learn it fresh",
+    if len(counts) == 1:
+        said = _tn("Anki tagged it at your deck's leech count ({lapses} lapses) and kept it in your reviews. Recover took only "
+                   "suspended leeches and ones at 8 lapses. Edit › Undo puts it back.",
+                   "Anki tagged them at your deck's leech count ({lapses} lapses) and kept them in your reviews. Recover took only "
+                   "suspended leeches and ones at 8 lapses. Edit › Undo puts them back.", n, lapses=counts[0])
+    else:
+        said = _tn("Anki tagged it at your decks' leech counts and kept it in your reviews. Recover took only "
+                   "suspended leeches and ones at 8 lapses. Edit › Undo puts it back.",
+                   "Anki tagged them at your decks' leech counts and kept them in your reviews. Recover took only "
+                   "suspended leeches and ones at 8 lapses. Edit › Undo puts them back.", n)
+    sheets.confirm(_tn("Learn {n} more leech fresh?", "Learn {n} more leeches fresh?", n), said,
+                   _t("Learn them fresh") if n != 1 else _t("Learn it fresh"),
                    lambda: gen == app.generation and set_reach(True),
-                   no=lambda: gen == app.generation and set_reach(False), no_label="Not these")
+                   no=lambda: gen == app.generation and set_reach(False), no_label=_t("Not these"))
 
 
 def set_reach(wide):
@@ -722,8 +735,8 @@ def set_reach(wide):
     _put_day(pc, st)
     if got:
         _pf()._after_change()
-        tooltip(f"{len(got):,} leeches back as new cards. Edit › Undo puts them back." if len(got) != 1
-                else "1 leech back as a new card. Edit › Undo puts it back.")
+        tooltip(_t("{n} leeches back as new cards. Edit › Undo puts them back.", n=f"{len(got):,}") if len(got) != 1
+                else _t("1 leech back as a new card. Edit › Undo puts it back."))
 
 
 def recover_now():
@@ -740,9 +753,9 @@ def recover_now():
     morning(c)
     _pc, st = _day_state()
     n = len(st.get("recovered") or [])
-    tooltip((f"{n:,} leeches back as new cards. Edit › Undo puts them back." if n != 1
-             else "1 leech back as a new card. Edit › Undo puts it back.")
-            if n else "No leeches to recover now. Each morning looks again.")
+    tooltip((_t("{n} leeches back as new cards. Edit › Undo puts them back.", n=f"{n:,}") if n != 1
+             else _t("1 leech back as a new card. Edit › Undo puts it back."))
+            if n else _t("No leeches to recover now. Each morning looks again."))
 
 
 def after_refresh():
@@ -810,19 +823,19 @@ def add(c, when, text, raw=False):
     items = D.prune(_items(c), today)
     items, it = D.add(items, text, day, today, rule=rule)
     if not it:
-        tooltip("That's 60 open. Tick or delete some first." if D.open_count(items) >= D.MAX_OPEN else "Nothing to add.")
+        tooltip(_t("That's 60 open. Tick or delete some first.") if D.open_count(items) >= D.MAX_OPEN else _t("Nothing to add."))
         return
     _save(c, items=items)
     tab = c.get("due_tab", "today")
     if it.get("r"):
         shown = tab == "upcoming" or (tab == "today" and D.on_day(it, today))
         if not shown:
-            _state["due_toast"] = (time.time(), {"text": "Added, " + D.repeat_label(it["r"]), "tab": "upcoming"})
+            _state["due_toast"] = (time.time(), {"text": _t("Added, {when}", when=D.repeat_label(it["r"])), "tab": "upcoming"})
     else:
         shown = (tab == "later" and not day) or (tab == "today" and day == today) or (
             tab == "upcoming" and day and day <= D.iso(D.d(today) + datetime.timedelta(days=D.AHEAD)))
     if not shown and not it.get("r"):
-        _state["due_toast"] = (time.time(), {"text": "Added to " + (D.long_day(day, today) if day else "Later"),
+        _state["due_toast"] = (time.time(), {"text": _t("Added to {day}", day=D.long_day(day, today)) if day else _t("Added to Later"),
                                              "tab": "later" if not day else "upcoming"})
     _swap(c)
 
@@ -839,10 +852,10 @@ def item_menu(c, ident):
     tomorrow = D.iso(D.d(today) + datetime.timedelta(days=1))
     if it.get("r"):
         # 3.8.0: a repeat has no day to move to; it stops instead
-        m.addAction("Edit…").triggered.connect(lambda: _edit(ident))
-        m.addAction("Stop repeating").triggered.connect(lambda: stop_repeat(cfg(), ident))
+        m.addAction(_t("Edit…")).triggered.connect(lambda: _edit(ident))
+        m.addAction(_t("Stop repeating")).triggered.connect(lambda: stop_repeat(cfg(), ident))
         m.addSeparator()
-        m.addAction("Delete").triggered.connect(lambda: delete(cfg(), ident))
+        m.addAction(_t("Delete")).triggered.connect(lambda: delete(cfg(), ident))
         m.exec(QCursor.pos())
         return
 
@@ -850,15 +863,15 @@ def item_menu(c, ident):
         c2 = cfg()
         _save(c2, items=D.change(_items(c2), ident, today, d=day))
         _swap(c2)
-    for label, day in (("Today", today), ("Tomorrow", tomorrow), ("Later", "")):
+    for label, day in ((_t("Today"), today), (_t("Tomorrow"), tomorrow), (_t("Later"), "")):
         a = m.addAction(label)
         a.setCheckable(True)
         a.setChecked(it["d"] == day)
         a.triggered.connect(lambda _=False, day=day: move(day))
-    m.addAction("Pick a day…").triggered.connect(lambda: _pick_day(ident, it["d"] or tomorrow))
+    m.addAction(_t("Pick a day…")).triggered.connect(lambda: _pick_day(ident, it["d"] or tomorrow))
     m.addSeparator()
-    m.addAction("Edit…").triggered.connect(lambda: _edit(ident))
-    m.addAction("Delete").triggered.connect(lambda: delete(cfg(), ident))
+    m.addAction(_t("Edit…")).triggered.connect(lambda: _edit(ident))
+    m.addAction(_t("Delete")).triggered.connect(lambda: delete(cfg(), ident))
     m.exec(QCursor.pos())
 
 
@@ -867,7 +880,7 @@ def _pick_day(ident, start):
     from .ui import heading, styled
     today = _today()
     dlg = styled(QDialog(mw))  # 3.9.1: the board's look, as every window
-    dlg.setWindowTitle("Pick a day")
+    dlg.setWindowTitle(_t("Pick a day"))
     lay = QVBoxLayout(dlg)
     heading(dlg, lay)
     cal = QCalendarWidget(dlg)
@@ -901,7 +914,7 @@ def _edit(ident):
             c = cfg()
             _save(c, items=D.change(_items(c), ident, _today(), t=text))
             _swap(c)
-    sheets.ask_text("Edit to-do", "", save, value=it["t"], most=D.MAX_TEXT)
+    sheets.ask_text(_t("Edit to-do"), "", save, value=it["t"], most=D.MAX_TEXT)
 
 
 def delete(c, ident):
@@ -1112,8 +1125,8 @@ def study_step(first=False):
     _state["study_walk"] = None
     r = _reviews() or {}
     back = int(r.get("back") or 0)
-    tooltip(f"Done for now · {back:,} learning card{'s' if back != 1 else ''} back at {r.get('at')}"
-            if back and r.get("at") else "Nothing due now." if first else "Done for today.")
+    tooltip(_tn("Done for now · {n} learning card back at {time}", "Done for now · {n} learning cards back at {time}", back, time=r.get("at"))
+            if back and r.get("at") else _t("Nothing due now.") if first else _t("Done for today."))
     if not first and getattr(mw, "state", "") != "deckBrowser":
         mw.moveToState("deckBrowser")
 
@@ -1122,7 +1135,7 @@ def _study_deck(did, first, label=None):
     try:
         mw.col.decks.select(int(did))
         if not first:
-            tooltip("Next: " + (label or mw.col.decks.name(int(did))), period=2500)
+            tooltip(_t("Next: {deck}", deck=label or mw.col.decks.name(int(did))), period=2500)
         _state["study_walk"]["deck"] = int(did)
         mw.moveToState("review")
     except Exception:
@@ -1140,7 +1153,7 @@ def walk_keys(state, shortcuts):
 def stop_walk():
     if _state.get("study_walk"):
         _state["study_walk"] = None
-        tooltip("Study today stopped. This deck stays open.")
+        tooltip(_t("Study today stopped. This deck stays open."))
 
 
 def on_state(new, old):
