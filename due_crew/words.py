@@ -100,6 +100,14 @@ def month(number):
     return t(MONTHS[(int(number) - 1) % 12])
 
 
+DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def weekday(number):
+    """A weekday's short name, 0 (Monday) to 6, as date.weekday() counts."""
+    return t(DAYS[int(number) % 7])
+
+
 def names_of(phrase):
     """The {names} a phrase takes, sorted: a translation must take the same."""
     return sorted(set(re.findall(r"\{([a-z_]+)\}", phrase)))

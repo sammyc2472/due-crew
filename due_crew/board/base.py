@@ -12,7 +12,7 @@ from datetime import date as _date, datetime, timezone
 
 from .. import room_model
 from ..stats.decks import sig_match
-from ..words import later as _later, month as _month, t as _t
+from ..words import later as _later, month as _month, t as _t, weekday as _weekday
 
 
 LIGHT = {
@@ -310,12 +310,12 @@ def _exam_text(iso, today_label):
     if delta < 0 or delta > 14:
         return ""
     if delta == 0:
-        return "exam today"
+        return _t("exam today")
     if delta == 1:
-        return "exam tomorrow"
+        return _t("exam tomorrow")
     if delta < 7:
-        return f"exam {d.strftime('%a')}"
-    return f"exam {d.strftime('%b')} {d.day}"
+        return _t("exam {day}", day=_weekday(d.weekday()))
+    return _t("exam {month} {day}", month=_month(d.month), day=d.day)
 
 
 def live_now(until, now=None):
@@ -370,10 +370,10 @@ def _away_text(doc, today_lb):
     except (TypeError, ValueError):
         return "away"
     if back <= today:
-        return "away"
+        return "away"  # (the bare word is a mark here; crew.py says it in the language in use)
     if back == today + _dt.timedelta(days=1):
-        return "back tomorrow"
-    return f"back {back:%b} {back.day}"
+        return _t("back tomorrow")
+    return _t("back {month} {day}", month=_month(back.month), day=back.day)
 
 
 def _day_flags(doc, today_lb):
