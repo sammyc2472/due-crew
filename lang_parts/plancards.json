@@ -1,0 +1,2972 @@
+{
+ "A day behind on {name}": [
+  "Un día de retraso en {name}",
+  "Um dia de atraso em {name}",
+  "Einen Tag im Rückstand bei {name}",
+  "Un jour de retard sur {name}"
+ ],
+ "A deck of its new cards": [
+  "Un mazo con sus tarjetas nuevas",
+  "Um baralho com os cartões novos dele",
+  "Ein Stapel mit seinen neuen Karten",
+  "Un paquet de ses nouvelles cartes"
+ ],
+ "A filtered deck of them, the most missed first": [
+  "Un mazo filtrado con ellas, las más falladas primero",
+  "Um baralho filtrado com eles, os mais errados primeiro",
+  "Ein Auswahlstapel damit, die am häufigsten verfehlten zuerst",
+  "Un paquet filtré avec elles, les plus ratées d’abord"
+ ],
+ "A filtered deck: its new cards and the ones due today": [
+  "Un mazo filtrado: sus tarjetas nuevas y las pendientes de hoy",
+  "Um baralho filtrado: os cartões novos dele e os pendentes de hoje",
+  "Ein Auswahlstapel: seine neuen Karten und die heute fälligen",
+  "Un paquet filtré : ses nouvelles cartes et celles à réviser aujourd’hui"
+ ],
+ "A filtered deck: its new cards not seen yet and what&rsquo;s due of it today": [
+  "Un mazo filtrado: sus tarjetas nuevas aún sin ver y lo que tiene pendiente hoy",
+  "Um baralho filtrado: os cartões novos ainda não vistos e o que está pendente dele hoje",
+  "Ein Auswahlstapel: seine noch nicht gesehenen neuen Karten und was davon heute fällig ist",
+  "Un paquet filtré : ses nouvelles cartes pas encore vues et ce qui en est à réviser aujourd&rsquo;hui"
+ ],
+ "A filtered deck: its sets&rsquo; open cards, the shakiest first": [
+  "Un mazo filtrado: las tarjetas abiertas de sus bloques, las más flojas primero",
+  "Um baralho filtrado: os cartões abertos dos blocos dele, os mais frágeis primeiro",
+  "Ein Auswahlstapel: die offenen Karten seiner Blöcke, die wackligsten zuerst",
+  "Un paquet filtré : les cartes ouvertes de ses blocs, les plus fragiles d&rsquo;abord"
+ ],
+ "A filtered deck: today&rsquo;s new cards and what&rsquo;s due today in this plan": [
+  "Un mazo filtrado: las tarjetas nuevas de hoy y lo pendiente de hoy en este plan",
+  "Um baralho filtrado: os cartões novos de hoje e o que está pendente hoje neste plano",
+  "Ein Auswahlstapel: die neuen Karten von heute und was heute in diesem Plan fällig ist",
+  "Un paquet filtré : les nouvelles cartes du jour et ce qui est à réviser aujourd&rsquo;hui dans ce plan"
+ ],
+ "A filtered deck: today&rsquo;s set&rsquo;s new cards and its learning ones due now": [
+  "Un mazo filtrado: las tarjetas nuevas del bloque de hoy y las que está aprendiendo, pendientes ahora",
+  "Um baralho filtrado: os cartões novos do bloco de hoje e os em aprendizado pendentes agora",
+  "Ein Auswahlstapel: die neuen Karten des heutigen Blocks und seine jetzt fälligen Lernkarten",
+  "Un paquet filtré : les nouvelles cartes du bloc du jour et celles en apprentissage à réviser maintenant"
+ ],
+ "A new plan that finishes by then": [
+  "Un plan nuevo que termina para entonces",
+  "Um plano novo que termina até lá",
+  "Ein neuer Plan, der bis dahin fertig ist",
+  "Un nouveau plan qui se termine d’ici là"
+ ],
+ "A number of days, {lo} to {hi}.": [
+  "Un número de días, de {lo} a {hi}.",
+  "Um número de dias, de {lo} a {hi}.",
+  "Eine Anzahl Tage, {lo} bis {hi}.",
+  "Un nombre de jours, de {lo} à {hi}."
+ ],
+ "A plan": [
+  "Un plan",
+  "Um plano",
+  "Ein Plan",
+  "Un plan"
+ ],
+ "A plan&rsquo;s code or link": [
+  "El código o enlace de un plan",
+  "O código ou link de um plano",
+  "Code oder Link eines Plans",
+  "Le code ou le lien d&rsquo;un plan"
+ ],
+ "A set takes up to 5,000.": [
+  "Un bloque admite hasta 5.000.",
+  "Um bloco aceita até 5.000.",
+  "Ein Block fasst bis zu 5.000.",
+  "Un bloc en accepte jusqu’à 5 000."
+ ],
+ "A squadmate": [
+  "Alguien del grupo",
+  "Alguém do grupo",
+  "Jemand aus der Gruppe",
+  "Quelqu’un du groupe"
+ ],
+ "Added {n} card to {name}.": [
+  "{n} tarjeta añadida a {name}.",
+  "{n} cartão adicionado a {name}.",
+  "{n} Karte zu {name} hinzugefügt.",
+  "{n} carte ajoutée à {name}."
+ ],
+ "Added {n} cards to {name}.": [
+  "{n} tarjetas añadidas a {name}.",
+  "{n} cartões adicionados a {name}.",
+  "{n} Karten zu {name} hinzugefügt.",
+  "{n} cartes ajoutées à {name}."
+ ],
+ "Anki has done something since. Use Edit › Undo.": [
+  "Anki ha hecho algo desde entonces. Usa Edición › Deshacer.",
+  "O Anki fez algo desde então. Use Editar › Desfazer.",
+  "Anki hat seitdem etwas getan. Nimm Bearbeiten › Rückgängig.",
+  "Anki a fait autre chose depuis. Utilisez Édition › Annuler."
+ ],
+ "Anki shows {n} more new cards a day in this deck for {days} days.": [
+  "Anki muestra {n} tarjetas nuevas más al día en este mazo durante {days} días.",
+  "O Anki mostra mais {n} cartões novos por dia neste baralho por {days} dias.",
+  "Anki zeigt in diesem Stapel {days} Tage lang {n} neue Karten mehr pro Tag.",
+  "Anki montre {n} nouvelles cartes de plus par jour dans ce paquet pendant {days} jours."
+ ],
+ "Anki shows {n} new a day in this deck.": [
+  "Anki muestra {n} nuevas al día en este mazo.",
+  "O Anki mostra {n} novos por dia neste baralho.",
+  "Anki zeigt in diesem Stapel {n} neue pro Tag.",
+  "Anki montre {n} nouvelles par jour dans ce paquet."
+ ],
+ "Anki shows {n} new a day in this deck; today has {want}.": [
+  "Anki muestra {n} nuevas al día en este mazo; hoy hay {want}.",
+  "O Anki mostra {n} novos por dia neste baralho; hoje há {want}.",
+  "Anki zeigt in diesem Stapel {n} neue pro Tag; heute sind es {want}.",
+  "Anki montre {n} nouvelles par jour dans ce paquet ; aujourd’hui il y en a {want}."
+ ],
+ "Anki&rsquo;s sync, so your phone has them": [
+  "La sincronización de Anki, para que tu móvil las tenga",
+  "A sincronização do Anki, para o seu celular ter os cartões",
+  "Ankis Synchronisierung, damit dein Handy sie hat",
+  "La synchronisation d&rsquo;Anki, pour que votre téléphone les ait"
+ ],
+ "As a picture…": [
+  "Como imagen…",
+  "Como imagem…",
+  "Als Bild…",
+  "En image…"
+ ],
+ "As text or a picture": [
+  "Como texto o imagen",
+  "Como texto ou imagem",
+  "Als Text oder Bild",
+  "En texte ou en image"
+ ],
+ "At that pace you open the last set on {day}, in time for {name}.": [
+  "A ese ritmo abres el último bloque el {day}, a tiempo para {name}.",
+  "Nesse ritmo você abre o último bloco em {day}, a tempo para {name}.",
+  "In dem Tempo öffnest du den letzten Block am {day}, rechtzeitig für {name}.",
+  "À ce rythme, vous ouvrez le dernier bloc le {day}, à temps pour {name}."
+ ],
+ "At that pace you open the last set on {day}, {n} day after {name}.": [
+  "A ese ritmo abres el último bloque el {day}, {n} día después de {name}.",
+  "Nesse ritmo você abre o último bloco em {day}, {n} dia depois de {name}.",
+  "In dem Tempo öffnest du den letzten Block am {day}, {n} Tag nach {name}.",
+  "À ce rythme, vous ouvrez le dernier bloc le {day}, {n} jour après {name}."
+ ],
+ "At that pace you open the last set on {day}, {n} days after {name}.": [
+  "A ese ritmo abres el último bloque el {day}, {n} días después de {name}.",
+  "Nesse ritmo você abre o último bloco em {day}, {n} dias depois de {name}.",
+  "In dem Tempo öffnest du den letzten Block am {day}, {n} Tage nach {name}.",
+  "À ce rythme, vous ouvrez le dernier bloc le {day}, {n} jours après {name}."
+ ],
+ "Back to the plan's days.": [
+  "De vuelta a los días del plan.",
+  "De volta aos dias do plano.",
+  "Zurück zu den Tagen des Plans.",
+  "Retour aux jours du plan."
+ ],
+ "Behind": [
+  "Atrasado",
+  "Atrasado",
+  "Im Rückstand",
+  "En retard"
+ ],
+ "Behind&hellip;": [
+  "Atrasado&hellip;",
+  "Atrasado&hellip;",
+  "Im Rückstand&hellip;",
+  "En retard&hellip;"
+ ],
+ "Browse": [
+  "Explorar",
+  "Explorar",
+  "Durchsuchen",
+  "Parcourir"
+ ],
+ "Browse its cards": [
+  "Explorar sus tarjetas",
+  "Explorar os cartões dele",
+  "Seine Karten durchsuchen",
+  "Parcourir ses cartes"
+ ],
+ "Browse its new cards": [
+  "Explorar sus tarjetas nuevas",
+  "Explorar os cartões novos dele",
+  "Seine neuen Karten durchsuchen",
+  "Parcourir ses nouvelles cartes"
+ ],
+ "Browse them": [
+  "Explorarlas",
+  "Explorar",
+  "Durchsuchen",
+  "Les parcourir"
+ ],
+ "Browse {n} card": [
+  "Explorar {n} tarjeta",
+  "Explorar {n} cartão",
+  "{n} Karte durchsuchen",
+  "Parcourir {n} carte"
+ ],
+ "Browse {n} cards": [
+  "Explorar {n} tarjetas",
+  "Explorar {n} cartões",
+  "{n} Karten durchsuchen",
+  "Parcourir {n} cartes"
+ ],
+ "Built {name}: {n} cards you&rsquo;ve missed most. {done} done.": [
+  "Creado {name}: las {n} tarjetas que más has fallado. {done} hechas.",
+  "Criado {name}: os {n} cartões que você mais errou. {done} feitos.",
+  "{name} erstellt: {n} Karten, die du am häufigsten verfehlt hast. {done} erledigt.",
+  "{name} créé : les {n} cartes que vous avez le plus ratées. {done} faites."
+ ],
+ "Cards already open stay open, and the ones it held back open too. The crew stops seeing your progress on this plan.": [
+  "Las tarjetas ya abiertas siguen abiertas, y las que retenía se abren también. El equipo deja de ver tu progreso en este plan.",
+  "Os cartões já abertos continuam abertos, e os que ele retinha abrem também. A turma deixa de ver seu progresso neste plano.",
+  "Schon offene Karten bleiben offen, und die zurückgehaltenen öffnen sich auch. Die Crew sieht deinen Fortschritt in diesem Plan nicht mehr.",
+  "Les cartes déjà ouvertes le restent, et celles qu’il retenait s’ouvrent aussi. L’équipe ne voit plus votre progression sur ce plan."
+ ],
+ "Cards already open stay open. Sets that come back and have passed count as behind.": [
+  "Las tarjetas ya abiertas siguen abiertas. Los bloques que vuelven y ya pasaron cuentan como atrasados.",
+  "Os cartões já abertos continuam abertos. Os blocos que voltam e já passaram contam como atrasados.",
+  "Schon offene Karten bleiben offen. Blöcke, die zurückkommen und schon vorbei sind, zählen als Rückstand.",
+  "Les cartes déjà ouvertes le restent. Les blocs qui reviennent et sont déjà passés comptent comme en retard."
+ ],
+ "Cards already open stay open. The crew stops seeing your progress on this plan.": [
+  "Las tarjetas ya abiertas siguen abiertas. El equipo deja de ver tu progreso en este plan.",
+  "Os cartões já abertos continuam abertos. A turma deixa de ver seu progresso neste plano.",
+  "Schon offene Karten bleiben offen. Die Crew sieht deinen Fortschritt in diesem Plan nicht mehr.",
+  "Les cartes déjà ouvertes le restent. L’équipe ne voit plus votre progression sur ce plan."
+ ],
+ "Catch up&hellip;": [
+  "Ponerse al día&hellip;",
+  "Pôr em dia&hellip;",
+  "Aufholen&hellip;",
+  "Rattraper&hellip;"
+ ],
+ "Catching up": [
+  "Poniéndote al día",
+  "Pondo em dia",
+  "Aufholen",
+  "Rattrapage"
+ ],
+ "Catching up: +{n} new a day to {day}": [
+  "Poniéndote al día: +{n} nuevas al día hasta el {day}",
+  "Pondo em dia: +{n} novos por dia até {day}",
+  "Aufholen: +{n} neue pro Tag bis {day}",
+  "Rattrapage : +{n} nouvelles par jour jusqu’à {day}"
+ ],
+ "Caught up": [
+  "Al día",
+  "Em dia",
+  "Aufgeholt",
+  "Rattrapé"
+ ],
+ "Change deck": [
+  "Cambiar de mazo",
+  "Trocar de baralho",
+  "Stapel wechseln",
+  "Changer de paquet"
+ ],
+ "Change deck…": [
+  "Cambiar de mazo…",
+  "Trocar de baralho…",
+  "Stapel wechseln…",
+  "Changer de paquet…"
+ ],
+ "Changes your days only, never the plan": [
+  "Cambia solo tus días, nunca el plan",
+  "Muda só os seus dias, nunca o plano",
+  "Ändert nur deine Tage, nie den Plan",
+  "Ne change que vos jours, jamais le plan"
+ ],
+ "Checkpoint {name} done: {score} right first time.": [
+  "Control {name} hecho: {score} bien a la primera.",
+  "Checkpoint {name} feito: {score} certos de primeira.",
+  "Checkpoint {name} erledigt: {score} beim ersten Mal richtig.",
+  "Point d’étape {name} terminé : {score} justes du premier coup."
+ ],
+ "Copied {n} card. Paste into a set on duecrew.com.": [
+  "{n} tarjeta copiada. Pégala en un bloque en duecrew.com.",
+  "{n} cartão copiado. Cole em um bloco em duecrew.com.",
+  "{n} Karte kopiert. Füge sie auf duecrew.com in einen Block ein.",
+  "{n} carte copiée. Collez-la dans un bloc sur duecrew.com."
+ ],
+ "Copied {n} cards. Paste into a set on duecrew.com.": [
+  "{n} tarjetas copiadas. Pégalas en un bloque en duecrew.com.",
+  "{n} cartões copiados. Cole em um bloco em duecrew.com.",
+  "{n} Karten kopiert. Füge sie auf duecrew.com in einen Block ein.",
+  "{n} cartes copiées. Collez-les dans un bloc sur duecrew.com."
+ ],
+ "Copied {n} note. Paste into a set on duecrew.com.": [
+  "{n} nota copiada. Pégala en un bloque en duecrew.com.",
+  "{n} nota copiada. Cole em um bloco em duecrew.com.",
+  "{n} Notiz kopiert. Füge sie auf duecrew.com in einen Block ein.",
+  "{n} note copiée. Collez-la dans un bloc sur duecrew.com."
+ ],
+ "Copied {n} notes. Paste into a set on duecrew.com.": [
+  "{n} notas copiadas. Pégalas en un bloque en duecrew.com.",
+  "{n} notas copiadas. Cole em um bloco em duecrew.com.",
+  "{n} Notizen kopiert. Füge sie auf duecrew.com in einen Block ein.",
+  "{n} notes copiées. Collez-les dans un bloc sur duecrew.com."
+ ],
+ "Copied.": [
+  "Copiado.",
+  "Copiado.",
+  "Kopiert.",
+  "Copié."
+ ],
+ "Couldn't change it. Deck Options › New cards/day.": [
+  "No se pudo cambiar. Opciones del mazo › Tarjetas nuevas/día.",
+  "Não deu para mudar. Opções do baralho › Novos cartões/dia.",
+  "Ließ sich nicht ändern. Stapeloptionen › Neue Karten/Tag.",
+  "Impossible de le changer. Options du paquet › Nouvelles cartes/jour."
+ ],
+ "Couldn't reach Due Crew. Check your connection.": [
+  "No se pudo conectar con Due Crew. Revisa tu conexión.",
+  "Não foi possível conectar ao Due Crew. Verifique sua conexão.",
+  "Due Crew ist nicht erreichbar. Prüf deine Verbindung.",
+  "Impossible de joindre Due Crew. Vérifiez votre connexion."
+ ],
+ "Couldn't reach Due Crew. Check your connection. Tomorrow morning asks again.": [
+  "No se pudo conectar con Due Crew. Revisa tu conexión. Mañana por la mañana se pregunta de nuevo.",
+  "Não foi possível conectar ao Due Crew. Verifique sua conexão. Amanhã de manhã pergunta de novo.",
+  "Due Crew ist nicht erreichbar. Prüf deine Verbindung. Morgen früh wird wieder gefragt.",
+  "Impossible de joindre Due Crew. Vérifiez votre connexion. La question revient demain matin."
+ ],
+ "Crew: {n} done with {name}": [
+  "Equipo: {n} terminaron {name}",
+  "Turma: {n} terminaram {name}",
+  "Crew: {n} fertig mit {name}",
+  "Équipe : {n} ont terminé {name}"
+ ],
+ "Day one": [
+  "Día uno",
+  "Dia um",
+  "Tag eins",
+  "Premier jour"
+ ],
+ "Don&rsquo;t wait": [
+  "No esperar",
+  "Não esperar",
+  "Nicht warten",
+  "Ne pas attendre"
+ ],
+ "Due Crew built {name}.": [
+  "Due Crew creó {name}.",
+  "O Due Crew criou {name}.",
+  "Due Crew hat {name} erstellt.",
+  "Due Crew a créé {name}."
+ ],
+ "Due Crew couldn't read this profile's plan file, so it's kept as {file}.": [
+  "Due Crew no pudo leer el archivo de planes de este perfil, así que se guarda como {file}.",
+  "O Due Crew não conseguiu ler o arquivo de planos deste perfil, então ele fica guardado como {file}.",
+  "Due Crew konnte die Plandatei dieses Profils nicht lesen; sie bleibt als {file} erhalten.",
+  "Due Crew n’a pas pu lire le fichier de plans de ce profil ; il est conservé sous {file}."
+ ],
+ "Due Crew opened {what}: {n} card": [
+  "Due Crew abrió {what}: {n} tarjeta",
+  "O Due Crew abriu {what}: {n} cartão",
+  "Due Crew hat {what} geöffnet: {n} Karte",
+  "Due Crew a ouvert {what} : {n} carte"
+ ],
+ "Due Crew opened {what}: {n} cards": [
+  "Due Crew abrió {what}: {n} tarjetas",
+  "O Due Crew abriu {what}: {n} cartões",
+  "Due Crew hat {what} geöffnet: {n} Karten",
+  "Due Crew a ouvert {what} : {n} cartes"
+ ],
+ "Due Crew: add to a plan…": [
+  "Due Crew: añadir a un plan…",
+  "Due Crew: adicionar a um plano…",
+  "Due Crew: zu einem Plan hinzufügen…",
+  "Due Crew : ajouter à un plan…"
+ ],
+ "Due Crew: copy as plan selector": [
+  "Due Crew: copiar como selector de plan",
+  "Due Crew: copiar como seletor de plano",
+  "Due Crew: als Plan-Auswahl kopieren",
+  "Due Crew : copier comme sélecteur de plan"
+ ],
+ "Due Crew: export for my AI…": [
+  "Due Crew: exportar para mi IA…",
+  "Due Crew: exportar para minha IA…",
+  "Due Crew: für meine KI exportieren…",
+  "Due Crew : exporter pour mon IA…"
+ ],
+ "Due Crew: note for the plan's followers…": [
+  "Due Crew: nota para quienes siguen el plan…",
+  "Due Crew: nota para quem segue o plano…",
+  "Due Crew: Notiz für alle, die dem Plan folgen…",
+  "Due Crew : note pour ceux qui suivent le plan…"
+ ],
+ "Due Crew: open its cards…": [
+  "Due Crew: abrir sus tarjetas…",
+  "Due Crew: abrir os cartões dela…",
+  "Due Crew: seine Karten öffnen…",
+  "Due Crew : ouvrir ses cartes…"
+ ],
+ "Due Crew: open these…": [
+  "Due Crew: abrir estas…",
+  "Due Crew: abrir estes…",
+  "Due Crew: diese öffnen…",
+  "Due Crew : ouvrir celles-ci…"
+ ],
+ "Due Crew: put on a day…": [
+  "Due Crew: poner en un día…",
+  "Due Crew: colocar em um dia…",
+  "Due Crew: auf einen Tag legen…",
+  "Due Crew : placer sur un jour…"
+ ],
+ "Due Crew: show on my plan": [
+  "Due Crew: mostrar en mi plan",
+  "Due Crew: mostrar no meu plano",
+  "Due Crew: in meinem Plan zeigen",
+  "Due Crew : montrer dans mon plan"
+ ],
+ "Due Crew: tag for a plan…": [
+  "Due Crew: etiquetar para un plan…",
+  "Due Crew: etiquetar para um plano…",
+  "Due Crew: für einen Plan taggen…",
+  "Due Crew : étiqueter pour un plan…"
+ ],
+ "Due Crew: why isn't it showing?": [
+  "Due Crew: ¿por qué no aparece?",
+  "Due Crew: por que não aparece?",
+  "Due Crew: Warum wird sie nicht gezeigt?",
+  "Due Crew : pourquoi n’apparaît-elle pas ?"
+ ],
+ "Ends {day}": [
+  "Termina el {day}",
+  "Termina em {day}",
+  "Endet am {day}",
+  "Se termine le {day}"
+ ],
+ "Ends {day}, after {name}.": [
+  "Termina el {day}, después de {name}.",
+  "Termina em {day}, depois de {name}.",
+  "Endet am {day}, nach {name}.",
+  "Se termine le {day}, après {name}."
+ ],
+ "Ends {day}.": [
+  "Termina el {day}.",
+  "Termina em {day}.",
+  "Endet am {day}.",
+  "Se termine le {day}."
+ ],
+ "Every plan you write or follow": [
+  "Todos los planes que escribes o sigues",
+  "Todos os planos que você escreve ou segue",
+  "Jeder Plan, den du schreibst oder dem du folgst",
+  "Tous les plans que vous écrivez ou suivez"
+ ],
+ "Every set of it is open.": [
+  "Todos sus bloques están abiertos.",
+  "Todos os blocos dele estão abertos.",
+  "Alle seine Blöcke sind offen.",
+  "Tous ses blocs sont ouverts."
+ ],
+ "Every set of this plan is open.": [
+  "Todos los bloques de este plan están abiertos.",
+  "Todos os blocos deste plano estão abertos.",
+  "Alle Blöcke dieses Plans sind offen.",
+  "Tous les blocs de ce plan sont ouverts."
+ ],
+ "Everything in this plan is already open.": [
+  "Todo en este plan ya está abierto.",
+  "Tudo neste plano já está aberto.",
+  "In diesem Plan ist schon alles offen.",
+  "Tout est déjà ouvert dans ce plan."
+ ],
+ "Everything still to come, a day later.": [
+  "Todo lo que queda, un día más tarde.",
+  "Tudo o que ainda vem, um dia depois.",
+  "Alles, was noch kommt, einen Tag später.",
+  "Tout ce qui reste à venir, un jour plus tard."
+ ],
+ "Everything still to come, {n} days later.": [
+  "Todo lo que queda, {n} días más tarde.",
+  "Tudo o que ainda vem, {n} dias depois.",
+  "Alles, was noch kommt, {n} Tage später.",
+  "Tout ce qui reste à venir, {n} jours plus tard."
+ ],
+ "Everything this week": [
+  "Todo lo de esta semana",
+  "Tudo desta semana",
+  "Alles in dieser Woche",
+  "Tout cette semaine"
+ ],
+ "Exam": [
+  "Examen",
+  "Prova",
+  "Prüfung",
+  "Examen"
+ ],
+ "Export for my AI": [
+  "Exportar para mi IA",
+  "Exportar para minha IA",
+  "Für meine KI exportieren",
+  "Exporter pour mon IA"
+ ],
+ "Finished": [
+  "Terminado",
+  "Concluído",
+  "Geschafft",
+  "Terminé"
+ ],
+ "Finished {name}: {what}. duecrew.com": [
+  "Terminé {name}: {what}. duecrew.com",
+  "Concluí {name}: {what}. duecrew.com",
+  "{name} geschafft: {what}. duecrew.com",
+  "{name} terminé : {what}. duecrew.com"
+ ],
+ "Fit it in": [
+  "Encajarlo",
+  "Encaixar",
+  "Einpassen",
+  "L’intégrer"
+ ],
+ "Fit it in over how many days?": [
+  "¿En cuántos días lo encajas?",
+  "Encaixar em quantos dias?",
+  "Über wie viele Tage einpassen?",
+  "L’intégrer sur combien de jours ?"
+ ],
+ "Fit it in…": [
+  "Encajarlo…",
+  "Encaixar…",
+  "Einpassen…",
+  "L’intégrer…"
+ ],
+ "Follow": [
+  "Seguir",
+  "Seguir",
+  "Folgen",
+  "Suivre"
+ ],
+ "Following {name}.": [
+  "Sigues {name}.",
+  "Você segue {name}.",
+  "Du folgst {name}.",
+  "Vous suivez {name}."
+ ],
+ "Following. Couldn't save how you start, so the earlier sets wait here; Plan ▾ › Push my dates back… or Open now on each.": [
+  "Ya lo sigues. No se pudo guardar cómo empiezas, así que los bloques anteriores esperan aquí; Plan ▾ › Retrasar mis fechas… o Abrir ahora en cada uno.",
+  "Seguindo. Não deu para salvar como você começa, então os blocos anteriores esperam aqui; Plano ▾ › Adiar minhas datas… ou Abrir agora em cada um.",
+  "Du folgst. Dein Start ließ sich nicht speichern, also warten die früheren Blöcke hier; Plan ▾ › Meine Termine verschieben… oder Jetzt öffnen bei jedem.",
+  "Vous suivez. Impossible d’enregistrer votre départ, les blocs précédents attendent donc ici ; Plan ▾ › Reculer mes dates… ou Ouvrir maintenant sur chacun."
+ ],
+ "For {name} on {day}": [
+  "Para {name}, el {day}",
+  "Para {name}, {day}",
+  "Für {name} am {day}",
+  "Pour {name}, {day}"
+ ],
+ "For {name} today": [
+  "Para {name}, hoy",
+  "Para {name}, hoje",
+  "Für {name} heute",
+  "Pour {name}, aujourd’hui"
+ ],
+ "Friday": [
+  "viernes",
+  "sexta-feira",
+  "Freitag",
+  "vendredi"
+ ],
+ "Halfway": [
+  "A mitad",
+  "Na metade",
+  "Halbzeit",
+  "À mi-chemin"
+ ],
+ "Halfway through {name}": [
+  "A mitad de {name}",
+  "Na metade de {name}",
+  "Halbzeit bei {name}",
+  "À mi-chemin de {name}"
+ ],
+ "Halfway through {name}: {n} of {of} sets. duecrew.com": [
+  "A mitad de {name}: {n} de {of} bloques. duecrew.com",
+  "Na metade de {name}: {n} de {of} blocos. duecrew.com",
+  "Halbzeit bei {name}: {n} von {of} Blöcken. duecrew.com",
+  "À mi-chemin de {name} : {n} blocs sur {of}. duecrew.com"
+ ],
+ "Held back: {n} cards…": [
+  "Retenidas: {n} tarjetas…",
+  "Retidos: {n} cartões…",
+  "Zurückgehalten: {n} Karten…",
+  "Retenues : {n} cartes…"
+ ],
+ "Held back: {n} card…": [
+  "Retenida: {n} tarjeta…",
+  "Retido: {n} cartão…",
+  "Zurückgehalten: {n} Karte…",
+  "Retenue : {n} carte…"
+ ],
+ "Hold back": [
+  "Retener",
+  "Reter",
+  "Zurückhalten",
+  "Retenir"
+ ],
+ "Hold back is off; these stayed suspended.": [
+  "Retener está desactivado; estas siguieron suspendidas.",
+  "Reter está desligado; estes continuaram suspensos.",
+  "Zurückhalten ist aus; diese blieben ausgesetzt.",
+  "Retenir est désactivé ; celles-ci sont restées suspendues."
+ ],
+ "Hold back later cards": [
+  "Retener las tarjetas posteriores",
+  "Reter os cartões posteriores",
+  "Spätere Karten zurückhalten",
+  "Retenir les cartes à venir"
+ ],
+ "Hold back the rest": [
+  "Retener el resto",
+  "Reter o resto",
+  "Den Rest zurückhalten",
+  "Retenir le reste"
+ ],
+ "How its cards open": [
+  "Cómo se abren sus tarjetas",
+  "Como os cartões dele abrem",
+  "Wie seine Karten geöffnet werden",
+  "Comment ses cartes s’ouvrent"
+ ],
+ "Ignore": [
+  "Ignorar",
+  "Ignorar",
+  "Ignorieren",
+  "Ignorer"
+ ],
+ "It": [
+  "Eso",
+  "Isso",
+  "Er",
+  "Il"
+ ],
+ "It isn't on a plan you follow.": [
+  "No está en ningún plan que sigas.",
+  "Não está em nenhum plano que você segue.",
+  "Sie ist in keinem Plan, dem du folgst.",
+  "Elle n’est dans aucun plan que vous suivez."
+ ],
+ "Its tags aren't in your Anki yet.": [
+  "Sus etiquetas aún no están en tu Anki.",
+  "As etiquetas dele ainda não estão no seu Anki.",
+  "Seine Tags sind noch nicht in deinem Anki.",
+  "Ses étiquettes ne sont pas encore dans votre Anki."
+ ],
+ "Its weeks and sets, Insights, and your settings for it": [
+  "Sus semanas y bloques, Análisis y tus ajustes para él",
+  "As semanas e blocos dele, Análises e suas configurações para ele",
+  "Seine Wochen und Blöcke, Einblicke und deine Einstellungen dafür",
+  "Ses semaines et ses blocs, Aperçus, et vos réglages pour lui"
+ ],
+ "Join": [
+  "Unirme",
+  "Entrar",
+  "Beitreten",
+  "Rejoindre"
+ ],
+ "Join its squad": [
+  "Unirme a su grupo",
+  "Entrar no grupo dele",
+  "Seiner Gruppe beitreten",
+  "Rejoindre son groupe"
+ ],
+ "Join this plan&rsquo;s squad? The others in it see your name and the days you show up, and your progress counts for its authors.": [
+  "¿Unirte al grupo de este plan? Los demás ven tu nombre y los días que vienes, y tu progreso cuenta para sus autores.",
+  "Entrar no grupo deste plano? Os outros veem seu nome e os dias em que você aparece, e seu progresso conta para os autores.",
+  "Der Gruppe dieses Plans beitreten? Die anderen sehen deinen Namen und die Tage, an denen du da bist, und dein Fortschritt zählt für die Autoren.",
+  "Rejoindre le groupe de ce plan ? Les autres voient votre nom et les jours où vous venez, et votre progression compte pour ses auteurs."
+ ],
+ "Keep {day}": [
+  "Mantener el {day}",
+  "Manter {day}",
+  "{day} behalten",
+  "Garder le {day}"
+ ],
+ "Last week": [
+  "Semana pasada",
+  "Semana passada",
+  "Letzte Woche",
+  "Semaine dernière"
+ ],
+ "Leave it out. The week has Undo skip.": [
+  "Dejarlo fuera. La semana tiene Deshacer omisión.",
+  "Deixar de fora. A semana tem Desfazer pulo.",
+  "Auslassen. Die Woche hat Überspringen rückgängig.",
+  "Le laisser de côté. La semaine a Annuler le saut."
+ ],
+ "Leave them": [
+  "Dejarlas",
+  "Deixar",
+  "So lassen",
+  "Les laisser"
+ ],
+ "Look": [
+  "Ver",
+  "Ver",
+  "Ansehen",
+  "Voir"
+ ],
+ "Make a plan": [
+  "Crear un plan",
+  "Criar um plano",
+  "Plan erstellen",
+  "Créer un plan"
+ ],
+ "Make it mine": [
+  "Hacerlo mío",
+  "Tornar meu",
+  "Zu meiner machen",
+  "En faire le mien"
+ ],
+ "Missed {when}: {n} new waiting": [
+  "Faltaste {when}: {n} nuevas esperando",
+  "Você faltou {when}: {n} novos esperando",
+  "Verpasst {when}: {n} neue warten",
+  "Manqué {when} : {n} nouvelles en attente"
+ ],
+ "Monday": [
+  "lunes",
+  "segunda-feira",
+  "Montag",
+  "lundi"
+ ],
+ "Move mine": [
+  "Mover el mío",
+  "Mover a minha",
+  "Meine verschieben",
+  "Déplacer le mien"
+ ],
+ "Move {name} to": [
+  "Mover {name} a",
+  "Mover {name} para",
+  "{name} verschieben auf",
+  "Déplacer {name} au"
+ ],
+ "Move {name} to {day}": [
+  "Mover {name} al {day}",
+  "Mover {name} para {day}",
+  "{name} auf {day} verschieben",
+  "Déplacer {name} à {day}"
+ ],
+ "Move&hellip;": [
+  "Mover&hellip;",
+  "Mover&hellip;",
+  "Verschieben&hellip;",
+  "Déplacer&hellip;"
+ ],
+ "My schedule…": [
+  "Mi horario…",
+  "Meu cronograma…",
+  "Mein Zeitplan…",
+  "Mon planning…"
+ ],
+ "New cards a day in {deck}: {n} (was {was}).": [
+  "Tarjetas nuevas al día en {deck}: {n} (antes {was}).",
+  "Cartões novos por dia em {deck}: {n} (antes {was}).",
+  "Neue Karten pro Tag in {deck}: {n} (vorher {was}).",
+  "Nouvelles cartes par jour dans {deck} : {n} (avant {was})."
+ ],
+ "New cards a day in {deck}: {n}.": [
+  "Tarjetas nuevas al día en {deck}: {n}.",
+  "Cartões novos por dia em {deck}: {n}.",
+  "Neue Karten pro Tag in {deck}: {n}.",
+  "Nouvelles cartes par jour dans {deck} : {n}."
+ ],
+ "New cards are stopped in this deck (You &rsaquo; Insights): today&rsquo;s {n} new card waits.": [
+  "Las tarjetas nuevas están detenidas en este mazo (Tú &rsaquo; Análisis): la {n} tarjeta nueva de hoy espera.",
+  "Os cartões novos estão parados neste baralho (Você &rsaquo; Análises): o {n} cartão novo de hoje espera.",
+  "Neue Karten sind in diesem Stapel gestoppt (Du &rsaquo; Einblicke): die {n} neue Karte von heute wartet.",
+  "Les nouvelles cartes sont arrêtées dans ce paquet (Vous &rsaquo; Aperçus) : la {n} nouvelle carte du jour attend."
+ ],
+ "New cards are stopped in this deck (You &rsaquo; Insights): today&rsquo;s {n} new cards wait.": [
+  "Las tarjetas nuevas están detenidas en este mazo (Tú &rsaquo; Análisis): las {n} tarjetas nuevas de hoy esperan.",
+  "Os cartões novos estão parados neste baralho (Você &rsaquo; Análises): os {n} cartões novos de hoje esperam.",
+  "Neue Karten sind in diesem Stapel gestoppt (Du &rsaquo; Einblicke): die {n} neuen Karten von heute warten.",
+  "Les nouvelles cartes sont arrêtées dans ce paquet (Vous &rsaquo; Aperçus) : les {n} nouvelles cartes du jour attendent."
+ ],
+ "New cards are stopped in this deck. Turn them back on in Insights first.": [
+  "Las tarjetas nuevas están detenidas en este mazo. Vuelve a activarlas primero en Análisis.",
+  "Os cartões novos estão parados neste baralho. Reative-os primeiro em Análises.",
+  "Neue Karten sind in diesem Stapel gestoppt. Schalte sie zuerst in Einblicke wieder ein.",
+  "Les nouvelles cartes sont arrêtées dans ce paquet. Réactivez-les d’abord dans Aperçus."
+ ],
+ "New plan…": [
+  "Nuevo plan…",
+  "Novo plano…",
+  "Neuer Plan…",
+  "Nouveau plan…"
+ ],
+ "New tags: {names} and {n} more.": [
+  "Etiquetas nuevas: {names} y {n} más.",
+  "Etiquetas novas: {names} e mais {n}.",
+  "Neue Tags: {names} und {n} weitere.",
+  "Nouvelles étiquettes : {names} et {n} de plus."
+ ],
+ "New tags: {names}.": [
+  "Etiquetas nuevas: {names}.",
+  "Etiquetas novas: {names}.",
+  "Neue Tags: {names}.",
+  "Nouvelles étiquettes : {names}."
+ ],
+ "Next week": [
+  "Semana siguiente",
+  "Próxima semana",
+  "Nächste Woche",
+  "Semaine suivante"
+ ],
+ "No": [
+  "No",
+  "Não",
+  "Nein",
+  "Non"
+ ],
+ "No deck here has this plan&rsquo;s cards yet.": [
+  "Ningún mazo de aquí tiene aún las tarjetas de este plan.",
+  "Nenhum baralho daqui tem ainda os cartões deste plano.",
+  "Noch hat kein Stapel hier die Karten dieses Plans.",
+  "Aucun paquet ici n&rsquo;a encore les cartes de ce plan."
+ ],
+ "No leeches in it now.": [
+  "Ahora no tiene sanguijuelas.",
+  "Não há sanguessugas nele agora.",
+  "Gerade keine Lernbremsen darin.",
+  "Aucune sangsue dedans pour l’instant."
+ ],
+ "No new cards while it&rsquo;s paused.": [
+  "Sin tarjetas nuevas mientras esté en pausa.",
+  "Sem cartões novos enquanto estiver em pausa.",
+  "Keine neuen Karten, solange er pausiert.",
+  "Pas de nouvelles cartes tant qu&rsquo;il est en pause."
+ ],
+ "No thanks": [
+  "No, gracias",
+  "Não, obrigado",
+  "Nein danke",
+  "Non merci"
+ ],
+ "None of its cards are in your deck.": [
+  "Ninguna de sus tarjetas está en tu mazo.",
+  "Nenhum dos cartões dele está no seu baralho.",
+  "Keine seiner Karten ist in deinem Stapel.",
+  "Aucune de ses cartes n’est dans votre paquet."
+ ],
+ "None of its cards are open yet.": [
+  "Ninguna de sus tarjetas está abierta aún.",
+  "Nenhum dos cartões dele está aberto ainda.",
+  "Noch ist keine seiner Karten offen.",
+  "Aucune de ses cartes n’est encore ouverte."
+ ],
+ "None of its new cards are open now.": [
+  "Ninguna de sus tarjetas nuevas está abierta ahora.",
+  "Nenhum dos cartões novos dele está aberto agora.",
+  "Gerade ist keine seiner neuen Karten offen.",
+  "Aucune de ses nouvelles cartes n’est ouverte pour l’instant."
+ ],
+ "Not today": [
+  "Hoy no",
+  "Hoje não",
+  "Heute nicht",
+  "Pas aujourd’hui"
+ ],
+ "Nothing held back now.": [
+  "Nada retenido ahora.",
+  "Nada retido agora.",
+  "Gerade nichts zurückgehalten.",
+  "Rien n’est retenu pour l’instant."
+ ],
+ "Nothing in {name} to open: it's open already.": [
+  "Nada que abrir en {name}: ya está abierto.",
+  "Nada para abrir em {name}: já está aberto.",
+  "In {name} gibt es nichts zu öffnen: schon offen.",
+  "Rien à ouvrir dans {name} : c’est déjà ouvert."
+ ],
+ "Nothing left to see.": [
+  "No queda nada por ver.",
+  "Não falta nada para ver.",
+  "Nichts mehr zu sehen.",
+  "Plus rien à voir."
+ ],
+ "Nothing more is held back.": [
+  "Ya no se retiene nada más.",
+  "Nada mais fica retido.",
+  "Es wird nichts mehr zurückgehalten.",
+  "Plus rien n’est retenu."
+ ],
+ "Nothing new or due from {day}.": [
+  "Nada nuevo ni pendiente del {day}.",
+  "Nada novo nem pendente de {day}.",
+  "Nichts Neues oder Fälliges vom {day}.",
+  "Rien de nouveau ni à réviser du {day}."
+ ],
+ "Nothing new or due in it.": [
+  "No tiene nada nuevo ni pendiente.",
+  "Nada novo nem pendente nele.",
+  "Nichts Neues oder Fälliges darin.",
+  "Rien de nouveau ni à réviser dedans."
+ ],
+ "Nothing new or due today in this plan.": [
+  "Nada nuevo ni pendiente hoy en este plan.",
+  "Nada novo nem pendente hoje neste plano.",
+  "Heute nichts Neues oder Fälliges in diesem Plan.",
+  "Rien de nouveau ni à réviser aujourd’hui dans ce plan."
+ ],
+ "Nothing new to open in {name}.": [
+  "Nada nuevo que abrir en {name}.",
+  "Nada novo para abrir em {name}.",
+  "Nichts Neues zu öffnen in {name}.",
+  "Rien de nouveau à ouvrir dans {name}."
+ ],
+ "Nothing opens by itself now. Open the next set from You › Plans.": [
+  "Ya nada se abre solo. Abre el siguiente bloque desde Tú › Planes.",
+  "Agora nada abre sozinho. Abra o próximo bloco em Você › Planos.",
+  "Jetzt öffnet sich nichts mehr von selbst. Öffne den nächsten Block unter Du › Pläne.",
+  "Plus rien ne s’ouvre tout seul. Ouvrez le bloc suivant depuis Vous › Plans."
+ ],
+ "Nothing to open.": [
+  "Nada que abrir.",
+  "Nada para abrir.",
+  "Nichts zu öffnen.",
+  "Rien à ouvrir."
+ ],
+ "Nothing's waiting from earlier sets now.": [
+  "Ahora no hay nada esperando de bloques anteriores.",
+  "Agora não há nada esperando de blocos anteriores.",
+  "Gerade wartet nichts aus früheren Blöcken.",
+  "Rien n’attend des blocs précédents pour l’instant."
+ ],
+ "OK": [
+  "Vale",
+  "OK",
+  "OK",
+  "OK"
+ ],
+ "Off": [
+  "Desactivado",
+  "Desligado",
+  "Aus",
+  "Désactivé"
+ ],
+ "On duecrew.com": [
+  "En duecrew.com",
+  "Em duecrew.com",
+  "Auf duecrew.com",
+  "Sur duecrew.com"
+ ],
+ "On no set now · {n}": [
+  "Ya en ningún bloque · {n}",
+  "Em nenhum bloco agora · {n}",
+  "Jetzt in keinem Block · {n}",
+  "Dans aucun bloc désormais · {n}"
+ ],
+ "On the plan's dates": [
+  "En las fechas del plan",
+  "Nas datas do plano",
+  "An den Terminen des Plans",
+  "Aux dates du plan"
+ ],
+ "On {plan}: {sets} and {n} more, which count them": [
+  "En {plan}: {sets} y {n} más, que las cuentan",
+  "Em {plan}: {sets} e mais {n}, que contam com eles",
+  "In {plan}: {sets} und {n} weitere, die sie mitzählen",
+  "Dans {plan} : {sets} et {n} de plus, qui les comptent"
+ ],
+ "On {plan}: {sets}, which count them": [
+  "En {plan}: {sets}, que las cuentan",
+  "Em {plan}: {sets}, que contam com eles",
+  "In {plan}: {sets}, die sie mitzählen",
+  "Dans {plan} : {sets}, qui les comptent"
+ ],
+ "One undo step; stopping the plan opens them again.": [
+  "Un solo paso de deshacer; dejar el plan las abre de nuevo.",
+  "Um só passo de desfazer; parar o plano abre tudo de novo.",
+  "Ein Rückgängig-Schritt; den Plan zu beenden öffnet sie wieder.",
+  "Une seule étape d’annulation ; arrêter le plan les rouvre."
+ ],
+ "Open": [
+  "Abrir",
+  "Abrir",
+  "Öffnen",
+  "Ouvrir"
+ ],
+ "Open and study": [
+  "Abrir y estudiar",
+  "Abrir e estudar",
+  "Öffnen und lernen",
+  "Ouvrir et étudier"
+ ],
+ "Open each day as it comes again": [
+  "Volver a abrir cada día cuando llegue",
+  "Voltar a abrir cada dia quando chegar",
+  "Wieder jeden Tag öffnen, wenn er kommt",
+  "Rouvrir chaque jour à mesure qu’il arrive"
+ ],
+ "Open early": [
+  "Abrir antes",
+  "Abrir antes",
+  "Früher öffnen",
+  "Ouvrir en avance"
+ ],
+ "Open everything now": [
+  "Abrir todo ahora",
+  "Abrir tudo agora",
+  "Jetzt alles öffnen",
+  "Tout ouvrir maintenant"
+ ],
+ "Open in Your plans": [
+  "Abrir en Tus planes",
+  "Abrir em Seus planos",
+  "In Deine Pläne öffnen",
+  "Ouvrir dans Vos plans"
+ ],
+ "Open it now, ahead of the rest": [
+  "Abrirlo ahora, antes que el resto",
+  "Abrir agora, antes do resto",
+  "Jetzt öffnen, vor den anderen",
+  "L’ouvrir maintenant, avant le reste"
+ ],
+ "Open now": [
+  "Abrir ahora",
+  "Abrir agora",
+  "Jetzt öffnen",
+  "Ouvrir maintenant"
+ ],
+ "Open {n}": [
+  "Abrir {n}",
+  "Abrir {n}",
+  "{n} öffnen",
+  "Ouvrir {n}"
+ ],
+ "Opened {name} (ahead of {other}) · {n} card, first in line.": [
+  "Abierto {name} (antes que {other}) · {n} tarjeta, la primera de la cola.",
+  "Aberto {name} (antes de {other}) · {n} cartão, primeiro da fila.",
+  "{name} geöffnet (vor {other}) · {n} Karte, als Erstes dran.",
+  "{name} ouvert (avant {other}) · {n} carte, en tête de file."
+ ],
+ "Opened {name} (ahead of {other}) · {n} cards, first in line.": [
+  "Abierto {name} (antes que {other}) · {n} tarjetas, las primeras de la cola.",
+  "Aberto {name} (antes de {other}) · {n} cartões, primeiros da fila.",
+  "{name} geöffnet (vor {other}) · {n} Karten, als Erstes dran.",
+  "{name} ouvert (avant {other}) · {n} cartes, en tête de file."
+ ],
+ "Opened {name} · {n} card, first in line.": [
+  "Abierto {name} · {n} tarjeta, la primera de la cola.",
+  "Aberto {name} · {n} cartão, primeiro da fila.",
+  "{name} geöffnet · {n} Karte, als Erstes dran.",
+  "{name} ouvert · {n} carte, en tête de file."
+ ],
+ "Opened {name} · {n} cards, first in line.": [
+  "Abierto {name} · {n} tarjetas, las primeras de la cola.",
+  "Aberto {name} · {n} cartões, primeiros da fila.",
+  "{name} geöffnet · {n} Karten, als Erstes dran.",
+  "{name} ouvert · {n} cartes, en tête de file."
+ ],
+ "Opened {n} card. Edit › Undo suspends them again.": [
+  "{n} tarjeta abierta. Edición › Deshacer la suspende de nuevo.",
+  "{n} cartão aberto. Editar › Desfazer suspende de novo.",
+  "{n} Karte geöffnet. Bearbeiten › Rückgängig setzt sie wieder aus.",
+  "{n} carte ouverte. Édition › Annuler la suspend à nouveau."
+ ],
+ "Opened {n} cards. Edit › Undo suspends them again.": [
+  "{n} tarjetas abiertas. Edición › Deshacer las suspende de nuevo.",
+  "{n} cartões abertos. Editar › Desfazer suspende de novo.",
+  "{n} Karten geöffnet. Bearbeiten › Rückgängig setzt sie wieder aus.",
+  "{n} cartes ouvertes. Édition › Annuler les suspend à nouveau."
+ ],
+ "Opened {n} · first in line. Edit › Undo puts them back.": [
+  "{n} abiertas · las primeras de la cola. Edición › Deshacer las devuelve.",
+  "{n} abertos · primeiros da fila. Editar › Desfazer devolve.",
+  "{n} geöffnet · als Erstes dran. Bearbeiten › Rückgängig macht es rückgängig.",
+  "{n} ouvertes · en tête de file. Édition › Annuler les remet."
+ ],
+ "Opened {n}. Edit › Undo puts them back.": [
+  "{n} abiertas. Edición › Deshacer las devuelve.",
+  "{n} abertos. Editar › Desfazer devolve.",
+  "{n} geöffnet. Bearbeiten › Rückgängig macht es rückgängig.",
+  "{n} ouvertes. Édition › Annuler les remet."
+ ],
+ "Or a plan of your own": [
+  "O un plan propio",
+  "Ou um plano seu",
+  "Oder ein eigener Plan",
+  "Ou un plan à vous"
+ ],
+ "Over the days you pick: about {n} more new card a day for three days.": [
+  "En los días que elijas: unas {n} tarjeta nueva más al día durante tres días.",
+  "Nos dias que você escolher: cerca de {n} cartão novo a mais por dia por três dias.",
+  "Über die Tage, die du wählst: etwa {n} neue Karte mehr pro Tag über drei Tage.",
+  "Sur les jours que vous choisissez : environ {n} nouvelle carte de plus par jour pendant trois jours."
+ ],
+ "Over the days you pick: about {n} more new cards a day for three days.": [
+  "En los días que elijas: unas {n} tarjetas nuevas más al día durante tres días.",
+  "Nos dias que você escolher: cerca de {n} cartões novos a mais por dia por três dias.",
+  "Über die Tage, die du wählst: etwa {n} neue Karten mehr pro Tag über drei Tage.",
+  "Sur les jours que vous choisissez : environ {n} nouvelles cartes de plus par jour pendant trois jours."
+ ],
+ "Over {days} days (+{n} new a day)": [
+  "En {days} días (+{n} nuevas al día)",
+  "Em {days} dias (+{n} novos por dia)",
+  "Über {days} Tage (+{n} neue pro Tag)",
+  "Sur {days} jours (+{n} nouvelles par jour)"
+ ],
+ "Pause until…": [
+  "Pausar hasta…",
+  "Pausar até…",
+  "Pausieren bis…",
+  "Mettre en pause jusqu’au…"
+ ],
+ "Pick a card first.": [
+  "Elige primero una tarjeta.",
+  "Escolha um cartão primeiro.",
+  "Wähl zuerst eine Karte.",
+  "Choisissez d’abord une carte."
+ ],
+ "Pick a deck": [
+  "Elegir un mazo",
+  "Escolher um baralho",
+  "Stapel wählen",
+  "Choisir un paquet"
+ ],
+ "Picked": [
+  "Elegidas",
+  "Escolhidos",
+  "Ausgewählt",
+  "Choisies"
+ ],
+ "Picked by ID": [
+  "Elegidas por ID",
+  "Escolhidos por ID",
+  "Per ID ausgewählt",
+  "Choisies par ID"
+ ],
+ "Pip in its grad cap": [
+  "Pip con su birrete",
+  "Pip de capelo",
+  "Pip mit Doktorhut",
+  "Pip avec sa toque de diplômé"
+ ],
+ "Pip: a set done": [
+  "Pip: un bloque hecho",
+  "Pip: um bloco feito",
+  "Pip: ein Block geschafft",
+  "Pip : un bloc terminé"
+ ],
+ "Pip: day one": [
+  "Pip: día uno",
+  "Pip: dia um",
+  "Pip: Tag eins",
+  "Pip : premier jour"
+ ],
+ "Pip: finished": [
+  "Pip: terminado",
+  "Pip: concluído",
+  "Pip: geschafft",
+  "Pip : terminé"
+ ],
+ "Plan": [
+  "Plan",
+  "Plano",
+  "Plan",
+  "Plan"
+ ],
+ "Plan the way there": [
+  "Planear el camino",
+  "Planejar o caminho",
+  "Den Weg dorthin planen",
+  "Planifier le chemin"
+ ],
+ "Push my dates back {n} day": [
+  "Retrasar mis fechas {n} día",
+  "Adiar minhas datas {n} dia",
+  "Meine Termine {n} Tag verschieben",
+  "Reculer mes dates de {n} jour"
+ ],
+ "Push my dates back {n} days": [
+  "Retrasar mis fechas {n} días",
+  "Adiar minhas datas {n} dias",
+  "Meine Termine {n} Tage verschieben",
+  "Reculer mes dates de {n} jours"
+ ],
+ "Push my dates back…": [
+  "Retrasar mis fechas…",
+  "Adiar minhas datas…",
+  "Meine Termine verschieben…",
+  "Reculer mes dates…"
+ ],
+ "Put back {name}": [
+  "Devolver {name}",
+  "Devolver {name}",
+  "{name} zurücklegen",
+  "Remettre {name}"
+ ],
+ "Put back {name} · {n} card.": [
+  "Devuelto {name} · {n} tarjeta.",
+  "Devolvido {name} · {n} cartão.",
+  "{name} zurückgelegt · {n} Karte.",
+  "{name} remis · {n} carte."
+ ],
+ "Put back {name} · {n} cards.": [
+  "Devuelto {name} · {n} tarjetas.",
+  "Devolvido {name} · {n} cartões.",
+  "{name} zurückgelegt · {n} Karten.",
+  "{name} remis · {n} cartes."
+ ],
+ "Put it back": [
+  "Devolverlo",
+  "Colocar de volta",
+  "Zurücklegen",
+  "Le remettre"
+ ],
+ "Raise to {n}": [
+  "Subir a {n}",
+  "Aumentar para {n}",
+  "Auf {n} erhöhen",
+  "Passer à {n}"
+ ],
+ "Reset": [
+  "Restablecer",
+  "Redefinir",
+  "Zurücksetzen",
+  "Réinitialiser"
+ ],
+ "Reset to default?": [
+  "¿Restablecer lo predeterminado?",
+  "Redefinir para o padrão?",
+  "Auf Standard zurücksetzen?",
+  "Réinitialiser par défaut ?"
+ ],
+ "Reset to default…": [
+  "Restablecer lo predeterminado…",
+  "Redefinir para o padrão…",
+  "Auf Standard zurücksetzen…",
+  "Réinitialiser par défaut…"
+ ],
+ "Resume": [
+  "Reanudar",
+  "Retomar",
+  "Fortsetzen",
+  "Reprendre"
+ ],
+ "Resume now": [
+  "Reanudar ahora",
+  "Retomar agora",
+  "Jetzt fortsetzen",
+  "Reprendre maintenant"
+ ],
+ "Reviews due": [
+  "Repasos pendientes",
+  "Revisões pendentes",
+  "Fällige Wiederholungen",
+  "Révisions à faire"
+ ],
+ "Run {name} on": [
+  "Usar {name} en",
+  "Usar {name} em",
+  "{name} laufen lassen auf",
+  "Faire tourner {name} sur"
+ ],
+ "Saturday": [
+  "sábado",
+  "sábado",
+  "Samstag",
+  "samedi"
+ ],
+ "Saved {n} note to {file}. Attach it to your AI chat with the prompt.": [
+  "{n} nota guardada en {file}. Adjúntalo a tu chat de IA con el prompt.",
+  "{n} nota salva em {file}. Anexe ao seu chat de IA com o prompt.",
+  "{n} Notiz in {file} gespeichert. Häng die Datei mit dem Prompt an deinen KI-Chat.",
+  "{n} note enregistrée dans {file}. Joignez-le à votre discussion avec l’IA, avec le prompt."
+ ],
+ "Saved {n} notes to {file}. Attach it to your AI chat with the prompt.": [
+  "{n} notas guardadas en {file}. Adjúntalo a tu chat de IA con el prompt.",
+  "{n} notas salvas em {file}. Anexe ao seu chat de IA com o prompt.",
+  "{n} Notizen in {file} gespeichert. Häng die Datei mit dem Prompt an deinen KI-Chat.",
+  "{n} notes enregistrées dans {file}. Joignez-le à votre discussion avec l’IA, avec le prompt."
+ ],
+ "Schedule off: sets open whole, as the plan has them.": [
+  "Horario desactivado: los bloques se abren enteros, como los tiene el plan.",
+  "Cronograma desligado: os blocos abrem inteiros, como estão no plano.",
+  "Zeitplan aus: Blöcke öffnen sich ganz, wie der Plan sie hat.",
+  "Planning désactivé : les blocs s’ouvrent en entier, comme dans le plan."
+ ],
+ "Schedule saved.": [
+  "Horario guardado.",
+  "Cronograma salvo.",
+  "Zeitplan gespeichert.",
+  "Planning enregistré."
+ ],
+ "Search": [
+  "Búsqueda",
+  "Busca",
+  "Suche",
+  "Recherche"
+ ],
+ "Search for the cards (a tag, say), or select them, first.": [
+  "Primero busca las tarjetas (una etiqueta, por ejemplo) o selecciónalas.",
+  "Primeiro busque os cartões (uma etiqueta, por exemplo) ou selecione-os.",
+  "Such zuerst die Karten (etwa ein Tag) oder wähl sie aus.",
+  "Cherchez d’abord les cartes (une étiquette, par exemple) ou sélectionnez-les."
+ ],
+ "Select one card first.": [
+  "Selecciona primero una tarjeta.",
+  "Selecione um cartão primeiro.",
+  "Wähl zuerst eine Karte aus.",
+  "Sélectionnez d’abord une carte."
+ ],
+ "Select some cards first.": [
+  "Selecciona primero algunas tarjetas.",
+  "Selecione alguns cartões primeiro.",
+  "Wähl zuerst ein paar Karten aus.",
+  "Sélectionnez d’abord des cartes."
+ ],
+ "Select some notes first.": [
+  "Selecciona primero algunas notas.",
+  "Selecione algumas notas primeiro.",
+  "Wähl zuerst ein paar Notizen aus.",
+  "Sélectionnez d’abord des notes."
+ ],
+ "Select some notes or cards first.": [
+  "Selecciona primero algunas notas o tarjetas.",
+  "Selecione algumas notas ou cartões primeiro.",
+  "Wähl zuerst ein paar Notizen oder Karten aus.",
+  "Sélectionnez d’abord des notes ou des cartes."
+ ],
+ "Sets: {sets}. Arrow keys move along them.": [
+  "Bloques: {sets}. Las flechas se mueven por ellos.",
+  "Blocos: {sets}. As setas percorrem os blocos.",
+  "Blöcke: {sets}. Mit den Pfeiltasten gehst du sie entlang.",
+  "Blocs : {sets}. Les flèches les parcourent."
+ ],
+ "Share": [
+  "Compartir",
+  "Compartilhar",
+  "Teilen",
+  "Partager"
+ ],
+ "Share this plan": [
+  "Compartir este plan",
+  "Compartilhar este plano",
+  "Diesen Plan teilen",
+  "Partager ce plan"
+ ],
+ "Skip a set": [
+  "Omitir un bloque",
+  "Pular um bloco",
+  "Einen Block überspringen",
+  "Sauter un bloc"
+ ],
+ "Skip it": [
+  "Omitirlo",
+  "Pular",
+  "Überspringen",
+  "Le sauter"
+ ],
+ "Skip them": [
+  "Omitirlos",
+  "Pular",
+  "Überspringen",
+  "Les sauter"
+ ],
+ "Skip what's left": [
+  "Omitir lo que queda",
+  "Pular o que falta",
+  "Den Rest überspringen",
+  "Sauter ce qui reste"
+ ],
+ "Skipped. Its cards stay open in your deck; the week has Undo skip.": [
+  "Omitido. Sus tarjetas siguen abiertas en tu mazo; la semana tiene Deshacer omisión.",
+  "Pulado. Os cartões dele continuam abertos no seu baralho; a semana tem Desfazer pulo.",
+  "Übersprungen. Seine Karten bleiben in deinem Stapel offen; die Woche hat Überspringen rückgängig.",
+  "Sauté. Ses cartes restent ouvertes dans votre paquet ; la semaine a Annuler le saut."
+ ],
+ "Skipped. Their cards stay open in your deck; the week has Undo skip.": [
+  "Omitidos. Sus tarjetas siguen abiertas en tu mazo; la semana tiene Deshacer omisión.",
+  "Pulados. Os cartões deles continuam abertos no seu baralho; a semana tem Desfazer pulo.",
+  "Übersprungen. Ihre Karten bleiben in deinem Stapel offen; die Woche hat Überspringen rückgängig.",
+  "Sautés. Leurs cartes restent ouvertes dans votre paquet ; la semaine a Annuler le saut."
+ ],
+ "Slide a day": [
+  "Deslizar un día",
+  "Deslizar um dia",
+  "Einen Tag schieben",
+  "Décaler d’un jour"
+ ],
+ "Slide your dates, fit it in, or skip what&rsquo;s left": [
+  "Desliza tus fechas, encájalo u omite lo que queda",
+  "Deslize suas datas, encaixe ou pule o que falta",
+  "Termine schieben, einpassen oder den Rest überspringen",
+  "Décalez vos dates, intégrez-le ou sautez ce qui reste"
+ ],
+ "Slide {n} days": [
+  "Deslizar {n} días",
+  "Deslizar {n} dias",
+  "{n} Tage schieben",
+  "Décaler de {n} jours"
+ ],
+ "Spread them (+{n} a day)": [
+  "Repartirlas (+{n} al día)",
+  "Distribuir (+{n} por dia)",
+  "Verteilen (+{n} pro Tag)",
+  "Les répartir (+{n} par jour)"
+ ],
+ "Squad: {n} in it": [
+  "Grupo: {n} dentro",
+  "Grupo: {n} nele",
+  "Gruppe: {n} dabei",
+  "Groupe : {n} dedans"
+ ],
+ "Squad: {n} of {of} showed up": [
+  "Grupo: {n} de {of} han venido",
+  "Grupo: {n} de {of} apareceram",
+  "Gruppe: {n} von {of} waren da",
+  "Groupe : {n} sur {of} sont venus"
+ ],
+ "Stop": [
+  "Dejar",
+  "Parar",
+  "Beenden",
+  "Arrêter"
+ ],
+ "Stop following": [
+  "Dejar de seguir",
+  "Parar de seguir",
+  "Nicht mehr folgen",
+  "Ne plus suivre"
+ ],
+ "Stop following {name}?": [
+  "¿Dejar de seguir {name}?",
+  "Parar de seguir {name}?",
+  "{name} nicht mehr folgen?",
+  "Ne plus suivre {name} ?"
+ ],
+ "Study": [
+  "Estudiar",
+  "Estudar",
+  "Lernen",
+  "Étudier"
+ ],
+ "Study for it": [
+  "Estudiar para él",
+  "Estudar para ele",
+  "Dafür lernen",
+  "Étudier pour lui"
+ ],
+ "Study {n}": [
+  "Estudiar {n}",
+  "Estudar {n}",
+  "{n} lernen",
+  "Étudier {n}"
+ ],
+ "Sunday": [
+  "domingo",
+  "domingo",
+  "Sonntag",
+  "dimanche"
+ ],
+ "Switch the browser to Cards to add single cards to a plan.": [
+  "Pon el explorador en Tarjetas para añadir tarjetas sueltas a un plan.",
+  "Mude o navegador para Cartões para adicionar cartões avulsos a um plano.",
+  "Stell den Browser auf Karten, um einzelne Karten zu einem Plan hinzuzufügen.",
+  "Passez le navigateur en mode Cartes pour ajouter des cartes seules à un plan."
+ ],
+ "Sync now": [
+  "Sincronizar ahora",
+  "Sincronizar agora",
+  "Jetzt synchronisieren",
+  "Synchroniser maintenant"
+ ],
+ "Tagged {n} note as {name}.": [
+  "{n} nota etiquetada como {name}.",
+  "{n} nota etiquetada como {name}.",
+  "{n} Notiz als {name} getaggt.",
+  "{n} note étiquetée {name}."
+ ],
+ "Tagged {n} notes as {name}.": [
+  "{n} notas etiquetadas como {name}.",
+  "{n} notas etiquetadas como {name}.",
+  "{n} Notizen als {name} getaggt.",
+  "{n} notes étiquetées {name}."
+ ],
+ "Take its's tags off your notes too": [
+  "Quitar también sus etiquetas de tus notas",
+  "Tirar também as etiquetas dele das suas notas",
+  "Auch seine Tags von deinen Notizen nehmen",
+  "Retirer aussi ses étiquettes de vos notes"
+ ],
+ "Take {name}'s tags off your notes too": [
+  "Quitar también las etiquetas de {name} de tus notas",
+  "Tirar também as etiquetas de {name} das suas notas",
+  "Auch die Tags von {name} von deinen Notizen nehmen",
+  "Retirer aussi les étiquettes de {name} de vos notes"
+ ],
+ "Text": [
+  "Texto",
+  "Texto",
+  "Text",
+  "Texte"
+ ],
+ "That didn't go through. Try again later.": [
+  "No se pudo completar. Inténtalo más tarde.",
+  "Não deu certo. Tente de novo mais tarde.",
+  "Das hat nicht geklappt. Versuch es später noch mal.",
+  "Ça n’a pas abouti. Réessayez plus tard."
+ ],
+ "That invite to {name} was taken back.": [
+  "Esa invitación a {name} fue retirada.",
+  "Esse convite para {name} foi retirado.",
+  "Die Einladung zu {name} wurde zurückgenommen.",
+  "Cette invitation à {name} a été retirée."
+ ],
+ "The last set": [
+  "El último bloque",
+  "O último bloco",
+  "Der letzte Block",
+  "Le dernier bloc"
+ ],
+ "The last set of {name}": [
+  "El último bloque de {name}",
+  "O último bloco de {name}",
+  "Der letzte Block von {name}",
+  "Le dernier bloc de {name}"
+ ],
+ "The last set of {name}: {set}, today. duecrew.com": [
+  "El último bloque de {name}: {set}, hoy. duecrew.com",
+  "O último bloco de {name}: {set}, hoje. duecrew.com",
+  "Der letzte Block von {name}: {set}, heute. duecrew.com",
+  "Le dernier bloc de {name} : {set}, aujourd’hui. duecrew.com"
+ ],
+ "The library": [
+  "La biblioteca",
+  "A biblioteca",
+  "Die Bibliothek",
+  "La bibliothèque"
+ ],
+ "The plan": [
+  "El plan",
+  "O plano",
+  "Der Plan",
+  "Le plan"
+ ],
+ "The plan's dates are at {name} today.": [
+  "Las fechas del plan van hoy por {name}.",
+  "As datas do plano estão hoje em {name}.",
+  "Die Termine des Plans sind heute bei {name}.",
+  "Les dates du plan en sont à {name} aujourd’hui."
+ ],
+ "The plan's dates ended {day}.": [
+  "Las fechas del plan terminaron el {day}.",
+  "As datas do plano terminaram em {day}.",
+  "Die Termine des Plans endeten am {day}.",
+  "Les dates du plan se sont terminées le {day}."
+ ],
+ "The plan's dates start {day}.": [
+  "Las fechas del plan empiezan el {day}.",
+  "As datas do plano começam em {day}.",
+  "Die Termine des Plans beginnen am {day}.",
+  "Les dates du plan commencent le {day}."
+ ],
+ "The {n} left stay open in your deck, no longer behind.": [
+  "Las {n} que quedan siguen abiertas en tu mazo, ya sin retraso.",
+  "Os {n} que faltam continuam abertos no seu baralho, sem contar como atraso.",
+  "Die {n} übrigen bleiben in deinem Stapel offen, nicht mehr im Rückstand.",
+  "Les {n} restantes restent ouvertes dans votre paquet, sans compter comme retard."
+ ],
+ "Then {sets}": [
+  "Luego {sets}",
+  "Depois {sets}",
+  "Dann {sets}",
+  "Ensuite {sets}"
+ ],
+ "They open on their day. One undo step; stopping the plan opens them again.": [
+  "Se abren en su día. Un solo paso de deshacer; dejar el plan las abre de nuevo.",
+  "Eles abrem no dia deles. Um só passo de desfazer; parar o plano abre tudo de novo.",
+  "Sie öffnen sich an ihrem Tag. Ein Rückgängig-Schritt; den Plan zu beenden öffnet sie wieder.",
+  "Elles s’ouvrent à leur date. Une seule étape d’annulation ; arrêter le plan les rouvre."
+ ],
+ "They open tomorrow morning": [
+  "Se abren mañana por la mañana",
+  "Abrem amanhã de manhã",
+  "Sie öffnen sich morgen früh",
+  "Elles s’ouvrent demain matin"
+ ],
+ "This morning opened {n} new card, in your decks.": [
+  "Esta mañana se abrió {n} tarjeta nueva, en tus mazos.",
+  "Esta manhã abriu {n} cartão novo, nos seus baralhos.",
+  "Heute Morgen wurde {n} neue Karte geöffnet, in deinen Stapeln.",
+  "Ce matin a ouvert {n} nouvelle carte, dans vos paquets."
+ ],
+ "This morning opened {n} new card.": [
+  "Esta mañana se abrió {n} tarjeta nueva.",
+  "Esta manhã abriu {n} cartão novo.",
+  "Heute Morgen wurde {n} neue Karte geöffnet.",
+  "Ce matin a ouvert {n} nouvelle carte."
+ ],
+ "This morning opened {n} new card: {sets}": [
+  "Esta mañana se abrió {n} tarjeta nueva: {sets}",
+  "Esta manhã abriu {n} cartão novo: {sets}",
+  "Heute Morgen wurde {n} neue Karte geöffnet: {sets}",
+  "Ce matin a ouvert {n} nouvelle carte : {sets}"
+ ],
+ "This morning opened {n} new card: {sets}, in your decks": [
+  "Esta mañana se abrió {n} tarjeta nueva: {sets}, en tus mazos",
+  "Esta manhã abriu {n} cartão novo: {sets}, nos seus baralhos",
+  "Heute Morgen wurde {n} neue Karte geöffnet: {sets}, in deinen Stapeln",
+  "Ce matin a ouvert {n} nouvelle carte : {sets}, dans vos paquets"
+ ],
+ "This morning opened {n} new cards, in your decks.": [
+  "Esta mañana se abrieron {n} tarjetas nuevas, en tus mazos.",
+  "Esta manhã abriu {n} cartões novos, nos seus baralhos.",
+  "Heute Morgen wurden {n} neue Karten geöffnet, in deinen Stapeln.",
+  "Ce matin a ouvert {n} nouvelles cartes, dans vos paquets."
+ ],
+ "This morning opened {n} new cards.": [
+  "Esta mañana se abrieron {n} tarjetas nuevas.",
+  "Esta manhã abriu {n} cartões novos.",
+  "Heute Morgen wurden {n} neue Karten geöffnet.",
+  "Ce matin a ouvert {n} nouvelles cartes."
+ ],
+ "This morning opened {n} new cards: {sets}": [
+  "Esta mañana se abrieron {n} tarjetas nuevas: {sets}",
+  "Esta manhã abriu {n} cartões novos: {sets}",
+  "Heute Morgen wurden {n} neue Karten geöffnet: {sets}",
+  "Ce matin a ouvert {n} nouvelles cartes : {sets}"
+ ],
+ "This morning opened {n} new cards: {sets}, in your decks": [
+  "Esta mañana se abrieron {n} tarjetas nuevas: {sets}, en tus mazos",
+  "Esta manhã abriu {n} cartões novos: {sets}, nos seus baralhos",
+  "Heute Morgen wurden {n} neue Karten geöffnet: {sets}, in deinen Stapeln",
+  "Ce matin a ouvert {n} nouvelles cartes : {sets}, dans vos paquets"
+ ],
+ "Three-quarters": [
+  "Tres cuartos",
+  "Três quartos",
+  "Drei Viertel",
+  "Aux trois quarts"
+ ],
+ "Three-quarters through {name}": [
+  "Tres cuartos de {name}",
+  "Três quartos de {name}",
+  "Drei Viertel von {name}",
+  "Aux trois quarts de {name}"
+ ],
+ "Three-quarters through {name}: {n} of {of} sets. duecrew.com": [
+  "Tres cuartos de {name}: {n} de {of} bloques. duecrew.com",
+  "Três quartos de {name}: {n} de {of} blocos. duecrew.com",
+  "Drei Viertel von {name}: {n} von {of} Blöcken. duecrew.com",
+  "Aux trois quarts de {name} : {n} blocs sur {of}. duecrew.com"
+ ],
+ "Thursday": [
+  "jueves",
+  "quinta-feira",
+  "Donnerstag",
+  "jeudi"
+ ],
+ "Times use a typical pace until there's more of yours to read.": [
+  "Los tiempos usan un ritmo típico hasta que haya más del tuyo.",
+  "Os tempos usam um ritmo típico até haver mais do seu.",
+  "Die Zeiten nutzen ein typisches Tempo, bis es mehr von deinem gibt.",
+  "Les durées utilisent un rythme type tant qu’il n’y a pas assez du vôtre."
+ ],
+ "Times use your own pace per card.": [
+  "Los tiempos usan tu propio ritmo por tarjeta.",
+  "Os tempos usam o seu ritmo por cartão.",
+  "Die Zeiten nutzen dein eigenes Tempo pro Karte.",
+  "Les durées utilisent votre propre rythme par carte."
+ ],
+ "Today is a rest day: reviews, and no new cards.": [
+  "Hoy es día de descanso: repasos, y sin tarjetas nuevas.",
+  "Hoje é dia de descanso: revisões, e sem cartões novos.",
+  "Heute ist ein Ruhetag: Wiederholungen, keine neuen Karten.",
+  "Aujourd’hui est un jour de repos : des révisions, pas de nouvelles cartes."
+ ],
+ "Today is in its catch-up week: reviews, and no new cards.": [
+  "Hoy está en su semana de ponerse al día: repasos, y sin tarjetas nuevas.",
+  "Hoje está na semana de pôr em dia: revisões, e sem cartões novos.",
+  "Heute liegt in seiner Aufholwoche: Wiederholungen, keine neuen Karten.",
+  "Aujourd’hui est dans sa semaine de rattrapage : des révisions, pas de nouvelles cartes."
+ ],
+ "Today is in its taper: reviews, and no new cards.": [
+  "Hoy está en su recta final: repasos, y sin tarjetas nuevas.",
+  "Hoje está na reta final: revisões, e sem cartões novos.",
+  "Heute liegt in seiner Schlussphase: Wiederholungen, keine neuen Karten.",
+  "Aujourd’hui est dans sa dernière ligne droite : des révisions, pas de nouvelles cartes."
+ ],
+ "Today’s {what}, in a filtered deck.": [
+  "Lo de hoy: {what}, en un mazo filtrado.",
+  "De hoje: {what}, em um baralho filtrado.",
+  "Von heute: {what}, in einem Auswahlstapel.",
+  "Du jour : {what}, dans un paquet filtré."
+ ],
+ "Took {n} note off {name}.": [
+  "{n} nota quitada de {name}.",
+  "{n} nota tirada de {name}.",
+  "{n} Notiz von {name} genommen.",
+  "{n} note retirée de {name}."
+ ],
+ "Took {n} notes off {name}.": [
+  "{n} notas quitadas de {name}.",
+  "{n} notas tiradas de {name}.",
+  "{n} Notizen von {name} genommen.",
+  "{n} notes retirées de {name}."
+ ],
+ "Tuesday": [
+  "martes",
+  "terça-feira",
+  "Dienstag",
+  "mardi"
+ ],
+ "Turn them back on": [
+  "Volver a activarlas",
+  "Reativar",
+  "Wieder einschalten",
+  "Les réactiver"
+ ],
+ "Undo": [
+  "Deshacer",
+  "Desfazer",
+  "Rückgängig",
+  "Annuler"
+ ],
+ "Undo skip": [
+  "Deshacer omisión",
+  "Desfazer pulo",
+  "Überspringen rückgängig",
+  "Annuler le saut"
+ ],
+ "Up next": [
+  "A continuación",
+  "A seguir",
+  "Als Nächstes",
+  "À suivre"
+ ],
+ "Wednesday": [
+  "miércoles",
+  "quarta-feira",
+  "Mittwoch",
+  "mercredi"
+ ],
+ "Week of {day} {month}": [
+  "Semana del {day} {month}",
+  "Semana de {day} {month}",
+  "Woche vom {day}. {month}",
+  "Semaine du {day} {month}"
+ ],
+ "Week {n} done": [
+  "Semana {n} hecha",
+  "Semana {n} feita",
+  "Woche {n} geschafft",
+  "Semaine {n} terminée"
+ ],
+ "When I'm ready": [
+  "Cuando esté listo",
+  "Quando eu estiver pronto",
+  "Wenn ich so weit bin",
+  "Quand je suis prêt"
+ ],
+ "When I'm ready, the next once I've seen most of the last": [
+  "Cuando esté listo; el siguiente, cuando haya visto casi todo el último",
+  "Quando eu estiver pronto; o próximo, quando eu tiver visto quase todo o último",
+  "Wenn ich so weit bin; der nächste, sobald ich den letzten größtenteils gesehen habe",
+  "Quand je suis prêt ; le suivant une fois le dernier presque entièrement vu"
+ ],
+ "Yes": [
+  "Sí",
+  "Sim",
+  "Ja",
+  "Oui"
+ ],
+ "You co-write {name} now.": [
+  "Ahora coescribes {name}.",
+  "Agora você coescreve {name}.",
+  "Du schreibst jetzt an {name} mit.",
+  "Vous coécrivez {name} désormais."
+ ],
+ "You opened {name} early. Nothing to do on {day}.": [
+  "Abriste {name} antes de tiempo. Nada que hacer el {day}.",
+  "Você abriu {name} antes da hora. Nada a fazer em {day}.",
+  "Du hast {name} früher geöffnet. Am {day} ist nichts zu tun.",
+  "Vous avez ouvert {name} en avance. Rien à faire {day}."
+ ],
+ "You put these back. They open when you open their set again.": [
+  "Las devolviste. Se abren cuando vuelvas a abrir su bloque.",
+  "Você devolveu estes. Eles abrem quando você abrir o bloco deles de novo.",
+  "Du hast diese zurückgelegt. Sie öffnen sich, wenn du ihren Block wieder öffnest.",
+  "Vous les avez remises. Elles s’ouvrent quand vous rouvrez leur bloc."
+ ],
+ "You said yes to Hold back: the new cards of sets still to come wait, suspended, till their day.": [
+  "Dijiste que sí a Retener: las tarjetas nuevas de los bloques por venir esperan, suspendidas, hasta su día.",
+  "Você disse sim a Reter: os cartões novos dos blocos que ainda vêm esperam, suspensos, até o dia deles.",
+  "Du hast Ja zu Zurückhalten gesagt: Die neuen Karten kommender Blöcke warten ausgesetzt bis zu ihrem Tag.",
+  "Vous avez dit oui à Retenir : les nouvelles cartes des blocs à venir attendent, suspendues, jusqu’à leur date."
+ ],
+ "You said yes to Hold back: the new cards of sets you haven't opened wait, suspended, till you open them.": [
+  "Dijiste que sí a Retener: las tarjetas nuevas de los bloques que no has abierto esperan, suspendidas, hasta que los abras.",
+  "Você disse sim a Reter: os cartões novos dos blocos que você não abriu esperam, suspensos, até você abri-los.",
+  "Du hast Ja zu Zurückhalten gesagt: Die neuen Karten ungeöffneter Blöcke warten ausgesetzt, bis du sie öffnest.",
+  "Vous avez dit oui à Retenir : les nouvelles cartes des blocs que vous n’avez pas ouverts attendent, suspendues, que vous les ouvriez."
+ ],
+ "Your dates are back where they were.": [
+  "Tus fechas vuelven a estar donde estaban.",
+  "Suas datas voltaram para onde estavam.",
+  "Deine Termine sind wieder, wo sie waren.",
+  "Vos dates sont revenues où elles étaient."
+ ],
+ "Your dates back where they were": [
+  "Tus fechas de vuelta donde estaban",
+  "Suas datas de volta onde estavam",
+  "Deine Termine wieder, wo sie waren",
+  "Vos dates de retour où elles étaient"
+ ],
+ "Your dates moved {n} day later": [
+  "Tus fechas se movieron {n} día más tarde",
+  "Suas datas foram {n} dia para frente",
+  "Deine Termine sind {n} Tag später",
+  "Vos dates ont reculé de {n} jour"
+ ],
+ "Your dates moved {n} day later. The plan's stay put.": [
+  "Tus fechas se movieron {n} día más tarde. Las del plan no cambian.",
+  "Suas datas foram {n} dia para frente. As do plano ficam onde estão.",
+  "Deine Termine sind {n} Tag später. Die des Plans bleiben.",
+  "Vos dates ont reculé de {n} jour. Celles du plan ne bougent pas."
+ ],
+ "Your dates moved {n} days later": [
+  "Tus fechas se movieron {n} días más tarde",
+  "Suas datas foram {n} dias para frente",
+  "Deine Termine sind {n} Tage später",
+  "Vos dates ont reculé de {n} jours"
+ ],
+ "Your dates moved {n} days later. The plan's stay put.": [
+  "Tus fechas se movieron {n} días más tarde. Las del plan no cambian.",
+  "Suas datas foram {n} dias para frente. As do plano ficam onde estão.",
+  "Deine Termine sind {n} Tage später. Die des Plans bleiben.",
+  "Vos dates ont reculé de {n} jours. Celles du plan ne bougent pas."
+ ],
+ "Your dates run {n} day later: back on time": [
+  "Tus fechas van {n} día más tarde: vuelven a su hora",
+  "Suas datas estão {n} dia para frente: voltam ao normal",
+  "Deine Termine laufen {n} Tag später: wieder pünktlich",
+  "Vos dates ont {n} jour de décalage : retour à l’heure"
+ ],
+ "Your dates run {n} days later: back on time": [
+  "Tus fechas van {n} días más tarde: vuelven a su hora",
+  "Suas datas estão {n} dias para frente: voltam ao normal",
+  "Deine Termine laufen {n} Tage später: wieder pünktlich",
+  "Vos dates ont {n} jours de décalage : retour à l’heure"
+ ],
+ "Your exam in Settings: the countdown your crew sees, and the good-luck card": [
+  "Tu examen en Ajustes: la cuenta atrás que ve tu equipo, y la tarjeta de buena suerte",
+  "Sua prova em Configurações: a contagem regressiva que sua turma vê, e o cartão de boa sorte",
+  "Deine Prüfung in den Einstellungen: der Countdown, den deine Crew sieht, und die Glückwunschkarte",
+  "Votre examen dans Réglages : le compte à rebours que voit votre équipe, et la carte de bonne chance"
+ ],
+ "Your exam: {day}, in {n} days": [
+  "Tu examen: {day}, en {n} días",
+  "Sua prova: {day}, em {n} dias",
+  "Deine Prüfung: {day}, in {n} Tagen",
+  "Votre examen : {day}, dans {n} jours"
+ ],
+ "Your exam: {day}, tomorrow": [
+  "Tu examen: {day}, mañana",
+  "Sua prova: {day}, amanhã",
+  "Deine Prüfung: {day}, morgen",
+  "Votre examen : {day}, demain"
+ ],
+ "Your exam: {day}.": [
+  "Tu examen: {day}.",
+  "Sua prova: {day}.",
+  "Deine Prüfung: {day}.",
+  "Votre examen : {day}."
+ ],
+ "Your pause ends": [
+  "Tu pausa termina",
+  "Sua pausa termina",
+  "Deine Pause endet",
+  "Votre pause se termine"
+ ],
+ "Your plan": [
+  "Tu plan",
+  "Seu plano",
+  "Dein Plan",
+  "Votre plan"
+ ],
+ "Your plans&hellip;": [
+  "Tus planes&hellip;",
+  "Seus planos&hellip;",
+  "Deine Pläne&hellip;",
+  "Vos plans&hellip;"
+ ],
+ "a plan": [
+  "un plan",
+  "um plano",
+  "einem Plan",
+  "un plan"
+ ],
+ "added {name}": [
+  "añadió {name}",
+  "adicionou {name}",
+  "{name} hinzugefügt",
+  "ajouté {name}"
+ ],
+ "added {name} and {other}": [
+  "añadió {name} y {other}",
+  "adicionou {name} e {other}",
+  "{name} und {other} hinzugefügt",
+  "ajouté {name} et {other}"
+ ],
+ "added {n} sets": [
+  "añadió {n} bloques",
+  "adicionou {n} blocos",
+  "{n} Blöcke hinzugefügt",
+  "ajouté {n} blocs"
+ ],
+ "added {n} tag": [
+  "añadió {n} etiqueta",
+  "adicionou {n} etiqueta",
+  "{n} Tag hinzugefügt",
+  "ajouté {n} étiquette"
+ ],
+ "added {n} tags": [
+  "añadió {n} etiquetas",
+  "adicionou {n} etiquetas",
+  "{n} Tags hinzugefügt",
+  "ajouté {n} étiquettes"
+ ],
+ "after {name}": [
+  "después de {name}",
+  "depois de {name}",
+  "nach {name}",
+  "après {name}"
+ ],
+ "all {n} set done": [
+  "el {n} bloque hecho",
+  "o {n} bloco feito",
+  "{n} Block geschafft",
+  "le {n} bloc terminé"
+ ],
+ "all {n} sets done": [
+  "los {n} bloques hechos",
+  "todos os {n} blocos feitos",
+  "alle {n} Blöcke geschafft",
+  "les {n} blocs terminés"
+ ],
+ "at your pace": [
+  "a tu ritmo",
+  "no seu ritmo",
+  "in deinem Tempo",
+  "à votre rythme"
+ ],
+ "catching up &middot; {n} left": [
+  "poniéndose al día &middot; quedan {n}",
+  "pondo em dia &middot; faltam {n}",
+  "beim Aufholen &middot; {n} übrig",
+  "en rattrapage &middot; {n} restantes"
+ ],
+ "crew {n}/{of}": [
+  "equipo {n}/{of}",
+  "turma {n}/{of}",
+  "Crew {n}/{of}",
+  "équipe {n}/{of}"
+ ],
+ "days": [
+  "días",
+  "dias",
+  "Tage",
+  "jours"
+ ],
+ "done": [
+  "hecho",
+  "feito",
+  "erledigt",
+  "terminé"
+ ],
+ "due {day}": [
+  "para el {day}",
+  "até {day}",
+  "fällig {day}",
+  "pour {day}"
+ ],
+ "for {name}": [
+  "para {name}",
+  "para {name}",
+  "für {name}",
+  "pour {name}"
+ ],
+ "it": [
+  "él",
+  "ele",
+  "ihm",
+  "lui"
+ ],
+ "moved": [
+  "movido",
+  "movido",
+  "verschoben",
+  "déplacé"
+ ],
+ "moved {name} to {day}": [
+  "movió {name} al {day}",
+  "moveu {name} para {day}",
+  "{name} auf {day} verschoben",
+  "déplacé {name} au {day}"
+ ],
+ "moved {name} to {day} and {other} to {day_b}": [
+  "movió {name} al {day} y {other} al {day_b}",
+  "moveu {name} para {day} e {other} para {day_b}",
+  "{name} auf {day} und {other} auf {day_b} verschoben",
+  "déplacé {name} au {day} et {other} au {day_b}"
+ ],
+ "moved {n} sets": [
+  "movió {n} bloques",
+  "moveu {n} blocos",
+  "{n} Blöcke verschoben",
+  "déplacé {n} blocs"
+ ],
+ "not in your copy": [
+  "no está en tu copia",
+  "não está na sua cópia",
+  "nicht in deiner Kopie",
+  "absent de votre copie"
+ ],
+ "nothing new": [
+  "nada nuevo",
+  "nada novo",
+  "nichts Neues",
+  "rien de nouveau"
+ ],
+ "now": [
+  "ahora",
+  "agora",
+  "jetzt",
+  "à l’instant"
+ ],
+ "opens {day}": [
+  "se abre el {day}",
+  "abre em {day}",
+  "öffnet am {day}",
+  "ouvre le {day}"
+ ],
+ "opens {n} card": [
+  "abre {n} tarjeta",
+  "abre {n} cartão",
+  "öffnet {n} Karte",
+  "ouvre {n} carte"
+ ],
+ "opens {n} cards": [
+  "abre {n} tarjetas",
+  "abre {n} cartões",
+  "öffnet {n} Karten",
+  "ouvre {n} cartes"
+ ],
+ "opens {n} day early": [
+  "abre {n} día antes",
+  "abre {n} dia antes",
+  "öffnet {n} Tag früher",
+  "ouvre {n} jour en avance"
+ ],
+ "opens {n} days early": [
+  "abre {n} días antes",
+  "abre {n} dias antes",
+  "öffnet {n} Tage früher",
+  "ouvre {n} jours en avance"
+ ],
+ "paused": [
+  "en pausa",
+  "em pausa",
+  "pausiert",
+  "en pause"
+ ],
+ "paused until {day}": [
+  "en pausa hasta el {day}",
+  "em pausa até {day}",
+  "pausiert bis {day}",
+  "en pause jusqu’au {day}"
+ ],
+ "renamed {n} tag": [
+  "renombró {n} etiqueta",
+  "renomeou {n} etiqueta",
+  "{n} Tag umbenannt",
+  "renommé {n} étiquette"
+ ],
+ "renamed {n} tags": [
+  "renombró {n} etiquetas",
+  "renomeou {n} etiquetas",
+  "{n} Tags umbenannt",
+  "renommé {n} étiquettes"
+ ],
+ "rest": [
+  "descanso",
+  "descanso",
+  "Ruhetag",
+  "repos"
+ ],
+ "set {n} of {of}": [
+  "bloque {n} de {of}",
+  "bloco {n} de {of}",
+  "Block {n} von {of}",
+  "bloc {n} sur {of}"
+ ],
+ "skipped": [
+  "omitido",
+  "pulado",
+  "übersprungen",
+  "sauté"
+ ],
+ "starts {day}": [
+  "empieza el {day}",
+  "começa em {day}",
+  "beginnt am {day}",
+  "commence le {day}"
+ ],
+ "that set": [
+  "ese bloque",
+  "esse bloco",
+  "diesem Block",
+  "ce bloc"
+ ],
+ "the exam": [
+  "el examen",
+  "a prova",
+  "die Prüfung",
+  "l’examen"
+ ],
+ "the plan": [
+  "el plan",
+  "o plano",
+  "der Plan",
+  "le plan"
+ ],
+ "the plan's end": [
+  "el final del plan",
+  "o fim do plano",
+  "das Ende des Plans",
+  "la fin du plan"
+ ],
+ "the quiz": [
+  "el test",
+  "o teste",
+  "das Quiz",
+  "le quiz"
+ ],
+ "this plan": [
+  "este plan",
+  "este plano",
+  "diesem Plan",
+  "ce plan"
+ ],
+ "this set": [
+  "este bloque",
+  "este bloco",
+  "diesen Block",
+  "ce bloc"
+ ],
+ "today": [
+  "hoy",
+  "hoje",
+  "heute",
+  "aujourd’hui"
+ ],
+ "today &middot; {n} to go": [
+  "hoy &middot; {n} por ver",
+  "hoje &middot; {n} por ver",
+  "heute &middot; {n} offen",
+  "aujourd&rsquo;hui &middot; {n} à voir"
+ ],
+ "took off {n} tag": [
+  "quitó {n} etiqueta",
+  "tirou {n} etiqueta",
+  "{n} Tag entfernt",
+  "retiré {n} étiquette"
+ ],
+ "took off {n} tags": [
+  "quitó {n} etiquetas",
+  "tirou {n} etiquetas",
+  "{n} Tags entfernt",
+  "retiré {n} étiquettes"
+ ],
+ "took out {name}": [
+  "quitó {name}",
+  "tirou {name}",
+  "{name} entfernt",
+  "retiré {name}"
+ ],
+ "took out {name} and {other}": [
+  "quitó {name} y {other}",
+  "tirou {name} e {other}",
+  "{name} und {other} entfernt",
+  "retiré {name} et {other}"
+ ],
+ "took out {n} sets": [
+  "quitó {n} bloques",
+  "tirou {n} blocos",
+  "{n} Blöcke entfernt",
+  "retiré {n} blocs"
+ ],
+ "updated {name}": [
+  "actualizó {name}",
+  "atualizou {name}",
+  "{name} aktualisiert",
+  "mis à jour {name}"
+ ],
+ "updated {name} and {other}": [
+  "actualizó {name} y {other}",
+  "atualizou {name} e {other}",
+  "{name} und {other} aktualisiert",
+  "mis à jour {name} et {other}"
+ ],
+ "updated {n} sets": [
+  "actualizó {n} bloques",
+  "atualizou {n} blocos",
+  "{n} Blöcke aktualisiert",
+  "mis à jour {n} blocs"
+ ],
+ "week {n} of {of}": [
+  "semana {n} de {of}",
+  "semana {n} de {of}",
+  "Woche {n} von {of}",
+  "semaine {n} sur {of}"
+ ],
+ "you: {n} review due": [
+  "tú: {n} repaso pendiente",
+  "você: {n} revisão pendente",
+  "du: {n} Wiederholung fällig",
+  "vous : {n} révision à faire"
+ ],
+ "you: {n} reviews due": [
+  "tú: {n} repasos pendientes",
+  "você: {n} revisões pendentes",
+  "du: {n} Wiederholungen fällig",
+  "vous : {n} révisions à faire"
+ ],
+ "your dates +{n} day": [
+  "tus fechas +{n} día",
+  "suas datas +{n} dia",
+  "deine Termine +{n} Tag",
+  "vos dates +{n} jour"
+ ],
+ "your dates +{n} days": [
+  "tus fechas +{n} días",
+  "suas datas +{n} dias",
+  "deine Termine +{n} Tage",
+  "vos dates +{n} jours"
+ ],
+ "your squad": [
+  "tu grupo",
+  "seu grupo",
+  "deiner Gruppe",
+  "votre groupe"
+ ],
+ "{a} to {b}": [
+  "{a} a {b}",
+  "{a} a {b}",
+  "{a} bis {b}",
+  "{a} à {b}"
+ ],
+ "{cards} Anki won&rsquo;t show you before {when}": [
+  "{cards} que Anki no te mostrará antes de {when}",
+  "{cards} que o Anki não vai mostrar antes de {when}",
+  "{cards}, die Anki dir vor {when} nicht zeigt",
+  "{cards} qu&rsquo;Anki ne vous montrera pas avant {when}"
+ ],
+ "{day} is heavy:": [
+  "{day} viene cargado:",
+  "{day} está pesado:",
+  "{day} wird viel:",
+  "{day} est chargé :"
+ ],
+ "{day}, today: its sets": [
+  "{day}, hoy: sus bloques",
+  "{day}, hoje: os blocos do dia",
+  "{day}, heute: seine Blöcke",
+  "{day}, aujourd’hui : ses blocs"
+ ],
+ "{day}: its sets": [
+  "{day}: sus bloques",
+  "{day}: os blocos do dia",
+  "{day}: seine Blöcke",
+  "{day} : ses blocs"
+ ],
+ "{day}: {what}, in a filtered deck.": [
+  "{day}: {what}, en un mazo filtrado.",
+  "{day}: {what}, em um baralho filtrado.",
+  "{day}: {what}, in einem Auswahlstapel.",
+  "{day} : {what}, dans un paquet filtré."
+ ],
+ "{dow} {day} {month}": [
+  "{dow} {day} {month}",
+  "{dow} {day} {month}",
+  "{dow}, {day}. {month}",
+  "{dow} {day} {month}"
+ ],
+ "{h} h {m}": [
+  "{h} h {m}",
+  "{h} h {m}",
+  "{h} Std {m}",
+  "{h} h {m}"
+ ],
+ "{leeches} stay suspended": [
+  "{leeches} siguen suspendidas",
+  "{leeches} continuam suspensos",
+  "{leeches} bleiben ausgesetzt",
+  "{leeches} restent suspendues"
+ ],
+ "{leeches} stays suspended": [
+  "{leeches} sigue suspendida",
+  "{leeches} continua suspenso",
+  "{leeches} bleibt ausgesetzt",
+  "{leeches} reste suspendue"
+ ],
+ "{lo} to {hi}. Three days is about {a} more new a day; a week, about {b}.": [
+  "De {lo} a {hi}. Tres días son unas {a} nuevas más al día; una semana, unas {b}.",
+  "De {lo} a {hi}. Três dias dão cerca de {a} novos a mais por dia; uma semana, cerca de {b}.",
+  "{lo} bis {hi}. Drei Tage sind etwa {a} neue mehr pro Tag; eine Woche etwa {b}.",
+  "De {lo} à {hi}. Trois jours, c’est environ {a} nouvelles de plus par jour ; une semaine, environ {b}."
+ ],
+ "{name} and {more} more have {n} left.": [
+  "A {name} y {more} más les quedan {n}.",
+  "{name} e mais {more} têm {n} restantes.",
+  "{name} und {more} weitere haben noch {n} übrig.",
+  "{name} et {more} de plus ont encore {n} restantes."
+ ],
+ "{name} and {more} more have {n} left; today {set} opened {total}.": [
+  "A {name} y {more} más les quedan {n}; hoy {set} abrió {total}.",
+  "{name} e mais {more} têm {n} restantes; hoje {set} abriu {total}.",
+  "{name} und {more} weitere haben noch {n} übrig; heute hat {set} {total} geöffnet.",
+  "{name} et {more} de plus ont encore {n} restantes ; aujourd’hui {set} en a ouvert {total}."
+ ],
+ "{name} and {more} more have {n} left; today {set} opens {total}.": [
+  "A {name} y {more} más les quedan {n}; hoy {set} abre {total}.",
+  "{name} e mais {more} têm {n} restantes; hoje {set} abre {total}.",
+  "{name} und {more} weitere haben noch {n} übrig; heute öffnet {set} {total}.",
+  "{name} et {more} de plus ont encore {n} restantes ; aujourd’hui {set} en ouvre {total}."
+ ],
+ "{name} and {n} more": [
+  "{name} y {n} más",
+  "{name} e mais {n}",
+  "{name} und {n} weitere",
+  "{name} et {n} de plus"
+ ],
+ "{name} asked": [
+  "{name} preguntó",
+  "{name} perguntou",
+  "{name} hat gefragt",
+  "{name} a demandé"
+ ],
+ "{name} has {n} left.": [
+  "A {name} le quedan {n}.",
+  "{name} tem {n} restantes.",
+  "{name} hat noch {n} übrig.",
+  "{name} a encore {n} restantes."
+ ],
+ "{name} has {n} left; today {set} opened {total}.": [
+  "A {name} le quedan {n}; hoy {set} abrió {total}.",
+  "{name} tem {n} restantes; hoje {set} abriu {total}.",
+  "{name} hat noch {n} übrig; heute hat {set} {total} geöffnet.",
+  "{name} a encore {n} restantes ; aujourd’hui {set} en a ouvert {total}."
+ ],
+ "{name} has {n} left; today {set} opens {total}.": [
+  "A {name} le quedan {n}; hoy {set} abre {total}.",
+  "{name} tem {n} restantes; hoje {set} abre {total}.",
+  "{name} hat noch {n} übrig; heute öffnet {set} {total}.",
+  "{name} a encore {n} restantes ; aujourd’hui {set} en ouvre {total}."
+ ],
+ "{name} is new on this computer. Hold back {cards} of its later sets until their day?": [
+  "{name} es nuevo en este ordenador. ¿Retener {cards} de sus bloques posteriores hasta su día?",
+  "{name} é novo neste computador. Reter {cards} dos blocos posteriores até o dia deles?",
+  "{name} ist neu auf diesem Computer. {cards} seiner späteren Blöcke bis zu ihrem Tag zurückhalten?",
+  "{name} est nouveau sur cet ordinateur. Retenir {cards} de ses blocs à venir jusqu’à leur date ?"
+ ],
+ "{name} is new on this computer. Hold back {cards} of its later sets until you open them?": [
+  "{name} es nuevo en este ordenador. ¿Retener {cards} de sus bloques posteriores hasta que los abras?",
+  "{name} é novo neste computador. Reter {cards} dos blocos posteriores até você abri-los?",
+  "{name} ist neu auf diesem Computer. {cards} seiner späteren Blöcke zurückhalten, bis du sie öffnest?",
+  "{name} est nouveau sur cet ordinateur. Retenir {cards} de ses blocs à venir jusqu’à ce que vous les ouvriez ?"
+ ],
+ "{name} is today": [
+  "{name} es hoy",
+  "{name} é hoje",
+  "{name} ist heute",
+  "{name}, c’est aujourd’hui"
+ ],
+ "{name} is yours now.": [
+  "{name} ya es tuyo.",
+  "{name} agora é seu.",
+  "{name} gehört jetzt dir.",
+  "{name} est à vous désormais."
+ ],
+ "{name} is {day}. Make it your exam?": [
+  "{name} es el {day}. ¿Lo haces tu examen?",
+  "{name} é em {day}. Tornar sua prova?",
+  "{name} ist am {day}. Zu deiner Prüfung machen?",
+  "{name} est le {day}. En faire votre examen ?"
+ ],
+ "{name} moved to {day}.": [
+  "{name} pasó al {day}.",
+  "{name} foi para {day}.",
+  "{name} auf {day} verschoben.",
+  "{name} déplacé au {day}."
+ ],
+ "{name} moved to {day}. Move your exam too?": [
+  "{name} pasó al {day}. ¿Mover también tu examen?",
+  "{name} foi para {day}. Mover sua prova também?",
+  "{name} wurde auf {day} verschoben. Deine Prüfung auch verschieben?",
+  "{name} est déplacé au {day}. Déplacer aussi votre examen ?"
+ ],
+ "{name} on {day}": [
+  "{name} el {day}",
+  "{name}, {day}",
+  "{name} am {day}",
+  "{name} le {day}"
+ ],
+ "{name} was due {day}. {n} card not seen yet.": [
+  "{name} era para el {day}. {n} tarjeta aún sin ver.",
+  "{name} era para {day}. {n} cartão ainda não visto.",
+  "{name} war am {day} fällig. {n} Karte noch nicht gesehen.",
+  "{name} était pour {day}. {n} carte pas encore vue."
+ ],
+ "{name} was due {day}. {n} cards not seen yet.": [
+  "{name} era para el {day}. {n} tarjetas aún sin ver.",
+  "{name} era para {day}. {n} cartões ainda não vistos.",
+  "{name} war am {day} fällig. {n} Karten noch nicht gesehen.",
+  "{name} était pour {day}. {n} cartes pas encore vues."
+ ],
+ "{name} · by ID": [
+  "{name} · por ID",
+  "{name} · por ID",
+  "{name} · per ID",
+  "{name} · par ID"
+ ],
+ "{name} · single cards": [
+  "{name} · tarjetas sueltas",
+  "{name} · cartões avulsos",
+  "{name} · einzelne Karten",
+  "{name} · cartes seules"
+ ],
+ "{name} · {n} picked": [
+  "{name} · {n} elegidas",
+  "{name} · {n} escolhidos",
+  "{name} · {n} ausgewählt",
+  "{name} · {n} choisies"
+ ],
+ "{name} · {owner}’s plan": [
+  "{name} · plan de {owner}",
+  "{name} · plano de {owner}",
+  "{name} · Plan von {owner}",
+  "{name} · plan de {owner}"
+ ],
+ "{name}'s tags are in your Anki: {tags} and more.": [
+  "Las etiquetas de {name} están en tu Anki: {tags} y más.",
+  "As etiquetas de {name} estão no seu Anki: {tags} e mais.",
+  "Die Tags von {name} sind in deinem Anki: {tags} und mehr.",
+  "Les étiquettes de {name} sont dans votre Anki : {tags} et d’autres."
+ ],
+ "{name}'s tags are in your Anki: {tags}.": [
+  "Las etiquetas de {name} están en tu Anki: {tags}.",
+  "As etiquetas de {name} estão no seu Anki: {tags}.",
+  "Die Tags von {name} sind in deinem Anki: {tags}.",
+  "Les étiquettes de {name} sont dans votre Anki : {tags}."
+ ],
+ "{name}, all {n} seen": [
+  "{name}, las {n} vistas",
+  "{name}, todos os {n} vistos",
+  "{name}, alle {n} gesehen",
+  "{name}, les {n} vues"
+ ],
+ "{name}, today": [
+  "{name}, hoy",
+  "{name}, hoje",
+  "{name}, heute",
+  "{name}, aujourd’hui"
+ ],
+ "{name}, {n} left": [
+  "{name}, quedan {n}",
+  "{name}, faltam {n}",
+  "{name}, {n} übrig",
+  "{name}, {n} restantes"
+ ],
+ "{name}: {n} card of sets you haven't opened are open already. Hold them back until you open their set?": [
+  "{name}: {n} tarjeta de bloques que no has abierto ya está abierta. ¿Retenerla hasta que abras su bloque?",
+  "{name}: {n} cartão de blocos que você não abriu já está aberto. Reter até você abrir o bloco dele?",
+  "{name}: {n} Karte aus ungeöffneten Blöcken ist schon offen. Zurückhalten, bis du ihren Block öffnest?",
+  "{name} : {n} carte de blocs que vous n’avez pas ouverts est déjà ouverte. La retenir jusqu’à l’ouverture de son bloc ?"
+ ],
+ "{name}: {n} cards of sets you haven't opened are open already. Hold them back until you open their set?": [
+  "{name}: {n} tarjetas de bloques que no has abierto ya están abiertas. ¿Retenerlas hasta que abras su bloque?",
+  "{name}: {n} cartões de blocos que você não abriu já estão abertos. Reter até você abrir o bloco deles?",
+  "{name}: {n} Karten aus ungeöffneten Blöcken sind schon offen. Zurückhalten, bis du ihren Block öffnest?",
+  "{name} : {n} cartes de blocs que vous n’avez pas ouverts sont déjà ouvertes. Les retenir jusqu’à l’ouverture de leur bloc ?"
+ ],
+ "{n} already seen or in your Anki": [
+  "{n} ya vistas o en tu Anki",
+  "{n} já vistos ou no seu Anki",
+  "{n} schon gesehen oder in deinem Anki",
+  "{n} déjà vues ou dans votre Anki"
+ ],
+ "{n} behind": [
+  "{n} con retraso",
+  "{n} em atraso",
+  "{n} im Rückstand",
+  "{n} en retard"
+ ],
+ "{n} card": [
+  "{n} tarjeta",
+  "{n} cartão",
+  "{n} Karte",
+  "{n} carte"
+ ],
+ "{n} card open from its sets": [
+  "{n} tarjeta abierta de sus bloques",
+  "{n} cartão aberto dos blocos dele",
+  "{n} Karte aus seinen Blöcken offen",
+  "{n} carte ouverte de ses blocs"
+ ],
+ "{n} cards": [
+  "{n} tarjetas",
+  "{n} cartões",
+  "{n} Karten",
+  "{n} cartes"
+ ],
+ "{n} cards open from its sets": [
+  "{n} tarjetas abiertas de sus bloques",
+  "{n} cartões abertos dos blocos dele",
+  "{n} Karten aus seinen Blöcken offen",
+  "{n} cartes ouvertes de ses blocs"
+ ],
+ "{n} catching up": [
+  "{n} poniéndose al día",
+  "{n} sendo postos em dia",
+  "{n} beim Aufholen",
+  "{n} en rattrapage"
+ ],
+ "{n} day": [
+  "{n} día",
+  "{n} dia",
+  "{n} Tag",
+  "{n} jour"
+ ],
+ "{n} day, {new} new": [
+  "{n} día, {new} nuevas",
+  "{n} dia, {new} novos",
+  "{n} Tag, {new} neu",
+  "{n} jour, {new} nouvelles"
+ ],
+ "{n} days behind on {name}": [
+  "{n} días de retraso en {name}",
+  "{n} dias de atraso em {name}",
+  "{n} Tage im Rückstand bei {name}",
+  "{n} jours de retard sur {name}"
+ ],
+ "{n} days, {new} new": [
+  "{n} días, {new} nuevas",
+  "{n} dias, {new} novos",
+  "{n} Tage, {new} neu",
+  "{n} jours, {new} nouvelles"
+ ],
+ "{n} done": [
+  "{n} hechos",
+  "{n} feitos",
+  "{n} erledigt",
+  "{n} terminés"
+ ],
+ "{n} due": [
+  "{n} pendientes",
+  "{n} pendentes",
+  "{n} fällig",
+  "{n} à réviser"
+ ],
+ "{n} following": [
+  "{n} lo siguen",
+  "{n} seguindo",
+  "{n} folgen",
+  "{n} le suivent"
+ ],
+ "{n} leech": [
+  "{n} sanguijuela",
+  "{n} sanguessuga",
+  "{n} Lernbremse",
+  "{n} sangsue"
+ ],
+ "{n} leeches": [
+  "{n} sanguijuelas",
+  "{n} sanguessugas",
+  "{n} Lernbremsen",
+  "{n} sangsues"
+ ],
+ "{n} left": [
+  "{n} restantes",
+  "{n} restantes",
+  "{n} übrig",
+  "{n} restantes"
+ ],
+ "{n} min": [
+  "{n} min",
+  "{n} min",
+  "{n} Min",
+  "{n} min"
+ ],
+ "{n} more": [
+  "{n} más",
+  "mais {n}",
+  "{n} weitere",
+  "{n} de plus"
+ ],
+ "{n} more day of prep": [
+  "{n} día más de preparación",
+  "mais {n} dia de preparo",
+  "noch {n} Tag Vorbereitung",
+  "encore {n} jour de préparation"
+ ],
+ "{n} more days of prep": [
+  "{n} días más de preparación",
+  "mais {n} dias de preparo",
+  "noch {n} Tage Vorbereitung",
+  "encore {n} jours de préparation"
+ ],
+ "{n} more picked": [
+  "{n} elegidas más",
+  "mais {n} escolhidos",
+  "{n} weitere ausgewählt",
+  "{n} autres choisies"
+ ],
+ "{n} moved set goes back: {sets}": [
+  "{n} bloque movido vuelve a su sitio: {sets}",
+  "{n} bloco movido volta ao lugar: {sets}",
+  "{n} verschobener Block geht zurück: {sets}",
+  "{n} bloc déplacé revient à sa place : {sets}"
+ ],
+ "{n} moved sets go back: {sets}": [
+  "{n} bloques movidos vuelven a su sitio: {sets}",
+  "{n} blocos movidos voltam ao lugar: {sets}",
+  "{n} verschobene Blöcke gehen zurück: {sets}",
+  "{n} blocs déplacés reviennent à leur place : {sets}"
+ ],
+ "{n} new": [
+  "{n} nuevas",
+  "{n} novos",
+  "{n} neu",
+  "{n} nouvelles"
+ ],
+ "{n} new &middot; waiting": [
+  "{n} nuevas &middot; en espera",
+  "{n} novos &middot; esperando",
+  "{n} neu &middot; wartet",
+  "{n} nouvelles &middot; en attente"
+ ],
+ "{n} new across {plans} plans on top of {rev} reviews.": [
+  "{n} nuevas entre {plans} planes, además de {rev} repasos.",
+  "{n} novos em {plans} planos, além de {rev} revisões.",
+  "{n} neue über {plans} Pläne, zusätzlich zu {rev} Wiederholungen.",
+  "{n} nouvelles sur {plans} plans, en plus de {rev} révisions."
+ ],
+ "{n} new across {plans} plans.": [
+  "{n} nuevas entre {plans} planes.",
+  "{n} novos em {plans} planos.",
+  "{n} neue über {plans} Pläne.",
+  "{n} nouvelles sur {plans} plans."
+ ],
+ "{n} new from earlier days waiting": [
+  "{n} nuevas de días anteriores esperando",
+  "{n} novos de dias anteriores esperando",
+  "{n} neue aus früheren Tagen warten",
+  "{n} nouvelles des jours précédents en attente"
+ ],
+ "{n} new in {plan}": [
+  "{n} nuevas en {plan}",
+  "{n} novos em {plan}",
+  "{n} neue in {plan}",
+  "{n} nouvelles dans {plan}"
+ ],
+ "{n} new on top of {rev} reviews.": [
+  "{n} nuevas, además de {rev} repasos.",
+  "{n} novos, além de {rev} revisões.",
+  "{n} neue, zusätzlich zu {rev} Wiederholungen.",
+  "{n} nouvelles, en plus de {rev} révisions."
+ ],
+ "{n} new.": [
+  "{n} nuevas.",
+  "{n} novos.",
+  "{n} neue.",
+  "{n} nouvelles."
+ ],
+ "{n} not seen yet": [
+  "{n} aún sin ver",
+  "{n} ainda não vistos",
+  "{n} noch nicht gesehen",
+  "{n} pas encore vues"
+ ],
+ "{n} note": [
+  "{n} nota",
+  "{n} nota",
+  "{n} Notiz",
+  "{n} note"
+ ],
+ "{n} notes": [
+  "{n} notas",
+  "{n} notas",
+  "{n} Notizen",
+  "{n} notes"
+ ],
+ "{n} of their notes aren&rsquo;t in your deck.": [
+  "{n} de sus notas no están en tu mazo.",
+  "{n} das notas delas não estão no seu baralho.",
+  "{n} ihrer Notizen sind nicht in deinem Stapel.",
+  "{n} de leurs notes ne sont pas dans votre paquet."
+ ],
+ "{n} of {of} exact cards aren’t in your deck.": [
+  "{n} de {of} tarjetas exactas no están en tu mazo.",
+  "{n} de {of} cartões exatos não estão no seu baralho.",
+  "{n} von {of} genauen Karten sind nicht in deinem Stapel.",
+  "{n} cartes exactes sur {of} ne sont pas dans votre paquet."
+ ],
+ "{n} of {of} new": [
+  "{n} de {of} nuevas",
+  "{n} de {of} novos",
+  "{n} von {of} neu",
+  "{n} nouvelles sur {of}"
+ ],
+ "{n} of {of} seen": [
+  "{n} de {of} vistas",
+  "{n} de {of} vistos",
+  "{n} von {of} gesehen",
+  "{n} vues sur {of}"
+ ],
+ "{n} of {of} sets": [
+  "{n} de {of} bloques",
+  "{n} de {of} blocos",
+  "{n} von {of} Blöcken",
+  "{n} blocs sur {of}"
+ ],
+ "{n} pick isn&rsquo;t in your copy": [
+  "{n} elegida no está en tu copia",
+  "{n} escolhido não está na sua cópia",
+  "{n} Auswahl ist nicht in deiner Kopie",
+  "{n} carte choisie est absente de votre copie"
+ ],
+ "{n} picks aren&rsquo;t in your copy": [
+  "{n} elegidas no están en tu copia",
+  "{n} escolhidos não estão na sua cópia",
+  "{n} ausgewählte sind nicht in deiner Kopie",
+  "{n} cartes choisies sont absentes de votre copie"
+ ],
+ "{n} set": [
+  "{n} bloque",
+  "{n} bloco",
+  "{n} Block",
+  "{n} bloc"
+ ],
+ "{n} set uses a tag your deck names differently, matched by their cards.": [
+  "{n} bloque usa una etiqueta que tu mazo nombra distinto; se emparejó por sus tarjetas.",
+  "{n} bloco usa uma etiqueta que seu baralho nomeia diferente; foi casado pelos cartões.",
+  "{n} Block nutzt ein Tag, das dein Stapel anders nennt; über seine Karten zugeordnet.",
+  "{n} bloc utilise une étiquette que votre paquet nomme autrement ; associé par ses cartes."
+ ],
+ "{n} set, {new} new": [
+  "{n} bloque, {new} nuevas",
+  "{n} bloco, {new} novos",
+  "{n} Block, {new} neu",
+  "{n} bloc, {new} nouvelles"
+ ],
+ "{n} sets": [
+  "{n} bloques",
+  "{n} blocos",
+  "{n} Blöcke",
+  "{n} blocs"
+ ],
+ "{n} sets use tags your deck names differently, matched by their cards.": [
+  "{n} bloques usan etiquetas que tu mazo nombra distinto; se emparejaron por sus tarjetas.",
+  "{n} blocos usam etiquetas que seu baralho nomeia diferente; foram casados pelos cartões.",
+  "{n} Blöcke nutzen Tags, die dein Stapel anders nennt; über ihre Karten zugeordnet.",
+  "{n} blocs utilisent des étiquettes que votre paquet nomme autrement ; associés par leurs cartes."
+ ],
+ "{n} sets, {new} new": [
+  "{n} bloques, {new} nuevas",
+  "{n} blocos, {new} novos",
+  "{n} Blöcke, {new} neu",
+  "{n} blocs, {new} nouvelles"
+ ],
+ "{n} single card": [
+  "{n} tarjeta suelta",
+  "{n} cartão avulso",
+  "{n} einzelne Karte",
+  "{n} carte seule"
+ ],
+ "{n} single cards": [
+  "{n} tarjetas sueltas",
+  "{n} cartões avulsos",
+  "{n} einzelne Karten",
+  "{n} cartes seules"
+ ],
+ "{n} skipped": [
+  "{n} omitidos",
+  "{n} pulados",
+  "{n} übersprungen",
+  "{n} sautés"
+ ],
+ "{n} skipped set comes back: {sets}": [
+  "{n} bloque omitido vuelve: {sets}",
+  "{n} bloco pulado volta: {sets}",
+  "{n} übersprungener Block kommt zurück: {sets}",
+  "{n} bloc sauté revient : {sets}"
+ ],
+ "{n} skipped sets come back: {sets}": [
+  "{n} bloques omitidos vuelven: {sets}",
+  "{n} blocos pulados voltam: {sets}",
+  "{n} übersprungene Blöcke kommen zurück: {sets}",
+  "{n} blocs sautés reviennent : {sets}"
+ ],
+ "{n} study days": [
+  "{n} días de estudio",
+  "{n} dias de estudo",
+  "{n} Lerntage",
+  "{n} jours d’étude"
+ ],
+ "{n} to come": [
+  "{n} por venir",
+  "{n} por vir",
+  "{n} kommen noch",
+  "{n} à venir"
+ ],
+ "{n} to go": [
+  "{n} por ver",
+  "{n} por ver",
+  "{n} offen",
+  "{n} à voir"
+ ],
+ "{n} to go today": [
+  "{n} por ver hoy",
+  "{n} por ver hoje",
+  "{n} heute offen",
+  "{n} à voir aujourd’hui"
+ ],
+ "{n} to go today, in your decks": [
+  "{n} por ver hoy, en tus mazos",
+  "{n} por ver hoje, nos seus baralhos",
+  "{n} heute offen, in deinen Stapeln",
+  "{n} à voir aujourd’hui, dans vos paquets"
+ ],
+ "{n} today": [
+  "{n} hoy",
+  "{n} hoje",
+  "{n} heute",
+  "{n} aujourd’hui"
+ ],
+ "{n} week": [
+  "{n} semana",
+  "{n} semana",
+  "{n} Woche",
+  "{n} semaine"
+ ],
+ "{n}d": [
+  "{n} d",
+  "{n} d",
+  "{n} T",
+  "{n} j"
+ ],
+ "{n}m": [
+  "{n} min",
+  "{n} min",
+  "{n} Min",
+  "{n} min"
+ ],
+ "{plan}'s followers get it with its next update.": [
+  "Quienes siguen {plan} la reciben con su próxima actualización.",
+  "Quem segue {plan} recebe na próxima atualização.",
+  "Wer {plan} folgt, bekommt es mit dem nächsten Update.",
+  "Ceux qui suivent {plan} la reçoivent à sa prochaine mise à jour."
+ ],
+ "{sets} and {n} more": [
+  "{sets} y {n} más",
+  "{sets} e mais {n}",
+  "{sets} und {n} weitere",
+  "{sets} et {n} de plus"
+ ],
+ "{sets} open tomorrow morning": [
+  "{sets} se abren mañana por la mañana",
+  "{sets} abrem amanhã de manhã",
+  "{sets} öffnen sich morgen früh",
+  "{sets} s’ouvrent demain matin"
+ ],
+ "{sets} opens tomorrow morning": [
+  "{sets} se abre mañana por la mañana",
+  "{sets} abre amanhã de manhã",
+  "{sets} öffnet sich morgen früh",
+  "{sets} s’ouvre demain matin"
+ ],
+ "{sets} wait for tomorrow morning": [
+  "{sets} esperan a mañana por la mañana",
+  "{sets} esperam até amanhã de manhã",
+  "{sets} warten bis morgen früh",
+  "{sets} attendent demain matin"
+ ],
+ "{sets} waits for tomorrow morning": [
+  "{sets} espera a mañana por la mañana",
+  "{sets} espera até amanhã de manhã",
+  "{sets} wartet bis morgen früh",
+  "{sets} attend demain matin"
+ ],
+ "{sets}, then {name} on {day}": [
+  "{sets}, luego {name} el {day}",
+  "{sets}, depois {name} em {day}",
+  "{sets}, dann {name} am {day}",
+  "{sets}, puis {name} le {day}"
+ ],
+ "{week}: {n} of {of} sessions, {new} new cards, on track.": [
+  "{week}: {n} de {of} sesiones, {new} tarjetas nuevas, al día.",
+  "{week}: {n} de {of} sessões, {new} cartões novos, em dia.",
+  "{week}: {n} von {of} Sitzungen, {new} neue Karten, im Plan.",
+  "{week} : {n} séances sur {of}, {new} nouvelles cartes, dans les temps."
+ ],
+ "{week}: {n} of {of} sessions, {new} new cards.": [
+  "{week}: {n} de {of} sesiones, {new} tarjetas nuevas.",
+  "{week}: {n} de {of} sessões, {new} cartões novos.",
+  "{week}: {n} von {of} Sitzungen, {new} neue Karten.",
+  "{week} : {n} séances sur {of}, {new} nouvelles cartes."
+ ],
+ "{who} added {n} card to {what}.": [
+  "{who} añadió {n} tarjeta a {what}.",
+  "{who} adicionou {n} cartão a {what}.",
+  "{who} hat {n} Karte zu {what} hinzugefügt.",
+  "{who} a ajouté {n} carte à {what}."
+ ],
+ "{who} added {n} cards to {what}.": [
+  "{who} añadió {n} tarjetas a {what}.",
+  "{who} adicionou {n} cartões a {what}.",
+  "{who} hat {n} Karten zu {what} hinzugefügt.",
+  "{who} a ajouté {n} cartes à {what}."
+ ],
+ "{who} asked you to co-write {name}. Its tags would go on your notes in Anki.": [
+  "{who} te pidió coescribir {name}. Sus etiquetas irían a tus notas en Anki.",
+  "{who} pediu para você coescrever {name}. As etiquetas dele iriam para suas notas no Anki.",
+  "{who} möchte, dass du an {name} mitschreibst. Seine Tags kämen auf deine Notizen in Anki.",
+  "{who} vous a proposé de coécrire {name}. Ses étiquettes iraient sur vos notes dans Anki."
+ ],
+ "{who} offered you {name} to keep.": [
+  "{who} te ofreció quedarte con {name}.",
+  "{who} ofereceu {name} para ficar com você.",
+  "{who} hat dir {name} zum Behalten angeboten.",
+  "{who} vous a proposé de garder {name}."
+ ],
+ "{who} offered {squad} a plan: {name}": [
+  "{who} ofreció un plan a {squad}: {name}",
+  "{who} ofereceu um plano a {squad}: {name}",
+  "{who} hat {squad} einen Plan angeboten: {name}",
+  "{who} a proposé un plan à {squad} : {name}"
+ ],
+ "{who} {what}.": [
+  "{who} {what}.",
+  "{who} {what}.",
+  "{who} hat {what}.",
+  "{who} a {what}."
+ ],
+ "… {n} more set": [
+  "… {n} bloque más",
+  "… mais {n} bloco",
+  "… {n} weiterer Block",
+  "… {n} bloc de plus"
+ ],
+ "… {n} more sets": [
+  "… {n} bloques más",
+  "… mais {n} blocos",
+  "… {n} weitere Blöcke",
+  "… {n} blocs de plus"
+ ]
+}

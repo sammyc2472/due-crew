@@ -861,6 +861,39 @@ def test_commands_have_handlers():
           new <= cmds and not (cmds - handled - {"plan"}), sorted(cmds - handled))
 
 
+def test_plans_say_their_phrases_in_another_language_v3100():
+    """3.10.0, languages: the plan's card, a change note and the Behind… sheet say their phrases in the
+    language in use (a stand-in one here: the files get theirs when the round's parts are merged), each
+    phrase whole, names and numbers in their places; English after, as before."""
+    from due_crew import words
+    was = dict(words._state)
+    card = {"id": "p1", "title": "Path Book", "sub": "", "week": [], "name": "Path Book", "status": {"togo": 12, "behind": 0},
+            "behind": {"left": 1031, "name": "Inflammation", "more": 2}}
+    doc = {"units": [{"id": "a", "name": "Renal", "opens": "2026-10-17", "tags": ["x"]},
+                     {"id": "b", "name": "Heme", "opens": "2026-10-18", "tags": ["y"]}]}
+    old = {"a": ["Renal", "2026-10-16", P.snapshot(doc)["a"][2]]}
+    said = lambda: "".join(t for t, _b in P.change_note("Dre", old, doc))
+    en = (board._plan_card_html(card), said())
+    try:
+        words._state.update(lang="xx", cat={
+            "Behind": "ZURÜCK", "{name}, {n} left": "noch {n}: {name}", "{name} and {n} more": "{name} plus {n}",
+            "{n} to go today": "heute {n}", "Your plans&hellip;": "PLÄNE&hellip;", "{who} {what}.": "{who} hat {what}.",
+            "moved {name} to {day}": "{name} auf {day} gelegt", "added {name}": "{name} dazu", " and ": " und ",
+            "{dow} {day} {month}": "{dow}, {day}. {month}", "Sat": "Sa", "Oct": "Okt", "Slide {n} days": "{n} Tage schieben"})
+        html, note = board._plan_card_html(card), said()
+        sheet = P.behind_sheet("Path Book", {"name": "Inflammation", "more": 0, "left": 31, "days": 2, "uids": ["a"]}, {"lessons": []}, 0)
+    finally:
+        words._state.update(was)
+    check("languages: the plan's card says its phrases in the language in use, the count where that language puts it",
+          "ZURÜCK &middot; noch 1,031: Inflammation plus 2" in html and "heute <b>12</b>" in html and "PLÄNE&hellip;" in html
+          and 'class="late">Behind' not in html, html)
+    check("languages: a change note is one phrase, its names still bold in their places",
+          note == "Dre hat Renal auf Sa, 17. Okt gelegt und Heme dazu." and sheet["ways"][0]["label"] == "2 Tage schieben", (note, sheet))
+    check("languages: and English after, as before",
+          (board._plan_card_html(card), said()) == en and en[1] == "Dre moved Renal to Sat 17 Oct and added Heme."
+          and "Behind &middot; Inflammation and 2 more, 1,031 left" in en[0], en)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
