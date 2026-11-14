@@ -1434,7 +1434,7 @@ def test_recover_by_deck_count_v393():
     import inspect
     src = inspect.getsource(F.ask_reach)
     check("recover 3.9.3: the question is the board's sheet, Not these its other answer",
-          "sheets.confirm(" in src and 'no_label="Not these"' in src and "gen == app.generation" in src)
+          "sheets.confirm(" in src and 'no_label=_t("Not these")' in src and "gen == app.generation" in src)
 
 
 def test_history_import():

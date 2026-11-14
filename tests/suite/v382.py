@@ -3183,7 +3183,7 @@ def test_sheets_v391():
           "a good-luck line, a tip, hold back, reset, change deck, stop following, the founder's tools",
           all(k in src[f] for f, k in (("social.py", 'sheets.ask_text(_t("Status")'), ("__init__.py", 'sheets.ask_text(_t("Display name")'),
                                        ("__init__.py", 'sheets.confirm(_t("Sign out?")'), ("__init__.py", 'sheets.confirm(_t("Delete account?")'),
-                                       ("due_flow.py", 'sheets.ask_text("Edit to-do"'), ("team_flow.py", 'sheets.confirm(_t("Join this plan'),
+                                       ("due_flow.py", 'sheets.ask_text(_t("Edit to-do")'), ("team_flow.py", 'sheets.confirm(_t("Join this plan'),
                                        ("team_flow.py", 'sheets.ask_text(_t("Reply")'), ("team_flow.py", 'sheets.ask_text(_t("Ask the squad")'),
                                        ("together.py", 'sheets.ask_text(_t("Good-luck card")'), ("together.py", 'sheets.ask_text(_t("Send a tip")'),
                                        ("plan_flow.py", "sheets.confirm(title, text, yes"), ("plan_flow.py", 'sheets.confirm(_t("Reset to default?")'),

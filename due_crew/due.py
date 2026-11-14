@@ -19,7 +19,9 @@ import datetime
 import re
 import uuid
 
-NAME = "Due"
+from .words import later as _later, month as _month_name, t as _t, weekday as _weekday
+
+NAME = _later("Due")
 TABS = ("today", "upcoming", "later")
 AHEAD = 14  # Upcoming: today and the next two weeks
 MAX_OPEN = 60  # my own items not yet done
@@ -27,12 +29,17 @@ MAX_TEXT = 140
 KEEP_DONE = 7  # days a ticked item stays (crossed out on its day)
 MAX_TICKS = 200
 MAX_AHEAD_DAYS = 730  # a day further out than two years is a typo
-TODO_KINDS = {"watch": "▶ Watch", "read": "Read", "do": "Do"}
+TODO_KINDS = {"watch": _later("▶ Watch"), "read": _later("Read"), "do": _later("Do")}  # said with _t where it's drawn
 SHOW_BEHIND = 6  # own items shown in Behind before "N more"
 
 
 def d(iso):
     return datetime.date.fromisoformat(str(iso))
+
+
+def _wdm(x):
+    """"Fri 16 Oct", in the language in use."""
+    return _t("{wd} {day} {month}", wd=_weekday(x.weekday()), day=x.day, month=_month_name(x.month))
 
 
 def iso(day):
@@ -222,10 +229,10 @@ def parse_repeat(text):
 def repeat_label(r):
     """"every day", "weekdays", "every Mon", "every Mon, Thu"."""
     if r == "0123456":
-        return "every day"
+        return _t("every day")
     if r == "01234":
-        return "weekdays"
-    return "every " + ", ".join(_DAYS[int(k)].capitalize() for k in r)
+        return _t("weekdays")
+    return _t("every {days}", days=", ".join(_weekday(int(k)) for k in r))
 
 
 def parse(text, today):
@@ -298,43 +305,42 @@ def remove(items, ident):
 def fmt_day(day, today):
     """"Today", "Tomorrow", "Fri", "Fri 16 Oct": short, and the date once it's past a week."""
     if day == today:
-        return "Today"
+        return _t("Today")
     x, t = d(day), d(today)
     n = (x - t).days
     if n == 1:
-        return "Tomorrow"
+        return _t("Tomorrow")
     if n == -1:
-        return "Yesterday"
+        return _t("Yesterday")
     if 1 < n < 7:
-        return f"{x:%a}"
-    return f"{x:%a} {x.day} {x:%b}"
+        return _weekday(x.weekday())
+    return _wdm(x)
 
 
 def long_day(day, today):
     """"Tomorrow", "Fri 9 Oct": for saying where an item went."""
     if day in (today, iso(d(today) + datetime.timedelta(days=1))):
         return fmt_day(day, today)
-    x = d(day)
-    return f"{x:%a} {x.day} {x:%b}"
+    return _wdm(d(day))
 
 
 def heading(day, today):
     x = d(day)
     if day == today:
-        return f"Today · {x:%a} {x.day} {x:%b}"
+        return _t("Today · {day}", day=_wdm(x))
     if (x - d(today)).days == 1:
-        return f"Tomorrow · {x:%a} {x.day} {x:%b}"
-    return f"{x:%a} {x.day} {x:%b}"
+        return _t("Tomorrow · {day}", day=_wdm(x))
+    return _wdm(x)
 
 
 def since(day, today):
     """"since Thu" for an item left from an earlier day."""
     n = (d(today) - d(day)).days
     if n == 1:
-        return "since yesterday"
+        return _t("since yesterday")
     if n < 7:
-        return f"since {d(day):%a}"
-    return f"since {d(day).day} {d(day):%b}"
+        return _t("since {day}", day=_weekday(d(day).weekday()))
+    return _t("since {day}", day=_t("{day} {month}", day=d(day).day, month=_month_name(d(day).month)))
 
 
 # ---- plan dates, as due_flow hands them over ----
@@ -380,7 +386,9 @@ def line_ticked(x, ticks):
 def sibling_line(n, buried):
     """A date done but for siblings Anki spaces out (they count as seen)."""
     n = int(n)
-    return f"done \u00b7 {n:,} sibling{'s' if n != 1 else ''} {'tomorrow' if buried else 'later'}"
+    if buried:
+        return _t(_later("done · {n} sibling tomorrow") if n == 1 else _later("done · {n} siblings tomorrow"), n=f"{n:,}")
+    return _t(_later("done · {n} sibling later") if n == 1 else _later("done · {n} siblings later"), n=f"{n:,}")
 
 
 def through(x):
@@ -416,14 +424,14 @@ def _date_row(x, ticks, today, short=False):
                           "done": int(t) > 0 and th >= int(t)})
         keys, on = line_keys(x["pid"], x["uid"], x.get("todo")), line_ticked(x, ticks)
         for n, td in enumerate(x.get("todo") or []):
-            lines.append({"kind": "todo", "label": TODO_KINDS.get(td.get("k"), "Do"), "text": str(td.get("t") or ""),
+            lines.append({"kind": "todo", "label": _t(TODO_KINDS.get(td.get("k"), "Do")), "text": str(td.get("t") or ""),
                           "url": str(td.get("url") or ""), "key": keys[n], "done": on[n],
                           "can": x["opens"] <= today})
     total, seen, th = int(x.get("total") or 0), int(x.get("seen") or 0), through(x)
     if x["opens"] > today:
-        n = f"{total:,} new" if total else ""
+        n = _t("{n} new", n=f"{total:,}") if total else ""
     elif total:
-        n = "all done" if th >= total else f"{th:,} / {total:,}"
+        n = _t("all done") if th >= total else f"{th:,} / {total:,}"
         sib, buried = (x.get("sibs") or [0, 0])[:2]
         if sib and th >= total:
             n = sibling_line(sib, buried)
@@ -459,7 +467,7 @@ def every_on(p, ln, day):
 
 
 def _every_row(p, ln, key, ticks, today, day):
-    return {"kind": "every", "pid": p["pid"], "plan": p.get("plan") or "", "label": TODO_KINDS.get(ln.get("k"), "Do"),
+    return {"kind": "every", "pid": p["pid"], "plan": p.get("plan") or "", "label": _t(TODO_KINDS.get(ln.get("k"), "Do")),
             "text": str(ln.get("t") or ""), "url": str(ln.get("url") or ""), "key": key, "day": day,
             "done": ticks.get(key) == day, "tag": repeat_label(_rule(ln.get("r"))), "ahead": day > today}
 
@@ -477,7 +485,7 @@ def _item_row(it, today, day=None):
                 "tag": repeat_label(it["r"]), "rep": True, "ahead": bool(day and day > today)}
     return {"kind": "mine", "id": it["id"], "text": it["t"], "day": it["d"], "done": bool(it["done"]),
             "tag": (since(it["d"], today) if it["d"] and it["d"] < today else
-                    fmt_day(it["d"], today) if it["d"] else "Later")}
+                    fmt_day(it["d"], today) if it["d"] else _t("Later"))}
 
 
 def _once(items):
@@ -586,7 +594,7 @@ def view(today, dates, items, ticks, tab="today", events=(), review_days=(), rev
         next_up = {"day": fmt_day(first, today), "names": [x.get("name") or "?" for x in nxt if x["opens"] == first]}
     ev_soon = sorted((e for e in events if today <= e["day"] <= end), key=lambda e: e["day"])
     start = next((r for r in today_rows if r["kind"] == "plan" and not r["done"]), None)
-    return {"name": NAME, "today": today, "tab": tab, "folded": bool(folded),
+    return {"name": _t(NAME), "today": today, "tab": tab, "folded": bool(folded),
             "head": heading(today, today), "rows": today_rows, "done_n": done_n, "total_n": len(counted),
             "behind_plans": behind_plans, "behind_mine": behind_mine[:SHOW_BEHIND],
             "behind_more": max(0, len(behind_mine) - SHOW_BEHIND),
@@ -646,9 +654,8 @@ def new_row(n, other=False):
 
 def fmt_range(a, b):
     x, y = d(a), d(b)
-    if a == b:
-        return f"{x:%a} {x.day}"
-    return f"{x:%a} {x.day} – {y:%a} {y.day}"
+    xs, ys = (_t("{wd} {day}", wd=_weekday(z.weekday()), day=z.day) for z in (x, y))
+    return xs if a == b else f"{xs} – {ys}"
 
 
 def done_for_today(v):
@@ -703,4 +710,6 @@ def misses_text(m):
     n = int((m or {}).get("n") or 0)
     if n <= 0:
         return None
-    return f'{int(m.get("reviews") or 0):,} reviews, {n:,} missed' if m.get("reviews") else f"{n:,} missed"
+    # (the board sets what follows the first ", " in bold: every language's phrase keeps that comma)
+    return (_t("{n} reviews, {missed} missed", n=f'{int(m.get("reviews") or 0):,}', missed=f"{n:,}") if m.get("reviews")
+            else _t("{n} missed", n=f"{n:,}"))

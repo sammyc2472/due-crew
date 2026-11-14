@@ -25,6 +25,12 @@ from . import app
 from .app import _bg, _state, cfg
 from .stats.queries import first_answers
 from .errs import oops
+from .words import month as _month, t as _t, weekday as _weekday
+
+
+def _wdm(x):
+    """"Fri 16 Oct", in the language in use."""
+    return _t("{wd} {day} {month}", wd=_weekday(x.weekday()), day=x.day, month=_month(x.month))
 
 FRESH = 600         # seconds a deck's view keeps (Insights' own)
 TRUST_DAYS = 7      # the track record is worked out again after a week
@@ -217,7 +223,7 @@ def _set_zero(col, did, on, keep=(), then=None):
         return False
     # 3.9.2's audit: every deck's save was its own undo step; one Edit › Undo now takes the day's 0 off them all
     try:
-        pos = col.add_custom_undo_entry("Due Crew: new cards " + ("stopped" if on else "back on"))
+        pos = col.add_custom_undo_entry(_t("Due Crew: new cards stopped") if on else _t("Due Crew: new cards back on"))
     except Exception:
         pos = None
     for deck in todo:
@@ -333,11 +339,11 @@ def stop_new(did, kind):
         x = None
     if kind == "week" and x:
         w = x - datetime.timedelta(days=A.STOP_BEFORE)
-        tooltip(f"No new cards in {name} from {w:%a} {w.day} {w:%b} to your exam.")
+        tooltip(_t("No new cards in {name} from {start} to your exam.", name=name, start=_wdm(w)))
     elif x:
-        tooltip(f"No new cards in {name} till your exam, {x:%a} {x.day} {x:%b}.")
+        tooltip(_t("No new cards in {name} till your exam, {day}.", name=name, day=_wdm(x)))
     else:
-        tooltip(f"No new cards in {name} till you turn them back on.")
+        tooltip(_t("No new cards in {name} till you turn them back on.", name=name))
     _forget(did)
 
 
@@ -356,7 +362,7 @@ def start_new(did):
                 _pf()._after_change()
         except Exception:
             oops()
-        tooltip(f"New cards back on in {str(col.decks.name(int(did)) or '').split('::')[-1]}.")
+        tooltip(_t("New cards back on in {name}.", name=str(col.decks.name(int(did)) or "").split("::")[-1]))
     _forget(did)
 
 
