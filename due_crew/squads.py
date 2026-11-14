@@ -14,6 +14,7 @@ from .backend.shapes import TransportError
 from .social import _open_profile, drop_muted, muted_uids
 from .stats.queries import StatsQueries
 from .ui import copy_text
+from .words import t as _t
 from .wrap import _mute_knocker, _wrap_data
 
 def _my_squads(c=None):
@@ -177,10 +178,10 @@ def _add_back(uid):
         if ok:
             if not already:
                 _state["my_friends"] = friends + [uid]
-            tooltip("You're crew.")
+            tooltip(_t("You're crew."))
             app.refresh(full=True)
         else:
-            tooltip("Couldn't add them. Check your connection.")
+            tooltip(_t("Couldn't add them. Check your connection."))
             app.swap(cfg())
 
     _bg(job, done)
@@ -268,10 +269,10 @@ def _copy_invite():
     from .share import squad_invite
     code = str(cur.get("code") or "")
     if not code:
-        tooltip("No code on this device.")
+        tooltip(_t("No code on this device."))
         return
     copy_text(squad_invite(cur.get("name") or "my squad", code))
-    tooltip("Copied.")
+    tooltip(_t("Copied."))
 
 
 def _leave_squad(sure=False):
@@ -279,7 +280,7 @@ def _leave_squad(sure=False):
     if cur is None:
         return
     if not sure:
-        sheets.confirm("Leave squad?", f"Leave {cur.get('name') or 'this squad'}?", "Leave", lambda: _leave_squad(True))
+        sheets.confirm(_t("Leave squad?"), _t("Leave {squad}?", squad=cur.get("name") or _t("this squad")), _t("Leave"), lambda: _leave_squad(True))
         return
     cl = client()
     sid = cur["id"]
@@ -299,10 +300,10 @@ def _toggle_squad_lock():
     def done(ok):
         if ok:
             sq["data"]["open"] = new_open
-            tooltip("Open." if new_open else "Locked.")
+            tooltip(_t("Open.") if new_open else _t("Locked."))
             app.swap(cfg())
         else:
-            tooltip("Couldn't change that.")
+            tooltip(_t("Couldn't change that."))
 
     _bg(lambda: cl.set_squad_open(cur["id"], new_open), done)
 
@@ -318,8 +319,8 @@ def _block_member(uid, sure=False):
     if row is None:
         return
     if not sure:
-        sheets.confirm("Block?", f"Block {row['name']}? They leave {cur.get('name') or 'the squad'} and can't rejoin.",
-                       "Block", lambda: _block_member(uid, True), danger=True)
+        sheets.confirm(_t("Block?"), _t("Block {name}? They leave {squad} and can't rejoin.", name=row["name"], squad=cur.get("name") or _t("the squad")),
+                       _t("Block"), lambda: _block_member(uid, True), danger=True)
         return
     cl = client()
     banned = list(sq["data"].get("banned") or [])
@@ -328,10 +329,10 @@ def _block_member(uid, sure=False):
         if ok:
             sq["data"]["rows"] = [r for r in sq["data"]["rows"] if r["user_id"] != uid]
             sq["data"]["banned"] = sorted(set(banned) | {uid})
-            tooltip("Blocked.")
+            tooltip(_t("Blocked."))
             app.swap(cfg())
         else:
-            tooltip("Couldn't block them.")
+            tooltip(_t("Couldn't block them."))
 
     _bg(lambda: cl.block_member(cur["id"], uid), done)
 
@@ -347,8 +348,9 @@ def _make_founder(uid, sure=False):
     if row is None:
         return
     if not sure:
-        sheets.confirm("Hand the squad on?", f"Make {row['name']} the founder of {cur.get('name') or 'the squad'}? "
-                       "You can't undo this.", "Make Founder", lambda: _make_founder(uid, True), danger=True)
+        sheets.confirm(_t("Hand the squad on?"),
+                       _t("Make {name} the founder of {squad}? You can't undo this.", name=row["name"], squad=cur.get("name") or _t("the squad")),
+                       _t("Make Founder"), lambda: _make_founder(uid, True), danger=True)
         return
     cl = client()
 
@@ -360,10 +362,10 @@ def _make_founder(uid, sure=False):
                 if entry.get("id") == cur["id"]:
                     entry["founder"] = uid
             save_cfg(c)
-            tooltip(f"{html.escape(row['name'])} is the founder now.")
+            tooltip(_t("{name} is the founder now.", name=html.escape(row["name"])))
             app.swap(cfg())
         else:
-            tooltip("Couldn't hand it off.")
+            tooltip(_t("Couldn't hand it off."))
 
     _bg(lambda: cl.set_founder(cur["id"], uid), done)
 
@@ -381,10 +383,10 @@ def _share_squad():
                              [(r["name"], r.get("emoji") or "", r.get("reviews")) for r in live],
                              len(live), view.get("reviews") or 0)
     if text is None:
-        tooltip("No one's studied yet today.")
+        tooltip(_t("No one's studied yet today."))
         return
     copy_text(text)
-    tooltip("Copied.")
+    tooltip(_t("Copied."))
 
 
 def _kick_member(uid, sure=False):
@@ -396,7 +398,7 @@ def _kick_member(uid, sure=False):
     if row is None:
         return
     if not sure:
-        sheets.confirm("Remove?", f"Remove {row['name']} from {cur.get('name') or 'the squad'}?", "Remove",
+        sheets.confirm(_t("Remove?"), _t("Remove {name} from {squad}?", name=row["name"], squad=cur.get("name") or _t("the squad")), _t("Remove"),
                        lambda: _kick_member(uid, True), danger=True)
         return
     cl = client()
@@ -405,10 +407,10 @@ def _kick_member(uid, sure=False):
         if ok:
             sq["data"]["rows"] = [r for r in sq["data"]["rows"]
                                   if r["user_id"] != uid]
-            tooltip("Removed.")
+            tooltip(_t("Removed."))
             app.swap(cfg())
         else:
-            tooltip("Couldn't remove them.")
+            tooltip(_t("Couldn't remove them."))
 
     _bg(lambda: cl.remove_member(cur["id"], uid), done)
 
@@ -433,9 +435,9 @@ def _send_knock(to_uid):
     def done(ok):
         if ok:
             _state["my_friends"] = friends + [to_uid]
-            tooltip("Added. You're crew when they add back.")
+            tooltip(_t("Added. You're crew when they add back."))
             app.swap(cfg())
         else:
-            tooltip("Couldn't add them. Check your connection.")
+            tooltip(_t("Couldn't add them. Check your connection."))
 
     _bg(job, done)

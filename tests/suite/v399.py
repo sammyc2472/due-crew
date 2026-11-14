@@ -1254,6 +1254,55 @@ def test_languages_v3100():
           "speak()" in srcs.glue_src() and 'if "lang" in changed:' in srcs.glue_src() and "open(" in srcs.due_src("words.py") and '"w"' not in srcs.due_src("words.py"))
 
 
+def test_languages_squads_round():
+    """3.10.0, the Squads round: a squad's table, bingo's words, the fridge, the scrapbook, the room's lobby, the Cheer
+    window and a cheer's banner say theirs in another language (from lang/de.json, or the round's part until it's merged)."""
+    import json
+    from due_crew import bingo, scrapbook, words
+    cat = dict(words.catalog("de"))
+    part = os.path.join(REPO, "lang_parts", "squads.json")
+    if os.path.exists(part):
+        with open(part, encoding="utf-8") as fh:
+            cat.update({k: v[2] for k, v in json.load(fh).items()})
+    view = {"state": "ok", "squads": [{"id": "s1", "name": "orca"}], "current": "s1", "name": "orca", "open": False, "founder_me": True,
+            "day": "2026-09-27", "yesterday": "2026-09-26", "people": 2, "reviews": 80,
+            "rows": [{"user_id": "me", "name": "Sammy", "you": True, "day": "2026-09-27", "reviews": 50, "time_ms": 600000, "retention": 90.0, "streak": 3, "week": 5},
+                     {"user_id": "n", "name": "Nia", "day": "2026-09-26", "reviews": 30, "time_ms": 60000, "retention": 80.0, "streak": 1, "week": 2}]}
+    item = {"from": "dre", "name": "Dre", "at": "2026-10-29", "a": "purple", "n": "", "d": {"k": "draw", "s": [[0, 10, 10, 50, 50]]}}
+    english = board._squads_html(view, {})
+    try:
+        words.use("de")
+        words._state["cat"] = cat
+        sq = board._squads_html(view, {})
+        check("a squad's table in German: its heads, its line, its foot; none of their English left",
+              all(w in sq for w in (">Wiederholungen", "2 in orca &middot; gesperrt", "1 lernen heute", "&middot; gestern<", ">Einladung kopieren<",
+                                    ">Verlassen<", "5/7 Tage<", "+ Gruppe gründen / beitreten"))
+              and not any(w in sq for w in ("locked", "studying today", ">Leave<", "7 days", "Create / join")), sq[-600:])
+        check("the squad's page is the same but for its words", len(re.findall(r"<tr", sq)) == len(re.findall(r"<tr", english))
+              and re.findall(r"duecrew:[a-z0-9:]+", sq) == re.findall(r"duecrew:[a-z0-9:]+", english))
+        week = bingo.week_labels("2026-09-23")
+        facts = bingo.facts(week, "2026-09-23", {}, {}, {})
+        check("bingo's progress, the board's days and the scrapbook's lines in German, each phrase whole",
+              bingo.progress({"type": "days", "params": {"days": 3}}, facts) == (False, "0 von 3 Tagen")
+              and bingo.progress({"type": "nope"}, facts)[1] == "Aktualisiere Due Crew, um dieses zu spielen"
+              and board._short_day("2026-10-14") == "14. Okt" and board._week_span("2026-W40") == "Woche vom 28. Sep"
+              and scrapbook.month_line([], 3) == ("", "3 Tage", " dabei gewesen.") and scrapbook.month_said("May") == "Mai"
+              and scrapbook.year_line(2026, 2, 1200, False) == ("2 Tage dabei gewesen, und ", "1,200 Wiederholungen", ".")
+              and board.and_more(["Dre", "Mo", "Ana", "Kai", "Lu"]) == "Dre, Mo, Ana und 2 weitere")
+        fr = board.fridge_html([item], {}, {"sev": True})
+        cw = board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["x"]})
+        said = json.loads(re.search(r"var V = (\{.*?\});\n", cw).group(1).replace("<\\/", "</"))["w"]
+        check("the fridge is drawn again for another language; the Cheer window is sent its words, and says them by their English",
+              'title="Abnehmen"' in fr
+              and said.get("Cancel") == "Abbrechen" and said.get("Cheer {name}") == "{name} anfeuern" and "say('Cancel')" in cw
+              and "klick, um eins zur" in board.flurry_js(["x"], "t", back=("dre", "x")))
+    finally:
+        words.use("en")
+    check("back in English the fridge is drawn again, and the Cheer window is sent no words",
+          'title="Take it down"' in board.fridge_html([item], {}, {"sev": True})
+          and '"w": {}' in board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["x"]}))
+
+
 def settings_model_change(parts):
     from due_crew import settings_model
     return settings_model.change(parts, {})

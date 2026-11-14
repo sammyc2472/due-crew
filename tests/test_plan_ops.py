@@ -495,6 +495,33 @@ def test_give_the_class_a_day():
     check("breather: said", e[0]["verb"] == "Moved" and "a study day later" in e[0]["detail"], e)
 
 
+def test_ops_in_another_language():
+    """3.10.0: a change's words are said in the language in use, and the line to followers still reads its
+    kind (an entry's "as"), not its words."""
+    from due_crew import words as W
+    was = dict(W._state)
+    W._state.update(lang="de", cat={"Moved": "Verschoben", "from {day}": "von {day}", "Not open for anyone yet": "Noch für niemanden offen",
+                                    "{name} moved {how} to {day}": "{name} verschoben {how} auf {day}",
+                                    "That set has those already.": "Dieser Block hat die schon."})
+    try:
+        d, c = doc(), ctx()
+        o = O.check(d, {"op": "move", "date": "Shock", "to": "2026-10-23"})
+        _after, entries, _touched = O.apply(d, o, c)
+        x = entries[0]
+        check("languages: a change's verb and detail are said in the language in use; its kind stays",
+              x["verb"] == "Verschoben" and x["detail"].startswith("von ") and x["as"] == "Moved" and x["old"] is True
+              and O.who(x, TODAY) == "Noch für niemanden offen", x)
+        check("languages: the line to followers reads the kind, and says it whole",
+              O.why_line(entries).startswith("Shock verschoben von ") and " auf " in O.why_line(entries), O.why_line(entries))
+        dr = D.Draft("p", d, 1, [o])
+        there = dr.entries(c)[0]["verb"]
+        W._state.update(was)
+        check("languages: a draft's words aren't kept across languages", there == "Verschoben" and dr.entries(c)[0]["verb"] == "Moved",
+              (there, dr.entries(c)[0]["verb"]))
+    finally:
+        W._state.update(was)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

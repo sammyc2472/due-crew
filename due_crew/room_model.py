@@ -596,5 +596,5 @@ def board_view(my_room, entries, dismissed=(), done=None, now=None, sev=False, a
                if p["state"] == "before"
                else _t("{n} rounds of {min} min · round {r} of {of}", n=room['rounds'], min=room['round'], r=max(1, p['round']), of=room['rounds']))
         out["invites"].append({"key": cmd_key(room), "title": title(entries, room), "sub": sub,
-                               "line": names_line(ms)})
+                               "line": names_line(ms), "n": len(ms)})  # n (3.10.0): how many `line` names, whatever the language
     return out
