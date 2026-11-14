@@ -3885,7 +3885,7 @@ def test_sev_moves_v381():
         check("signed out (Sam's pick): Pip waves, a hello from its mix, once; drawn again it rests there",
               mom(a) in sev.moves("hello") and not rests(a) and mom(b) == mom(a) and rests(b))
         check("…beside the words on the card, with its colours and motion sheet",
-              card.index('class="dc-hi"') < card.index("Your friends&rsquo;") and "sv-blink" in card
+              card.index('class="dc-hi"') < card.index("Your friends’") and "sv-blink" in card
               and "--sv-a: var(--dc-accent)" in card and "duecrew:setup" in card)
         check("…only on the way in: an expired sign-in or a deleted account says just what happened",
               "dc-hi" not in board.signed_out_card({}, expired=True, sev=a) and "dc-hi" not in board.signed_out_card({}, gone=True, sev=a))

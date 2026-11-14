@@ -567,17 +567,24 @@ _FLOAT_JS = """(function () {
     // speech bubble: a wash of their colour, a folded corner, a small Tip over its words; their Pip waves while it's
     // folded and holds the note out once it's opened (open(), above)
     var tint = note ? (withPip ? peek.pips[0].a[night ? 1 : 0] : acc) : '';
-    var edge = note ? 'position:relative;border:1px solid ' + tint + ';background:color-mix(in srgb, ' + tint + ' 13%, ' + c.bg + ');rotate:-1.5deg;' : '';
-    bub = el('div', 'margin-bottom:' + (withPip ? '26px' : '0') + ';max-width:220px;display:grid;gap:4px;padding:8px 11px;' +
-      'border-radius:' + (note ? '4px 12px 4px 4px' : withPip ? (left ? '12px 12px 12px 4px' : '12px 12px 4px 12px') : '12px') + ';transform-origin:' + (left ? '0' : '100%') + ' 100%;' + card + edge);
+    // the corner is folded over, so it's cut off the note (SC: "we shouldn't see the white rounded rectangle behind it
+    // because it is folded"): the note is clipped to its shape and its shadow is its holder's, which follows the cut
+    var edge = note ? 'position:relative;border:1px solid ' + tint + ';background:color-mix(in srgb, ' + tint + ' 13%, ' + c.bg + ');box-shadow:none;' +
+      'clip-path:polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);' : '';
+    var lift = 'margin-bottom:' + (withPip ? '26px' : '0') + ';';
+    bub = el('div', (note ? '' : lift) + 'max-width:220px;display:grid;gap:4px;padding:8px 11px;' +
+      'border-radius:' + (note ? '4px' : withPip ? (left ? '12px 12px 12px 4px' : '12px 12px 4px 12px') : '12px') + ';transform-origin:' + (left ? '0' : '100%') + ' 100%;' + card + edge);
     if (note) {
       bub.setAttribute('data-note', '1');
-      bub.appendChild(el('span', 'position:absolute;top:-1px;right:-1px;width:13px;height:13px;border-radius:0 12px 0 4px;' +
+      bub.appendChild(el('span', 'position:absolute;top:-1px;right:-1px;width:14px;height:14px;' +
         'background:linear-gradient(225deg, transparent 50%, ' + tint + ' 50%);', ''));
       bub.appendChild(el('span', 'justify-self:start;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:' + tint + ';', 'Tip'));
     }
     bub.appendChild(head); bub.appendChild(acts);
-    box.appendChild(bub);
+    if (note) {
+      var hold = el('div', lift + 'rotate:-1.5deg;filter:drop-shadow(0 4px 9px rgba(0,0,0,.22));', '');
+      hold.appendChild(bub); box.appendChild(hold);
+    } else { box.appendChild(bub); }
   }
   if (withPip) {
     fig = el('span', 'position:relative;display:inline-flex;align-items:flex-end;gap:2px;line-height:0;');

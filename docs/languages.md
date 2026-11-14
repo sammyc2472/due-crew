@@ -26,10 +26,12 @@ Board › Language says otherwise.
 
 ## Order
 
-Done: the ground, Settings' Language row, the crew board (Today, Week), the board's foot.
+Done: the ground, Settings' Language row, the whole crew tab (Today, Week, Decks, the show-up view, asks), the
+board's foot, its banners (off-line, notice, exam eve, knocks, milestones, last week, month and year), the
+Share menu's items, the signed-out, expired and loading cards. About 190 phrases.
 
 Next, a surface at a time:
-1. The rest of the board: banners, Decks, Squads, the You tabs, cheers, the fridge, the closet, the
+1. The rest of the board: the tab names (`base.YOU_MORE`, `HIDEABLE_TABS`), Squads and bingo, the You tabs, cheers, the fridge, the closet, the
    dance floor, bingo, the scrapbook.
 2. Settings, sign-in and welcome, the Qt windows (`ui/`), the Tools menu, tooltips and sheets.
 3. The review screen: the chip, tips, rooms, Fifteen.

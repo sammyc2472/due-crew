@@ -44,11 +44,11 @@ def notice_html(notice):
     More when it has a link, and a dismiss. Escaped; the link never goes in
     the page (Python opens it)."""
     nid = int(notice.get("id") or 0)
-    more = (f'<a class="wc" href="#" title="Opens in your browser" onclick="{_pycmd("noticeopen")}">More</a>'
+    more = (f'<a class="wc" href="#" title="{_t("Opens in your browser")}" onclick="{_pycmd("noticeopen")}">{_t("More")}</a>'
             if notice.get("link") else "")
     return (f'<div class="dc-wrap notice"><span>&#128227;</span>'
             f'<span>{_html.escape(str(notice.get("text") or ""))}</span>{more}'
-            f'<a class="wx" href="#" title="Dismiss" onclick="{_pycmd(f"noticex:{nid}")}">&times;</a></div>')
+            f'<a class="wx" href="#" title="{_t("Dismiss")}" onclick="{_pycmd(f"noticex:{nid}")}">&times;</a></div>')
 
 
 def _clock(ts, now=None):
@@ -74,32 +74,32 @@ def offline_html(fetched_at, now=None):
     the foot's "Couldn't sync" was the only word. What I study still counts:
     the next sync reads it from Anki. Try now is Refresh."""
     when = _clock(fetched_at, now)
-    last = f" Last refresh {when}." if when else ""
+    last = " " + _t("Last refresh {when}.", when=when) if when else ""
     return (f'<div class="dc-wrap off" role="status"><span>&#9888;&#65039;</span>'
-            f'<span>Can&rsquo;t reach Due Crew. Your studying still counts and sends when it&rsquo;s back.{last}</span>'
-            f'<a class="wc" href="#" onclick="{_pycmd("refresh")}">Try now</a></div>')
+            f'<span>{_t("Can’t reach Due Crew. Your studying still counts and sends when it’s back.")}{last}</span>'
+            f'<a class="wc" href="#" onclick="{_pycmd("refresh")}">{_t("Try now")}</a></div>')
 
 
 def _review_banner(kind, info):
     """Personal month or year review, above the board. Local numbers only."""
     r = info["review"]
     if kind == "month":
-        icon, title = "&#128197;", f'Your {_html.escape(str(info["name"]))}:'
+        icon, title = "&#128197;", _t("Your {period}:", period=_html.escape(str(info["name"])))
         cmd_copy, cmd_x = "monthcopy", "monthdismiss"
     else:
-        icon, title = "&#127881;", f'Your {_html.escape(str(info["key"]))}:'
+        icon, title = "&#127881;", _t("Your {period}:", period=_html.escape(str(info["key"])))
         cmd_copy, cmd_x = "yearcopy", "yeardismiss"
-    bits = [f'{int(r["reviews"]):,} reviews', _fmt_time(int(r["time_ms"] or 0)),
-            f'{int(r["days"])} of {int(r["span"])} days']
+    bits = [_t("{n} reviews", n=f'{int(r["reviews"]):,}'), _fmt_time(int(r["time_ms"] or 0)),
+            _t("{n} of {of} days", n=int(r["days"]), of=int(r["span"]))]
     if kind == "month" and r.get("best_day"):
-        bits.append(f'best day {int(r["best_day"][1]):,}')
+        bits.append(_t("best day {n}", n=f'{int(r["best_day"][1]):,}'))
     if kind == "year" and int(r.get("longest_run") or 0) > 1:
-        bits.append(f'&#128293; {int(r["longest_run"])}-day run')
+        bits.append("&#128293; " + _t("{n}-day run", n=int(r["longest_run"])))
     return (f'<div class="dc-wrap"><span>{icon}</span>'
             f'<span><b>{title}</b> {" &middot; ".join(bits)}</span>'
-            f'<a class="wc" href="#" title="Copy for the chat" '
-            f'onclick="{_pycmd(cmd_copy)}">Copy</a>'
-            f'<a class="wx" href="#" title="Dismiss" '
+            f'<a class="wc" href="#" title="{_t("Copy for the chat")}" '
+            f'onclick="{_pycmd(cmd_copy)}">{_t("Copy")}</a>'
+            f'<a class="wx" href="#" title="{_t("Dismiss")}" '
             f'onclick="{_pycmd(cmd_x)}">&times;</a></div>')
 
 
@@ -107,17 +107,17 @@ def share_menu_items(show_up, squad_ok=False):
     """The footer's Share menu (3.7.1, H3), as [(label, command)], a label of
     None being a heading: as text first, then as a picture, the same on
     every tab. Today's numbers aren't offered in just-show-up mode."""
-    items = [(None, "As text")]
+    items = [(None, _t("As text"))]
     if not show_up:
-        items.append(("My day", "sharetoday"))
-    items.append(("Our week", "sharecrewweek"))
+        items.append((_t("My day"), "sharetoday"))
+    items.append((_t("Our week"), "sharecrewweek"))
     if squad_ok and not show_up:
-        items.append(("The squad's day", "squadshare"))
-    items.append((None, "As a picture"))
+        items.append((_t("The squad's day"), "squadshare"))
+    items.append((None, _t("As a picture")))
     if not show_up:
-        items.append(("My day…", "picturetoday"))
-    items += [("My week…", "pictureweek"), ("My year…", "pictureyear"),
-              ("All time…", "picturealltime")]
+        items.append((_t("My day…"), "picturetoday"))
+    items += [(_t("My week…"), "pictureweek"), (_t("My year…"), "pictureyear"),
+              (_t("All time…"), "picturealltime")]
     return items
 
 
@@ -145,7 +145,7 @@ def _one_at_a_time(bans):
     step = ("var w=this.closest('.dc-wrap'),n=w.nextElementSibling||w.parentNode.firstElementChild;"
             "w.hidden=true;n.hidden=false;return false;")
     for i, b in enumerate(bans):
-        more = f'<a class="wn" href="#" title="The next one" onclick="{step}">{i + 1} of {len(bans)} &rsaquo;</a>'
+        more = f'<a class="wn" href="#" title="{_t("The next one")}" onclick="{step}">{_t("{n} of {of}", n=i + 1, of=len(bans))} &rsaquo;</a>'
         cut = b.rfind('<a class="wx"')
         if cut < 0:
             cut = b.rfind("</div>")
@@ -162,9 +162,9 @@ def _use_line(cfg):
     from .. import errs_flow
     if not errs_flow.note_due(cfg):
         return ""
-    return (f'<div class="dc-calm"><span>{errs_flow.NOTE}</span><span class="sp"></span>'
-            f'<a href="#" onclick="{_pycmd("usesee")}">Privacy</a>'
-            f'<a href="#" onclick="{_pycmd("usetold")}">Got it</a></div>')
+    return (f'<div class="dc-calm"><span>{_t(errs_flow.NOTE)}</span><span class="sp"></span>'
+            f'<a href="#" onclick="{_pycmd("usesee")}">{_t("Privacy")}</a>'
+            f'<a href="#" onclick="{_pycmd("usetold")}">{_t("Got it")}</a></div>')
 
 
 def _live_line(cfg):
@@ -190,10 +190,10 @@ def _calm_line(cfg):
         part, bold, rest, go = h
         return (f'<div class="dc-calm"><span><b>{bold}</b> {rest}</span><span class="sp"></span>'
                 f'<a href="#" onclick="{_pycmd(f"calmopen:{part}")}">{go}</a>'
-                f'<a href="#" class="x" title="Put this away" aria-label="Put this away" onclick="{_pycmd("calmx")}">&times;</a></div>')
+                f'<a href="#" class="x" title="{_t("Put this away")}" aria-label="{_t("Put this away")}" onclick="{_pycmd("calmx")}">&times;</a></div>')
     if calm.held(cfg):
-        return (f'<div class="dc-calm"><span>More when you&rsquo;re ready</span><span class="sp"></span>'
-                f'<a href="#" title="Every tab now; Settings &rsaquo; Board has the switch" onclick="{_pycmd("calmall")}">Show all</a></div>')
+        return (f'<div class="dc-calm"><span>{_t("More when you’re ready")}</span><span class="sp"></span>'
+                f'<a href="#" title="{_t("Every tab now; Settings › Board has the switch")}" onclick="{_pycmd("calmall")}">{_t("Show all")}</a></div>')
     return ""
 
 
@@ -241,44 +241,45 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     bans = []
     if exam_eve and exam_eve.get("people"):
         # 2.10: a line for their exam-morning card, rather than a cheer now
-        links = [f'<a class="dc-pl" href="#" title="Add a line to their good-luck card" '
+        links = [f'<a class="dc-pl" href="#" title="{_t("Add a line to their good-luck card")}" '
                  f'onclick="{_pycmd("luckline:" + str(u))}">'
                  f'<b>{_html.escape(str(n))}</b></a>'
                  for u, n in exam_eve["people"]]
         if len(links) == 1:
             uid = exam_eve["people"][0][0]
-            line = f'{links[0]}&rsquo;s exam is tomorrow.'
-            act = (f'<a class="wc" href="#" title="They see it when they open Anki that morning" '
-                   f'onclick="{_pycmd("luckline:" + str(uid))}">&#127808; Add a line to their card</a>')
+            line = _t("{who}’s exam is tomorrow.", who=links[0])
+            act = (f'<a class="wc" href="#" title="{_t("They see it when they open Anki that morning")}" '
+                   f'onclick="{_pycmd("luckline:" + str(uid))}">&#127808; {_t("Add a line to their card")}</a>')
         else:
-            line = " and ".join(links) + " have exams tomorrow."
+            line = _t("{who} have exams tomorrow.", who=_t(" and ").join(links))
             act = ""
         bans.append(f'<div class="dc-wrap eve"><span>&#128214;</span>'
                     f'<span>{line}</span>{act}'
-                    f'<a class="wx" href="#" title="Dismiss" '
+                    f'<a class="wx" href="#" title="{_t("Dismiss")}" '
                     f'onclick="{_pycmd("evedismiss")}">&times;</a></div>')
     for k in (knocks or [])[:3]:
         # someone in a squad added me: my add makes it mutual
         who = _html.escape(str(k.get("name", "?")))
         # a squadmate's add names the squad; an add by code (2.9) says so
-        where = (f' from {_html.escape(str(k["squad"]))}' if k.get("squad")
-                 else " your code" if k.get("via_code") else "")
+        bold = f"<b>{who}</b>"
+        said = (_t("{who} added you from {squad}", who=bold, squad=_html.escape(str(k["squad"]))) if k.get("squad")
+                else _t("{who} added your code", who=bold) if k.get("via_code") else _t("{who} added you", who=bold))
         uid = str(k.get("uid", ""))
         bans.append(f'<div class="dc-wrap knock"><span>&#128075;</span>'
-                    f'<span><b>{who}</b> added{"" if k.get("via_code") and not k.get("squad") else " you"}{where}</span>'
-                    f'<a class="wc" href="#" title="Add back" '
-                    f'onclick="{_pycmd("addback:" + uid)}">Add back</a>'
-                    f'<a class="wx" href="#" title="Not now" '
+                    f'<span>{said}</span>'
+                    f'<a class="wc" href="#" title="{_t("Add back")}" '
+                    f'onclick="{_pycmd("addback:" + uid)}">{_t("Add back")}</a>'
+                    f'<a class="wx" href="#" title="{_t("Not now")}" '
                     f'onclick="{_pycmd("knockmute:" + uid)}">&times;</a></div>')
     for uid, who, days in (milestones or [])[:2]:
         emoji = "&#128175;" if int(days) < 365 else "&#127881;"
         fig = (milestone_sev or {}).get(uid)  # 3.8.1 (Sam's pick): Pip hops in the emoji's place
         icon = f'<span class="dc-fig">{_sev.slot(fig, 40)}</span>' if fig else f"<span>{emoji}</span>"
         bans.append(f'<div class="dc-wrap">{icon}'
-                    f'<span><b>{_html.escape(str(who))}</b> just reached a {int(days)}-day streak.</span>'
-                    f'<a class="wc" href="#" title="Send a cheer" '
-                    f'onclick="{_pycmd("milestonecheer:" + str(uid))}">Send {emoji}</a>'
-                    f'<a class="wx" href="#" title="Dismiss" '
+                    f'<span>{_t("{who} just reached a {n}-day streak.", who=f"<b>{_html.escape(str(who))}</b>", n=int(days))}</span>'
+                    f'<a class="wc" href="#" title="{_t("Send a cheer")}" '
+                    f'onclick="{_pycmd("milestonecheer:" + str(uid))}">{_t("Send")} {emoji}</a>'
+                    f'<a class="wx" href="#" title="{_t("Dismiss")}" '
                     f'onclick="{_pycmd("milestonex:" + str(uid))}">&times;</a></div>')
     if ahead and ahead.get("did"):
         bans.append(ahead_line(ahead))
@@ -296,21 +297,19 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     if wrap and not show_up:  # the week's totals are numbers
         extra = ""
         if (wrap.get("full_days") or 0) >= 3:
-            extra = f' &middot; everyone showed up {wrap["full_days"]} of 7 days'
+            extra = " &middot; " + _t("everyone showed up {n} of 7 days", n=wrap["full_days"])
         if wrap.get("best_name"):
-            extra += (f' &middot; {_html.escape(str(wrap["best_name"]))}&rsquo;s '
-                      f'best week yet')
+            extra += " &middot; " + _t("{who}’s best week yet", who=_html.escape(str(wrap["best_name"])))
         if 0 < int(wrap.get("days_known") or 7) < 7:
-            extra += f' &middot; from {int(wrap["days_known"])} of its 7 days'
+            extra += " &middot; " + _t("from {n} of its 7 days", n=int(wrap["days_known"]))
         if wrap.get("milestone"):
-            extra += (f' &middot; and the crew just passed '
-                      f'<b>{_html.escape(str(wrap["milestone"]))} all-time</b>')
+            extra += " &middot; " + _t("and the crew just passed {n} all-time", n=f'<b>{_html.escape(str(wrap["milestone"]))}</b>')
         bans.append(f'<div class="dc-wrap"><span>&#127881;</span>'
-                    f'<span><b>Last week, together:</b> '
-                    f'{wrap["reviews"]:,} reviews &middot; {_fmt_time(wrap["time_ms"])}{extra}</span>'
-                    f'<a class="wc" href="#" title="Copy for the group chat" '
-                    f'onclick="{_pycmd("wrapcopy")}">Copy</a>'
-                    f'<a class="wx" href="#" title="Dismiss" '
+                    f'<span><b>{_t("Last week, together:")}</b> '
+                    f'{_t("{n} reviews", n=format(wrap["reviews"], ","))} &middot; {_fmt_time(wrap["time_ms"])}{extra}</span>'
+                    f'<a class="wc" href="#" title="{_t("Copy for the group chat")}" '
+                    f'onclick="{_pycmd("wrapcopy")}">{_t("Copy")}</a>'
+                    f'<a class="wx" href="#" title="{_t("Dismiss")}" '
                     f'onclick="{_pycmd("wrapdismiss")}">&times;</a></div>')
     for kind in ("month", "year"):
         if reviews and reviews.get(kind):
@@ -342,8 +341,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
               f'{_t("Couldn’t sync")}</span> &middot; ') if sync_error else ""
     foot = (_calm_line(cfg) + _use_line(cfg) + _live_line(cfg) + f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
             f'<span class="fr">{failed}<span class="upd">{_t("Updated {when}", when=ago)}</span>'
-            f'<a class="ic" href="#" title="Refresh" aria-label="Refresh" onclick="{_pycmd("refresh")}">{_IC_REFRESH}</a>'
-            f'<a class="ic" href="#" title="Settings" aria-label="Settings" onclick="{_pycmd("settings")}">{_IC_GEAR}</a></span></div>')
+            f'<a class="ic" href="#" title="{_t("Refresh")}" aria-label="{_t("Refresh")}" onclick="{_pycmd("refresh")}">{_IC_REFRESH}</a>'
+            f'<a class="ic" href="#" title="{_t("Settings")}" aria-label="{_t("Settings")}" onclick="{_pycmd("settings")}">{_IC_GEAR}</a></span></div>')
 
     # 3.8.1: Pip's moments; a crew room's Pips each wear their person's accent, by day or by night as the board
     seat = _by_theme(cfg, "#due-crew .dc-room .seat", "--sv-a: var(--sa-l);", "--sv-a: var(--sa-d);")
@@ -393,18 +392,17 @@ def signed_out_card(cfg, expired=False, gone=False, sev=None):
     sev (3.8.1, Sam's pick): Pip's markup, waving beside the words until
     you start (rooms.signed_out_sev), or None."""
     if gone:
-        return _card(cfg, "Welcome back",
-                     f'Your Due Crew account was deleted after 12 months without activity, '
-                     f'as the listing says. Your Anki and its cards are untouched. '
-                     f'<a href="#" onclick="{_pycmd("setup")}">Start again with your email</a>; '
-                     f'your crew can add you with your new code.')
+        start = f'<a href="#" onclick="{_pycmd("setup")}">{_t("Start again with your email")}</a>'
+        return _card(cfg, _t("Welcome back"),
+                     _t("Your Due Crew account was deleted after 12 months without activity, as the listing says. "
+                        "Your Anki and its cards are untouched. {start}; your crew can add you with your new code.", start=start))
     if expired:
         return _card(cfg, "Due Crew",
-                     f'Your sign-in expired. '
-                     f'<a href="#" onclick="{_pycmd("setup")}">Sign in again</a>')
+                     f'{_t("Your sign-in expired.")} '
+                     f'<a href="#" onclick="{_pycmd("setup")}">{_t("Sign in again")}</a>')
     # 3.4 review, C4: one way in; the emailed code knows if the address is new
-    words = (f'Your friends&rsquo; studying next to yours. Nothing is shared '
-             f'until you start. <a href="#" onclick="{_pycmd("setup")}">Start with your email</a>')
+    words = (f'{_t("Your friends’ studying next to yours. Nothing is shared until you start.")} '
+             f'<a href="#" onclick="{_pycmd("setup")}">{_t("Start with your email")}</a>')
     if not sev:
         return _card(cfg, "Due Crew", words)
     return _card(cfg, "Due Crew", f'<span class="dc-so"><span class="dc-hi">{_sev.slot(sev, 44)}</span><span>{words}</span></span>',
@@ -412,4 +410,4 @@ def signed_out_card(cfg, expired=False, gone=False, sev=None):
 
 
 def loading_card(cfg):
-    return _card(cfg, "Due Crew", "Catching up with your crew&hellip;")
+    return _card(cfg, "Due Crew", _t("Catching up with your crew…"))

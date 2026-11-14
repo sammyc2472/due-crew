@@ -43,7 +43,7 @@ def test_calm_offline_v399():
           and D._clock(at - 9 * 86400, now) == "30 Oct" and D._clock(0, now) == "", D._clock(at, now))
     line = D.offline_html(at, now)
     check("offline: the line says it plainly, when, and Try now refreshes (the board's own command)",
-          "Can&rsquo;t reach Due Crew. Your studying still counts and sends when it&rsquo;s back. Last refresh 3:10 PM."
+          "Can’t reach Due Crew. Your studying still counts and sends when it’s back. Last refresh 3:10 PM."
           in line and "duecrew:refresh|" in line and "Try now" in line and 'role="status"' in line)
     page = board.render(data, {"period": "today"}, at, offline=True, notice={"id": 1, "text": "Hi"})
     calm = board.render(data, {"period": "today"}, at)

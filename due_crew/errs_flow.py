@@ -13,6 +13,7 @@ from aqt import mw
 
 from . import app, errs
 from .errs import wanted as on
+from .words import later
 
 FILE = "errs.json"
 SAVE_MS = 10000   # a count is on disk this long after, at most
@@ -133,7 +134,7 @@ def see_what_went():
 # counted before that.
 
 TOLD = "use_told"
-NOTE = "New: Due Crew counts which of its parts get opened, as totals with no account on them."
+NOTE = later("New: Due Crew counts which of its parts get opened, as totals with no account on them.")  # said with t() where it's drawn
 
 
 def use_ready(c=None):
