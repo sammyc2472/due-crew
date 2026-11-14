@@ -12,6 +12,7 @@ from datetime import date as _date, datetime, timezone
 
 from .. import room_model
 from ..stats.decks import sig_match
+from ..words import later as _later, month as _month, t as _t
 
 
 LIGHT = {
@@ -98,7 +99,7 @@ PERIODS = ("today", "week", "decks", "squads")
 # 3.8.0: Today and Week are always there; the rest can be hidden in Settings
 HIDEABLE_TABS = (("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"), ("insights", "Insights"),
                  ("party", "Party"))  # 3.9.10: the tab says Party (Sam: "Let's go for party"); the feature is still Pip Party. 3.9.5 (Sam: "make pip party something someone can unshow")
-CREW_VIEWS = (("today", "Today"), ("week", "Week"), ("decks", "Decks"))
+CREW_VIEWS = (("today", _later("Today")), ("week", _later("Week")), ("decks", _later("Decks")))
 YOU_MORE = (("plans", "Plans"), ("insights", "Insights"))
 PARTY_TAB = ("party", "Party")  # 3.9.5's last round: after Insights, for those it's open to (gamenight_flow.shown)
 BETA_TABS = ()  # a tab named here says Beta (Pip Party did, 3.9.5 to 3.9.10: Sam, "we can take pip party out of beta")
@@ -123,6 +124,13 @@ def _head_label(icon, text):
 HEADERS = (("reviews", _head_label("&#128218;", "Reviews")), ("time", _head_label("&#9201;", "Time")),
            ("retention", _head_label("&#127919;", "Retention")),
            ("streak", _head_label("&#128293;", "Streak")))
+_HEAD_WORDS = (("reviews", "&#128218;", _later("Reviews")), ("time", "&#9201;", _later("Time")),
+               ("retention", "&#127919;", _later("Retention")), ("streak", "&#128293;", _later("Streak")))
+
+
+def headers():
+    """HEADERS in the language in use (3.10.0, words.py): what a table's head row draws."""
+    return tuple((key, _head_label(icon, _t(word))) for key, icon, word in _HEAD_WORDS)
 
 
 def _token_block(palette):
@@ -155,12 +163,12 @@ def _fmt_time(ms):
 
 def _ago_secs(secs):
     if secs < 300:
-        return "just now", "fresh"
+        return _t("just now"), "fresh"
     if secs < 3600:
-        return f"{int(secs // 60)}m ago", "fresh"
+        return _t("{n}m ago", n=int(secs // 60)), "fresh"
     if secs < 86400:
-        return f"{int(secs // 3600)}h ago", "hours"
-    return f"{int(secs // 86400)}d ago", "faded"
+        return _t("{n}h ago", n=int(secs // 3600)), "hours"
+    return _t("{n}d ago", n=int(secs // 86400)), "faded"
 
 
 def _ago(ts_str):
@@ -186,18 +194,18 @@ def away_words(ts_str, now=None):
     except Exception:
         return ""
     if days < 1:  # in today, nothing studied (and nothing yesterday): hours
-        return f"{max(1, hours)}h"
+        return _t("{n}h", n=max(1, hours))
     if days < 2:
-        return "a day"
+        return _t("a day")
     if days < 7:
-        return f"{days} days"
+        return _t("{n} days", n=days)
     if days < 14:
-        return "a week"
+        return _t("a week")
     if days < 28:
-        return f"{days // 7} weeks"
+        return _t("{n} weeks", n=days // 7)
     if days < 60:
-        return "a month"
-    return "since " + dt.astimezone().strftime("%b")
+        return _t("a month")
+    return _t("since {month}", month=_month(dt.astimezone().month))
 
 
 BENCH_MAX = 12  # Pips on the bench; past it, "+N more"

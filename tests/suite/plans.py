@@ -458,7 +458,7 @@ def test_feedback_365():
     check("feedback: the versions line", v.startswith("add-on 3.6.5 · Anki ") and v.count(" · ") == 2, v)
     html = board.settings_html({"tab": "you", "signed_in": True, "name": "Maya"}, {})
     check("feedback: a row on Settings › You, sent as setfeedback", "duecrew:setfeedback" in html and "Feedback" in html)
-    check("feedback: not on the signed-out You tab", "setfeedback" not in board.settings_html({"tab": "you", "signed_in": False}, {}))
+    check("feedback: not on the signed-out You tab", "setfeedback" not in board._settings_you({"signed_in": False}, {}))  # 3.10.0: Board's Language row has Suggest a wording, the same window
     import due_crew as dc
     from aqt.deckbrowser import DeckBrowser
     if "aqt.reviewer" not in sys.modules:

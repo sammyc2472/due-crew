@@ -6,6 +6,7 @@ A part of the board (due_crew/board/, 3.9.8): see its __init__."""
 import html as _html
 import time
 
+from ..words import t as _t
 from ..logo import board_mark
 from .. import sev as _sev
 
@@ -325,24 +326,22 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     # itself) and Open a room is the top bar's (▶ Fifteen?'s arrow). Refresh and Settings stay quiet icons
     left = ""
     if rules_stale:
-        left += ('<span class="warn" title="The server is behind this version; '
-                 'some sharing is paused until it catches up.">'
-                 '&#9888; server catching up</span>')
-    left += (f'<a href="#" title="Your crew, your code, Copy invite" onclick="{_pycmd("friends")}">Friends</a>'
-             f'<a href="#" title="What your crew sent you and what you did, by month" onclick="{_pycmd("scrapbook")}">Scrapbook</a>'
-             f'<a href="#" title="Your day, week or year, as text or a picture" '
-             f'onclick="{_pycmd("sharemenu")}">Share my stats</a>')
+        left += (f'<span class="warn" title="{_t("The server is behind this version; some sharing is paused until it catches up.")}">'
+                 f'&#9888; {_t("server catching up")}</span>')
+    left += (f'<a href="#" title="{_t("Your crew, your code, Copy invite")}" onclick="{_pycmd("friends")}">{_t("Friends")}</a>'
+             f'<a href="#" title="{_t("What your crew sent you and what you did, by month")}" onclick="{_pycmd("scrapbook")}">{_t("Scrapbook")}</a>'
+             f'<a href="#" title="{_t("Your day, week or year, as text or a picture")}" '
+             f'onclick="{_pycmd("sharemenu")}">{_t("Share my stats")}</a>')
     n_pending = len(data.get("pending", []))
     if n_pending:
-        left += (f'<a class="warn" href="#" title="You added them; you\'re crew when they add you back" '
-                 f'onclick="{_pycmd("friends")}">{n_pending} waiting</a>')
+        left += (f'<a class="warn" href="#" title="{_t("You added them; you’re crew when they add you back")}" '
+                 f'onclick="{_pycmd("friends")}">{_t("{n} waiting", n=n_pending)}</a>')
 
-    ago, _tone = _ago_secs(max(0.0, time.time() - fetched_at)) if fetched_at else ("just now", "")
-    failed = ('<span class="warn" title="The last sync didn\'t reach Due Crew. '
-              'Your numbers are safe; Refresh tries again.">Couldn&rsquo;t sync</span>'
-              ' &middot; ') if sync_error else ""
+    ago, _tone = _ago_secs(max(0.0, time.time() - fetched_at)) if fetched_at else (_t("just now"), "")
+    failed = (f'<span class="warn" title="{_t("The last sync didn’t reach Due Crew. Your numbers are safe; Refresh tries again.")}">'
+              f'{_t("Couldn’t sync")}</span> &middot; ') if sync_error else ""
     foot = (_calm_line(cfg) + _use_line(cfg) + _live_line(cfg) + f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
-            f'<span class="fr">{failed}<span class="upd">Updated {ago}</span>'
+            f'<span class="fr">{failed}<span class="upd">{_t("Updated {when}", when=ago)}</span>'
             f'<a class="ic" href="#" title="Refresh" aria-label="Refresh" onclick="{_pycmd("refresh")}">{_IC_REFRESH}</a>'
             f'<a class="ic" href="#" title="Settings" aria-label="Settings" onclick="{_pycmd("settings")}">{_IC_GEAR}</a></span></div>')
 

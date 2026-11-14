@@ -1208,3 +1208,52 @@ def test_what_offers_a_tip_v3912():
     check("the offer: Again or Hard since yesterday, or slow, or nearly a leech; and an ask still has its Tip",
           "ease IN (1, 2) LIMIT 1" in src and "hooks.slow(_taken(card), _usual(col, day)) or hooks.near_leech(card.lapses, *_leech(col, card))" in src
           and '"kind": "asked"' in src and '"act": "Tip"' in src)
+
+
+def test_languages_v3100():
+    """3.10.0 (SC: Spanish, Portuguese, German, French; drafted by AI and said so, with a way to send a better
+    wording; Anki's language unless Settings says otherwise): words.py, the files, the crew board in another language."""
+    import importlib.util
+    from due_crew import words
+    check("which language: Settings' pick, or Anki's; one we haven't got is English",
+          words.pick("auto", "pt_BR") == "pt" and words.pick(None, "es-ES") == "es" and words.pick("de", "fr") == "de"
+          and words.pick("auto", "ja") == "en" and words.pick("xx", "") == "en" and words.code_of("FR_fr") == "fr")
+    try:
+        check("English is the key: said as written, names filled, a count picks its phrase",
+              words.use("en") == "en" and words.t("{n} days", n=3) == "3 days" and words.tn("{n} day this week", "{n} days this week", 1) == "1 day this week"
+              and words.t("no such phrase") == "no such phrase" and words.later("Today") == "Today")
+        check("another language: its phrase, the English when it hasn't got one, months by name",
+              words.use("es") == "es" and words.lang() == "es" and words.t("Today") == "Hoy" and words.t("{n} days", n=3) == "3 días"
+              and words.t("no such phrase") == "no such phrase" and words.month(8) == "ago" and words.use("xx") == "en")
+        spec = importlib.util.spec_from_file_location("dc_words_tool", os.path.join(REPO, "tools", "words.py"))
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        rep = tool.report()
+        check("every language has every phrase the code asks for, none left over, each with its English's {names} and no markup of its own",
+              sorted(rep) == ["de", "es", "fr", "pt"] and all(not any(r.values()) for r in rep.values()),
+              {c: {k: v[:3] for k, v in r.items() if v} for c, r in rep.items()})
+        labels = ["2026-09-27", "2026-09-26", "2026-09-25", "2026-09-24", "2026-09-23", "2026-09-22", "2026-09-21"]
+        ent = lambda uid, name, days, you=False, last="2026-09-27T10:00:00Z": {
+            "user_id": uid, "name": name, "you": you, "paused": False, "last_updated": last, "exam_date": "", "days": days, "decks": []}
+        data = {"entries": [ent("me", "Sammy", {labels[0]: {"studied": True, "reviews": 50, "studyTimeMs": 600000}}, you=True),
+                            ent("n", "Nia", {labels[1]: {"studied": True, "reviews": 30, "studyTimeMs": 60000}}),
+                            ent("w", "Wren", {}, last="2026-01-02T10:00:00Z")],
+                "labels": labels, "tomorrow": "2026-09-28", "pending": []}
+        words.use("de")
+        page = board.render(data, {"period": "today"}, 0)
+        check("the crew board in German: its views, heads, yesterday's row, the bench, the foot; none of their English left",
+              all(w in page for w in (">Heute<", ">Woche<", ">Wiederholungen<", ">Serie<", "&middot; gestern<", ">seit Jan<", ">Freunde<", ">Meine Zahlen teilen<", "Aktualisiert "))
+              and not any(w in page for w in (">Today<", ">Reviews<", "&middot; yesterday<", ">since Jan<", ">Friends<", ">Share my stats<")), page[:300])
+        st = board._settings_board({"lang": "fr"})
+        check("Settings › Board › Language: Anki's or one of five, each in its own name; who drafted them, and where a better wording goes",
+              all(f"set:lang:{c}" in st for c in words.CHOICES) and ">Español<" in st and ">Français<" in st and "une IA" not in st and "KI entworfen" in st
+              and "setfeedback" in st and settings_model_change(["set", "lang", "pt"]) == {"lang": "pt"} and settings_model_change(["set", "lang", "xx"]) is None)
+    finally:
+        words.use("en")
+    check("spoken at a profile's open and when the setting changes; never a file of its own to write",
+          "speak()" in srcs.glue_src() and 'if "lang" in changed:' in srcs.glue_src() and "open(" in srcs.due_src("words.py") and '"w"' not in srcs.due_src("words.py"))
+
+
+def settings_model_change(parts):
+    from due_crew import settings_model
+    return settings_model.change(parts, {})

@@ -266,6 +266,9 @@ clean `main` does the migrations, the API, then the site, then
   core for every part; a part adds only its own and never restates it); a page of its
   own carries `base.page_reset(scope)`'s text (Magic search, the plan window); the site's
   pages carry `board.SITE_RESET`.
+- What a person reads is said through `words.py` (3.10.0; `docs/languages.md`): `t("phrase")`, English the
+  key, a phrase whole (never built from halves), each language's in `due_crew/lang/`. A new phrase gets all
+  four languages in the same commit (`python3 tools/words.py`). Surfaces not wrapped yet read English.
 - A file Due Crew keeps is written by `store.py` (3.9.12: whole to a .tmp,
   swapped in; `load`/`save` for one kept in memory), never by a module's own
   open-and-replace. The colours are `board.palette`: every add-on page reads

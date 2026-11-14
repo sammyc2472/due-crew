@@ -22,6 +22,7 @@ from ..app import _state
 from ..app import cfg
 from ..app import client
 from ..app import save_cfg
+from .settings import speak
 from ..errs import oops
 from ..squads import open_squads
 
@@ -59,6 +60,11 @@ def _on_profile_open():
     _run.last_attempt = 0.0
     _run.pushed = None
     client()                  # rebind to this profile's session
+    try:  # 3.10.0: speak this profile's language (Settings' pick, or Anki's)
+        speak()
+    except Exception:
+        from ..errs import oops
+        oops()
     try:  # 3.9.12: switches that left Settings go back to their defaults, once
         from .. import settings_model
         back = settings_model.retire(cfg())

@@ -6,6 +6,8 @@ import html as _html
 import json as _json
 import re as _re
 
+from .. import words as _words
+from ..words import t as _t
 from ..errs import wanted as _sends_errs
 from ..logo import board_mark
 from .. import sev as _sev
@@ -207,6 +209,11 @@ def _settings_board(cfg):
             + '</div><div class="st-h">Look</div><div class="st-box">'
             + _st_row("Theme", _st_seg("theme", (("auto", "Match Anki"), ("light", "Light"), ("dark", "Dark")), cfg.get("theme", "auto"), "Theme"))
             + _st_row("Accent", f'<span class="st-sw" role="group" aria-label="Accent">{swatches}</span>')
+            # 3.10.0 (words.py): Anki's language unless picked here; each named as its speakers write it. The note says who
+            # drafted them, and Suggest a wording is the feedback window, written in one's own language (SC, 13 Nov)
+            + _st_row(_t("Language"), _st_seg("lang", ((_words.AUTO, _t("Match Anki")),) + tuple(_words.NAMES.items()),
+                                              cfg.get("lang", _words.AUTO), _t("Language")),
+                      f'{_t(_words.NOTE)} <a class="st-lk" href="#" {_st_click("setfeedback")}>{_t("Suggest a wording")}</a>')
             + '</div><div class="st-h">Your crew</div><div class="st-box">'
             + _st_row("Yesterday for friends who haven't synced", _st_switch("show_stale", g("show_stale", True), "Yesterday for friends who haven't synced"))
             + _st_row("Tell me when my crew studies", _st_switch("sync_notifications", g("sync_notifications", True), "Tell me when my crew studies"))
@@ -421,7 +428,7 @@ def settings_index(view, cfg):
         seen.add(key)
         words = " ".join([label, where, extra] + [w for k, w in FIND_WORDS.items() if f.startswith(k)])
         out.append({"t": tab, "f": _find_key(f), "l": label, "w": where, "k": " ".join(_re.findall(r"[a-z0-9]+", words.lower()))})
-    for tab, _t in SETTINGS_TABS:
+    for tab, _name in SETTINGS_TABS:
         body = _settings_tab(tab, dict(view, name="", status="", emoji=""), cfg, pip=False)
         sections = _re.split(r'<div class="st-h">', body)
         for i, sec in enumerate(sections):

@@ -22,6 +22,7 @@ SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "share_revie
 CHOICES = {"theme": ("auto", "light", "dark"),
            "accent": ("green", "blue", "purple", "teal", "amber", "rose"),
            "room_chip_side": ("left", "right"),
+           "lang": ("auto", "en", "es", "pt", "de", "fr"),  # 3.10.0: words.CHOICES (this computer's, like the theme)
            "sev_break": ("breathe", "stretch")}  # 3.8.1: a fifteen's break
 HIDEABLE = ("decks", "squads", "plans", "insights", "party")  # board.HIDEABLE_TABS: Crew's Decks, Squads; Plans, Insights (3.8.0); Pip Party (3.9.5)
 PRIVACY = ("numbers", "showup", "paused")
