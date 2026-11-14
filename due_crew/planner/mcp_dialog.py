@@ -10,13 +10,14 @@ from aqt.qt import (
 )
 
 from ..ui import attach_alive, confirm, copy_text, heading, note
+from ..words import later as _later, t as _t
 
-SWITCH = "Let an AI app on this computer read my plans and add changes for me to send"
-ABOUT = ("An AI app on this computer (Claude Desktop, Claude Code or another) reads your plans and the deck's tags "
-         "through Anki, and puts changes under a plan you write.")
-SETUP = ("Copy setup is for an app that starts a program for its tools (it needs Python 3 here); Copy HTTP setup "
-         "for one that takes an address. Paste either under mcpServers in the app's setup.")
-NOTHING_SENT = "Nothing is sent from Anki by it: changes wait under the plan for you to Review and send."
+SWITCH = _later("Let an AI app on this computer read my plans and add changes for me to send")
+ABOUT = _later("An AI app on this computer (Claude Desktop, Claude Code or another) reads your plans and the deck's tags "
+               "through Anki, and puts changes under a plan you write.")
+SETUP = _later("Copy setup is for an app that starts a program for its tools (it needs Python 3 here); Copy HTTP setup "
+               "for one that takes an address. Paste either under mcpServers in the app's setup.")
+NOTHING_SENT = _later("Nothing is sent from Anki by it: changes wait under the plan for you to Review and send.")
 
 _open = []  # the one window
 
@@ -36,12 +37,12 @@ class AiAppDialog(QDialog):
         super().__init__(parent)
         self.ops = ops
         attach_alive(self)
-        self.setWindowTitle("Your AI app")
+        self.setWindowTitle(_t("Your AI app"))
         self.setMinimumWidth(520)
         root = QVBoxLayout(self)
         heading(self, root)
-        root.addWidget(_plain(ABOUT))
-        self.switch = QCheckBox(SWITCH)
+        root.addWidget(_plain(_t(ABOUT)))
+        self.switch = QCheckBox(_t(SWITCH))
         self.switch.toggled.connect(self._switch)
         root.addWidget(self.switch)
 
@@ -54,31 +55,31 @@ class AiAppDialog(QDialog):
         self.token = QLineEdit()
         self.token.setReadOnly(True)
         self.token.setEchoMode(QLineEdit.EchoMode.Password)
-        self.copy_token = QPushButton("Copy")
-        self.copy_token.clicked.connect(lambda: self._copy(self.ops.state()["token"], "Token copied."))
-        self.new_btn = QPushButton("New token")
+        self.copy_token = QPushButton(_t("Copy"))
+        self.copy_token.clicked.connect(lambda: self._copy(self.ops.state()["token"], _t("Token copied.")))
+        self.new_btn = QPushButton(_t("New token"))
         self.new_btn.clicked.connect(self._new_token)
-        grid.addWidget(_plain("Address", wrap=False), 0, 0)
+        grid.addWidget(_plain(_t("Address"), wrap=False), 0, 0)
         grid.addWidget(self.address, 0, 1, 1, 3)
-        grid.addWidget(_plain("Token", wrap=False), 1, 0)
+        grid.addWidget(_plain(_t("Token"), wrap=False), 1, 0)
         grid.addWidget(self.token, 1, 1)
         grid.addWidget(self.copy_token, 1, 2)
         grid.addWidget(self.new_btn, 1, 3)
         grid.setColumnStretch(1, 1)
         box.addLayout(grid)
         row = QHBoxLayout()
-        self.setup_btn = QPushButton("Copy setup")
-        self.setup_btn.clicked.connect(lambda: self._copy(self.ops.setup(http=False), "Setup copied."))
-        self.http_btn = QPushButton("Copy HTTP setup")
-        self.http_btn.clicked.connect(lambda: self._copy(self.ops.setup(http=True), "HTTP setup copied."))
+        self.setup_btn = QPushButton(_t("Copy setup"))
+        self.setup_btn.clicked.connect(lambda: self._copy(self.ops.setup(http=False), _t("Setup copied.")))
+        self.http_btn = QPushButton(_t("Copy HTTP setup"))
+        self.http_btn.clicked.connect(lambda: self._copy(self.ops.setup(http=True), _t("HTTP setup copied.")))
         row.addWidget(self.setup_btn)
         row.addWidget(self.http_btn)
         row.addStretch(1)
         box.addLayout(row)
-        box.addWidget(note(_plain(SETUP)))
+        box.addWidget(note(_plain(_t(SETUP))))
         root.addWidget(self.on_box)
 
-        root.addWidget(note(_plain(NOTHING_SENT)))
+        root.addWidget(note(_plain(_t(NOTHING_SENT))))
         self.said = _plain("")
         root.addWidget(self.said)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -99,7 +100,7 @@ class AiAppDialog(QDialog):
         self.new_btn.setEnabled(bool(s.get("on")))
         words = said if said is not None else (s.get("said") or "")
         if s.get("on") and not live and not words:
-            words = "It isn't running. Turn it off and on again."
+            words = _t("It isn't running. Turn it off and on again.")
         self.said.setText(words)
         self.said.setVisible(bool(words))
 
@@ -107,8 +108,8 @@ class AiAppDialog(QDialog):
         self._show(self.ops.set_on(bool(on)))
 
     def _new_token(self):
-        if confirm(self, "New token?", "The AI app's setup stops working until you copy it again.", "New token"):
-            self._show(self.ops.new_token(), "New token. Copy the setup again into your AI app.")
+        if confirm(self, _t("New token?"), _t("The AI app's setup stops working until you copy it again."), _t("New token")):
+            self._show(self.ops.new_token(), _t("New token. Copy the setup again into your AI app."))
 
     def _copy(self, text, words):
         copy_text(text)

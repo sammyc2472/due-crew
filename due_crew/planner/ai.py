@@ -27,6 +27,7 @@ import json
 import re
 
 from .. import plans as P
+from ..words import later as _later, t as _t
 from . import build as B
 from . import claude as C
 from . import edits as E
@@ -189,10 +190,10 @@ def clean_op(o):
     """(op with only its own fields, "") or (None, why): an op the registry
     doesn't know, or that isn't an object, is never tried."""
     if not isinstance(o, dict):
-        return None, "A change is an object with its op."
+        return None, _t("A change is an object with its op.")
     name = o.get("op")
     if not isinstance(name, str) or name not in O.REG:
-        return None, f"There's no change called {name}." if name else "That change has no op."
+        return None, _t("There's no change called {name}.", name=name) if name else _t("That change has no op.")
     fields = VOCAB.get(name, ("", {}, {}))[1]
     return {k: copy.deepcopy(v) for k, v in o.items() if k == "op" or k in fields}, ""
 
@@ -208,7 +209,7 @@ def try_ops(ops_list, doc, ctx, most=O.OPS_MAX):
     kept, refused, cur = [], [], doc
     for i, raw in enumerate(ops_list if isinstance(ops_list, list) else []):
         if i >= most:
-            refused.append((raw, f"More than {most:,} changes at once: this one wasn't tried."))
+            refused.append((raw, _t("More than {n} changes at once: this one wasn't tried.", n=f"{most:,}")))
             continue
         o, why = clean_op(raw)
         if o is None:
@@ -221,10 +222,10 @@ def try_ops(ops_list, doc, ctx, most=O.OPS_MAX):
             refused.append((o, str(e)))
             continue
         except Exception:  # an op whose fields aren't what its kind takes: said, never applied
-            refused.append((o, "That change doesn't fit this plan."))
+            refused.append((o, _t("That change doesn't fit this plan.")))
             continue
         if _same(after, cur):
-            refused.append((o, "Nothing to change: the plan has that already."))
+            refused.append((o, _t("Nothing to change: the plan has that already.")))
             continue
         for x in entries:
             x["who"] = O.who(x, ctx.today)
@@ -251,9 +252,9 @@ SCOPE_SHAPE = {"type": "object", "required": ["dates"], "properties": {
 
 
 class Job:
-    """One thing an AI does: its name, title, what it's told (does), the
-    input it may be sent, how it answers (ops, text, sessions, notes) and
-    the answer's shape."""
+    """One thing an AI does: its name, title (kept in English: say it with `_t(job.title)`), what it's
+    told (does: the AI's, English), the input it may be sent, how it answers (ops, text, sessions,
+    notes) and the answer's shape."""
 
     def __init__(self, name, title, does, inputs, answer, shape):
         self.name, self.title, self.does = name, title, does
@@ -261,22 +262,22 @@ class Job:
 
 
 JOBS = {j.name: j for j in (
-    Job("calendar", "Read a block's calendar",
+    Job("calendar", _later("Read a block's calendar"),
         "Each session in this calendar: its date, what kind it is, its title, its objectives and the resources it "
         "lists. Leave out breaks and holidays.", ("today", "text", "day_first"), "sessions", C.CALENDAR_SHAPE),
-    Job("pick", "Cards for a date",
+    Job("pick", _later("Cards for a date"),
         "Which of these tags or subdecks fit this date, by its name and words. Answer with paths from the list only.",
         ("date", "tags"), "ops", PICK_SHAPE),
-    Job("scope", "What an exam covers",
+    Job("scope", _later("What an exam covers"),
         "Which of these dates the line says the exam covers.", ("event", "said", "dates"), "ops", SCOPE_SHAPE),
-    Job("words", "A change in my words",
+    Job("words", _later("A change in my words"),
         "The changes to this plan these words ask for, as ops.", ("today", "said", "plan"), "ops", OPS_SHAPE),
-    Job("tag", "Tag by objective",
+    Job("tag", _later("Tag by objective"),
         "A plan tag line for each objective, from the deck's tags.", ("said", "plan", "tags"), "text", TEXT_SHAPE),
-    Job("check", "Check the plan",
+    Job("check", _later("Check the plan"),
         "What in this plan is worth a second look, one line each. Change nothing.", ("today", "plan", "tags"),
         "notes", NOTES_SHAPE),
-    Job("plan", "Plan the dates",
+    Job("plan", _later("Plan the dates"),
         "Dates for this plan, in the plan's text format.", ("today", "said", "plan", "tags", "whole"), "text",
         TEXT_SHAPE),
 )}
@@ -297,15 +298,15 @@ _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 
 def _clean(v, key="", depth=0):
     if depth > 6:
-        raise NotSent("That's nested deeper than a request goes.")
+        raise NotSent(_t("That's nested deeper than a request goes."))
     if isinstance(v, dict):
         out = {}
         for k, x in v.items():
             k = str(k)
             if k.lower() in NEVER:
-                raise NotSent(f"A request never carries {k}: card text, ids and people stay on this computer.")
+                raise NotSent(_t("A request never carries {key}: card text, ids and people stay on this computer.", key=k))
             if k not in KEYS:
-                raise NotSent(f"A request doesn't carry {k}.")
+                raise NotSent(_t("A request doesn't carry {key}.", key=k))
             if x is not None:
                 out[k] = _clean(x, k, depth + 1)
         return out
@@ -317,7 +318,7 @@ def _clean(v, key="", depth=0):
         return v if v == v and abs(v) != float("inf") else None
     if isinstance(v, str):
         return _EMAIL.sub("[email]", v)[:STR_MAX.get(key, 600)]
-    raise NotSent(f"A request carries words and numbers, not {type(v).__name__}.")
+    raise NotSent(_t("A request carries words and numbers, not {kind}.", kind=type(v).__name__))
 
 
 def request(job, **inputs):
@@ -326,10 +327,10 @@ def request(job, **inputs):
     NotSent for anything else (card text above all)."""
     j = JOBS.get(job)
     if j is None:
-        raise NotSent(f"There's no job called {job}.")
+        raise NotSent(_t("There's no job called {name}.", name=job))
     bad = sorted(k for k in inputs if k not in j.inputs)
     if bad:
-        raise NotSent(f"{j.title} isn't sent {', '.join(bad)}.")
+        raise NotSent(_t("{job} isn't sent {keys}.", job=_t(j.title), keys=", ".join(bad)))
     return {"job": job, "v": V, "input": _clean({k: v for k, v in inputs.items() if v is not None})}
 
 
@@ -517,7 +518,7 @@ def request_for(job, doc=None, tree=None, name="", today="", said="", ref=None, 
         inp = {"today": str(today), "said": str(said or ""), "plan": plan_summary(doc, tree, name), "tags": lines(),
                "whole": bool(whole)}
     else:
-        raise NotSent(f"There's no job called {job}.")
+        raise NotSent(_t("There's no job called {name}.", name=job))
     return request(job, **inp)
 
 
@@ -582,19 +583,19 @@ def _pick_ops(answer, inp):
     for o in raw:
         if isinstance(o, dict) and o.get("op") == "add_cards":
             if date and o.get("date") not in (None, date):
-                refused.append((o, "That's not the set it was asked about."))
+                refused.append((o, _t("That's not the set it was asked about.")))
                 continue
             o = dict(o, date=date or o.get("date"))
             if given is not None:
                 ts, ds = [str(t) for t in o.get("tags") or []], [str(d) for d in o.get("decks") or []]
                 off = [f"tag:{t}" for t in ts if f"tag:{t}" not in given] + [f"deck:{d}" for d in ds if f"deck:{d}" not in given]
                 if off:
-                    refused.append(({"op": "add_cards", "date": o["date"], "tags": off}, f"Not one of the tags it was given: {', '.join(off)}."))
+                    refused.append(({"op": "add_cards", "date": o["date"], "tags": off}, _t("Not one of the tags it was given: {tags}.", tags=", ".join(off))))
                     o = dict(o, tags=[t for t in ts if f"tag:{t}" in given], decks=[d for d in ds if f"deck:{d}" in given])
                     if not (o["tags"] or o["decks"]):
                         continue
         elif isinstance(o, dict):
-            refused.append((o, "A set's cards are all pick changes."))
+            refused.append((o, _t("A set's cards are all pick changes.")))
             continue
         ok.append(o)
     return ok, refused
@@ -612,13 +613,13 @@ def _scope_ops(answer, inp):
     ok, refused = [], []
     for o in raw:
         if not isinstance(o, dict) or o.get("op") != "set_for":
-            refused.append((o, "What an exam covers is all set_for changes."))
+            refused.append((o, _t("What an exam covers is all set_for changes.")))
             continue
         if eid and o.get("event") not in (None, eid):
-            refused.append((o, "That's not the quiz or exam it was asked about."))
+            refused.append((o, _t("That's not the quiz or exam it was asked about.")))
             continue
         if given is not None and o.get("date") not in given:
-            refused.append((o, f"Not one of the sets it was given: {o.get('date')}."))
+            refused.append((o, _t("Not one of the sets it was given: {name}.", name=o.get("date"))))
             continue
         ok.append(dict(o, event=eid or o.get("event")))
     return ok, refused
@@ -647,7 +648,7 @@ def answer_ops(job, answer, doc, ctx, request=None):
     elif j.answer == "text":
         text = _unfence(str((answer.get("text") if isinstance(answer, dict) else "") or ""))
         if not text.strip():
-            return [], [(answer, "No plan lines in that answer.")]
+            return [], [(answer, _t("No plan lines in that answer."))]
         raw = [{"op": "text", "mode": "replace" if job == "plan" and inp.get("whole") else "add", "text": text}]
     elif job == "calendar":
         raw = _calendar_ops(answer)
@@ -658,7 +659,7 @@ def answer_ops(job, answer, doc, ctx, request=None):
     else:
         raw = None
     if not raw:
-        return [], pre or [(answer, "That answer has no changes in it.")]
+        return [], pre or [(answer, _t("That answer has no changes in it."))]
     kept, refused, _after = try_ops(raw, doc, ctx)
     return [o for o, _e in kept], pre + refused
 
@@ -681,7 +682,7 @@ def check_notes(answer):
 class Runner:
     """Who answers a job. available() -> (bool, words); run(request, done):
     done(answer or None, words), on the caller's thread for these (Claude's,
-    later, in the background)."""
+    later, in the background). name: kept in English, said with `_t(runner.name)`."""
 
     name = ""
     key = ""
@@ -694,11 +695,11 @@ class Runner:
 
 
 class Off(Runner):
-    name = "Off"
+    name = _later("Off")
     key = "off"
 
     def available(self):
-        return False, "No AI helps with this. Plain rules alone."
+        return False, _t("No AI helps with this. Plain rules alone.")
 
 
 class StandIn(Runner):
@@ -715,14 +716,14 @@ class StandIn(Runner):
 
     def run(self, req, done):
         job, inp = req.get("job"), req.get("input") or {}
-        say = "Claude’s stand-in: its rules, not Claude."
+        say = _t("Claude’s stand-in: its rules, not Claude.")
         if job == "calendar":
             got = self.rules.calendar(inp.get("text") or "", _day(inp.get("today")), bool(inp.get("day_first")))
             done({"sessions": [{"date": s["date"], "kind": s["kind"], "title": s["title"]} for s in got], "say": say},
-                 say if got else "The stand-in found no dates in that.")
+                 say if got else _t("The stand-in found no dates in that."))
         elif job == "pick":
             got = self._pick(inp)
-            done({"tags": got, "say": say}, say if got else "The stand-in found nothing that fits.")
+            done({"tags": got, "say": say}, say if got else _t("The stand-in found nothing that fits."))
         elif job == "scope":
             dates = inp.get("dates") or []
             sessions = [{"date": d.get("day"), "kind": "lecture", "title": d.get("name") or "", "week": d.get("week")}
@@ -730,10 +731,10 @@ class StandIn(Runner):
             tags = {i: [str(t).split(":", 1)[-1] for t in d.get("tags") or []] for i, d in enumerate(dates)}
             idx, left = self.rules.scope(inp.get("said") or [], sessions, tags)
             done({"dates": [dates[i]["id"] for i in idx], "say": say},
-                 say + (f" It couldn't place: {'; '.join(left)}." if left else ""))
+                 say + (" " + _t("It couldn't place: {names}.", names="; ".join(left)) if left else ""))
         else:
-            done(None, "The stand-in reads calendars, picks a set's tags and finds what an exam covers; "
-                       "for this one, copy the prompt to your own AI.")
+            done(None, _t("The stand-in reads calendars, picks a set's tags and finds what an exam covers; "
+                          "for this one, copy the prompt to your own AI."))
 
     def _pick(self, inp):
         """The stand-in's pick: the given paths whose last part has the date's
@@ -754,15 +755,15 @@ class StandIn(Runner):
 class OwnAI(Runner):
     """Your own AI: the prompt to copy into any AI chat, and its answer pasted back (read)."""
 
-    name = "Your own AI"
+    name = _later("Your own AI")
     key = "own"
-    WORDS = "Copy the prompt into your own AI, then paste its answer back here."
+    WORDS = _later("Copy the prompt into your own AI, then paste its answer back here.")
 
     def available(self):
-        return True, self.WORDS
+        return True, _t(self.WORDS)
 
     def run(self, req, done):
-        done(None, self.WORDS)
+        done(None, _t(self.WORDS))
 
     def prompt(self, job, doc=None, tree=None, name="", today="", said="", cover=None, req=None):
         """The prompt to copy: Plan the dates' and Tag by objective's own
@@ -813,7 +814,7 @@ class Claude(Runner):
     key = "claude"
 
     def available(self):
-        return False, "Claude isn't connected yet."
+        return False, _t("Claude isn't connected yet.")
 
 
 RUNNERS = {"off": Off, "standin": StandIn, "own": OwnAI, "claude": Claude}

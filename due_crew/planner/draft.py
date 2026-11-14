@@ -16,6 +16,7 @@ Pure."""
 import copy
 import json
 
+from ..words import lang as _lang, t as _t
 from . import edits as E
 from . import ops as O
 
@@ -39,7 +40,7 @@ class Draft:
     def replay(self, ctx):
         """(doc, [entries a change], [(op, words)] dropped): the ops on the
         base, in order; one that won't go on any more is dropped, said."""
-        key = (json.dumps(self.ops, sort_keys=True), id(ctx.tree), ctx.today)
+        key = (json.dumps(self.ops, sort_keys=True), id(ctx.tree), ctx.today, _lang())  # its words are in a language
         if self._cache and self._cache[0] == key:
             return self._cache[1]
         doc, changes, dropped, kept = copy.deepcopy(self.base), [], [], []
@@ -56,7 +57,7 @@ class Draft:
             doc = after
         self.ops = kept
         out = (doc, changes, dropped)
-        self._cache = (json.dumps(self.ops, sort_keys=True), id(ctx.tree), ctx.today), out
+        self._cache = (json.dumps(self.ops, sort_keys=True), id(ctx.tree), ctx.today, _lang()), out
         return out
 
     def doc(self, ctx):
@@ -77,12 +78,12 @@ class Draft:
         """One op more, checked on the plan as the draft has it now:
         (entries it made, the ids it touched); Refused with the words."""
         if len(self.ops) >= O.OPS_MAX:
-            raise E.Refused(f"{O.OPS_MAX} changes are waiting: send them first.")
+            raise E.Refused(_t("{n} changes are waiting: send them first.", n=O.OPS_MAX))
         doc = self.doc(ctx)
         o = O.check(doc, o)
         after, entries, touched = O.apply(doc, o, ctx)
         if json.dumps(E.lean(after), sort_keys=True) == json.dumps(E.lean(doc), sort_keys=True):
-            raise E.Refused("Nothing to change: the plan has that already.")
+            raise E.Refused(_t("Nothing to change: the plan has that already."))
         self.ops.append(o)
         self._cache = None
         return entries, touched
