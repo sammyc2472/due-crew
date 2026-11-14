@@ -39,10 +39,10 @@ GROUPS = (_later("Showing up"), _later("Fifteens"), _later("Crew"), _later("Squa
           _later("Card care"), _later("Seasons"), _later("Secret"))
 
 # (key, place, group, name, rule, (fact, n)[, extra]). Order is the closet's.
-# 3.10.0: a name, a rule, a tip, a season's dates and a group are said in the reader's language where
-# they're drawn (words.t); here they stay the English, which is also what the code compares.
 # extra: when (a season's dates), tip (what the rule means, in a tooltip),
 # also (another place it takes).
+# 3.10.0: a name, a rule, a tip, a season's dates and a group are said in the reader's language where
+# they're drawn (words.t); here they stay the English, which is also what the code compares.
 _T = (
     ("sprout", "head", "Showing up", _later("Sprout"), _later("Your first day"), ("days", 1)),
     ("beanie", "head", "Showing up", _later("Beanie"), _later("7 days in a row"), ("run", 7)),
