@@ -13,14 +13,20 @@ from .base import _pycmd
 from .style import _css
 from .pip import SEV_CSS
 from .settings import SETTINGS_CSS, _accent_swatches, _st_click
+from .. import words as _words
+from ..words import later as _later, t as _t
 
 
 # ---- 3.8.2: Pip's closet ----
 
-CLOSET_TABS = ("Yours", "To earn")
+CLOSET_TABS = (_later("Yours"), _later("To earn"))  # the glue keeps the tab by its English; said with _t where it's drawn
 # the places on Pip, top to bottom, as the closet lists them; a costume over them all
 CLOSET_PLACES = ("head", "face", "body", "hand", "back")
-PLACE_NAMES = {"head": "Head", "face": "Face", "body": "Body", "hand": "Hand", "back": "Back", _closet.COSTUME: "Costume"}
+PLACE_NAMES = {"head": _later("Head"), "face": _later("Face"), "body": _later("Body"), "hand": _later("Hand"), "back": _later("Back"),
+               _closet.COSTUME: _later("Costume")}
+# a thing that takes a second place: what that place says ("with the earmuffs"), and its tile's line ("and body")
+ALSO_WITH = {"winter": _later("with the earmuffs")}
+ALSO_PLACE = {"body": _later("and body")}
 
 CLOSET_CSS = """
     #due-crew.dc-closet { text-align: left; }
@@ -115,7 +121,7 @@ def _closet_day(day):
         d = _date.fromisoformat(str(day))
     except ValueError:
         return ""
-    return f"{d.day} {d:%b}" + ("" if d.year == _date.today().year else f" {d.year}")
+    return f"{d.day} {_words.month(d.month)}" + ("" if d.year == _date.today().year else f" {d.year}")
 
 
 def _wear_tile(t, have, look, shown, new):
@@ -125,16 +131,18 @@ def _wear_tile(t, have, look, shown, new):
     k = t["k"]
     on, under = k in look and k in shown, k in look and k not in shown
     cls = "cl-t" + (" on" if on else " under" if under else "") + (" new" if k in new else "")
-    badge = ('<span class="cl-badge">&#10003; On</span>' if on else '<span class="cl-badge u">Under</span>' if under else "")
-    badge += '<span class="cl-badge n">New</span>' if k in new and not on else ""
+    badge = (f'<span class="cl-badge">&#10003; {_t("On")}</span>' if on else f'<span class="cl-badge u">{_t("Under")}</span>' if under else "")
+    badge += f'<span class="cl-badge n">{_t("New")}</span>' if k in new and not on else ""
     since = _closet_day(have.get(k))
-    tip = e(f'Yours since {since}' if since else t.get("tip") or "")
-    fig = f'<span class="cl-f">{_sev.slot(_sev.svg("idle", rest=True, look=[k], label=e(t["name"])), 52)}</span>'
-    also = "".join(f'<small>and {PLACE_NAMES[p].lower()}</small>' for p in t.get("also") or ())
-    also += f'<small>{e(t["rule"])}</small>'  # what earned it
-    state = "on" if on else "under the costume" if under else "not on"
-    return (f'<button class="{cls}" title="{tip}" aria-label="{e(t["name"])}, {state}" aria-pressed="{"true" if k in look else "false"}" '
-            f'{_st_click("closetwear:" + k)}>{badge}{fig}<b>{e(t["name"])}</b>{also}</button>')
+    tip = e(_t("Yours since {day}", day=since) if since else _t(t.get("tip") or ""))
+    name = e(_t(t["name"]))
+    fig = f'<span class="cl-f">{_sev.slot(_sev.svg("idle", rest=True, look=[k], label=name), 52)}</span>'
+    also = "".join(f'<small>{_t(ALSO_PLACE[p]) if p in ALSO_PLACE else _t("and {place}", place=_t(PLACE_NAMES[p]).lower())}</small>'
+                   for p in t.get("also") or ())
+    also += f'<small>{e(_t(t["rule"]))}</small>'  # what earned it
+    said = _t("{name}, on", name=name) if on else _t("{name}, under the costume", name=name) if under else _t("{name}, not on", name=name)
+    return (f'<button class="{cls}" title="{tip}" aria-label="{said}" aria-pressed="{"true" if k in look else "false"}" '
+            f'{_st_click("closetwear:" + k)}>{badge}{fig}<b>{name}</b>{also}</button>')
 
 
 def _earn_tile(t, progress):
@@ -142,17 +150,18 @@ def _earn_tile(t, progress):
     a secret, only that it is one."""
     e = _html.escape
     if t["group"] == "Secret":
-        return ('<div class="cl-t lk" role="group" aria-label="A secret, not yet" title="You&rsquo;ll know it when it happens">'
-                '<span class="cl-q" aria-hidden="true">?</span><b>A secret</b></div>')
-    fig = f'<span class="cl-f">{_sev.slot(_sev.svg("idle", rest=True, look=[t["k"]], label=e(t["name"])), 52)}</span>'
-    when = f'<small class="w">{e(t["when"])}</small>' if t.get("when") else ""
+        return (f'<div class="cl-t lk" role="group" aria-label="{_t("A secret, not yet")}" title="{_t("You&rsquo;ll know it when it happens")}">'
+                f'<span class="cl-q" aria-hidden="true">?</span><b>{_t("A secret")}</b></div>')
+    name = e(_t(t["name"]))
+    fig = f'<span class="cl-f">{_sev.slot(_sev.svg("idle", rest=True, look=[t["k"]], label=name), 52)}</span>'
+    when = f'<small class="w">{e(_t(t["when"]))}</small>' if t.get("when") else ""
     bar = ""
     got, need = progress.get(t["k"]) or (0, 0)
     if got > 0:
         bar = (f'<span class="cl-bar" aria-hidden="true"><i style="width:{min(100, round(100 * got / need))}%"></i></span>'
-               f'<small>{got:,} of {need:,}</small>')
-    return (f'<div class="cl-t lk" role="group" aria-label="{e(t["name"])}, not yet" title="{e(t.get("tip") or "")}">'
-            f'{fig}<b>{e(t["name"])}</b><small>{e(t["rule"])}</small>{when}{bar}</div>')
+               f'<small>{_t("{n} of {of}", n=f"{got:,}", of=f"{need:,}")}</small>')
+    return (f'<div class="cl-t lk" role="group" aria-label="{_t("{name}, not yet", name=name)}" title="{e(_t(t.get("tip") or ""))}">'
+            f'{fig}<b>{name}</b><small>{e(_t(t["rule"]))}</small>{when}{bar}</div>')
 
 
 def _closet_ons(look):
@@ -162,18 +171,19 @@ def _closet_ons(look):
     cos = _closet.costume(look)
     rows = []
     if cos:
-        rows.append(f'<div class="cl-o cos"><span>Costume</span><button title="Take it off" '
-                    f'{_st_click("closetwear:" + cos)}>{e(_closet.BY[cos]["name"])}</button></div>')
+        rows.append(f'<div class="cl-o cos"><span>{_t("Costume")}</span><button title="{_t("Take it off")}" '
+                    f'{_st_click("closetwear:" + cos)}>{e(_t(_closet.BY[cos]["name"]))}</button></div>')
     for p in CLOSET_PLACES:
         k = next((x for x in look if _closet.BY[x]["slot"] != _closet.COSTUME and p in _closet.places(x)), None)
         if k is None:
             what = "<i>&ndash;</i>"
         elif _closet.BY[k]["slot"] != p:  # the earmuffs' scarf
-            what = f'<i>with the {e(_closet.BY[k]["name"].split(" and ")[0].lower())}</i>'
+            what = (f'<i>{e(_t(ALSO_WITH[k]))}</i>' if k in ALSO_WITH
+                    else f'<i>with the {e(_closet.BY[k]["name"].split(" and ")[0].lower())}</i>')
         else:
-            what = f'<button title="Take it off" {_st_click("closetwear:" + k)}>{e(_closet.BY[k]["name"])}</button>'
-        rows.append(f'<div class="cl-o"><span>{PLACE_NAMES[p]}</span>{what}</div>')
-    return (f'<div class="cl-ons{" covered" if cos else ""}" aria-label="What your Pip has on">' + "".join(rows) + "</div>")
+            what = f'<button title="{_t("Take it off")}" {_st_click("closetwear:" + k)}>{e(_t(_closet.BY[k]["name"]))}</button>'
+        rows.append(f'<div class="cl-o"><span>{_t(PLACE_NAMES[p])}</span>{what}</div>')
+    return (f'<div class="cl-ons{" covered" if cos else ""}" aria-label="{_t("What your Pip has on")}">' + "".join(rows) + "</div>")
 
 
 def closet_html(view, cfg):
@@ -192,17 +202,17 @@ def closet_html(view, cfg):
     tab = view.get("tab") if view.get("tab") in CLOSET_TABS else CLOSET_TABS[0]
     new = [k for k in view.get("new") or [] if k in have]
     progress = {k: v for k, v in (view.get("progress") or {}).items() if k in _closet.BY and k not in have}
-    fig = _sev.svg("hello" if new else "idle", rest=bool(view.get("rest")), look=look, label="Your Pip")
-    colour = (f'<div class="cl-col"><span>Colour <small>Pip and your board</small></span>'
-              f'<span class="st-sw" role="group" aria-label="Colour">{_accent_swatches(cfg)}</span></div>')  # 3.9.0 (Sam)
+    fig = _sev.svg("hello" if new else "idle", rest=bool(view.get("rest")), look=look, label=_t("Your Pip"))
+    colour = (f'<div class="cl-col"><span>{_t("Colour")} <small>{_t("Pip and your board")}</small></span>'
+              f'<span class="st-sw" role="group" aria-label="{_t("Colour")}">{_accent_swatches(cfg)}</span></div>')  # 3.9.0 (Sam)
     me = (f'<div class="cl-me"><div class="cl-fig">{fig}</div>{colour}{_closet_ons(look)}'
           f'<div class="cl-msg" aria-live="polite">{str(view.get("msg") or "")}</div>'
-          + (f'<a class="st-lk" href="#" {_st_click("closetoff")}>Take it all off</a>' if look else "")
+          + (f'<a class="st-lk" href="#" {_st_click("closetoff")}>{_t("Take it all off")}</a>' if look else "")
           + '</div>')
     left = len(_closet.THINGS) - len(have)
     counts = (len(have), left)
     pills = "".join(f'<button class="st-pill{" on" if t == tab else ""}" aria-pressed="{"true" if t == tab else "false"}" '
-                    f'{_st_click(f"closettab:{i}")}>{e(t)} <small>{counts[i]}</small></button>' for i, t in enumerate(CLOSET_TABS))
+                    f'{_st_click(f"closettab:{i}")}>{e(_t(t))} <small>{counts[i]}</small></button>' for i, t in enumerate(CLOSET_TABS))
     if tab == CLOSET_TABS[0]:
         secs = []
         for p in CLOSET_PLACES + (_closet.COSTUME,):
@@ -213,32 +223,35 @@ def closet_html(view, cfg):
                 todo = [t for t in _closet.THINGS if t["slot"] == p and t["group"] != "Secret"]
                 nxt = max(todo, key=lambda t: (progress.get(t["k"], (0, 1))[0] / progress.get(t["k"], (0, 1))[1], -todo.index(t)))
                 got = progress.get(nxt["k"], (0, 0))[0]
-                body = (f'<div class="cl-next">Next: <b>{e(nxt["name"])}</b>, {e(nxt["rule"][:1].lower() + nxt["rule"][1:])}'
-                        f'{f" ({got:,} so far)" if got else ""}</div>')
-            secs.append(f'<section class="cl-sec"><h4>{"Costumes" if p == _closet.COSTUME else PLACE_NAMES[p]}'
+                rule = _t(nxt["rule"])
+                if _words.lang() != "de":  # German keeps a noun's capital in the middle of a line
+                    rule = rule[:1].lower() + rule[1:]
+                body = (f'<div class="cl-next">{_t("Next: {name}, {rule}", name="<b>" + e(_t(nxt["name"])) + "</b>", rule=e(rule))}'
+                        f'{" " + _t("({n} so far)", n=f"{got:,}") if got else ""}</div>')
+            secs.append(f'<section class="cl-sec"><h4>{_t("Costumes") if p == _closet.COSTUME else _t(PLACE_NAMES[p])}'
                         f'{f" <small>{len(mine)}</small>" if mine else ""}</h4>{body}</section>')
         main = "".join(secs)
     else:
         near_html = ""
         if view.get("near"):
-            near_html = ('<section class="cl-sec"><h4>Almost there</h4><div class="cl-near">' + "".join(
-                f'<div class="cl-nr"><span>{_sev.slot(_sev.svg("idle", rest=True, look=[k], label=e(_closet.BY[k]["name"])), 34)}</span>'
-                f'<span><b>{e(_closet.BY[k]["name"])}</b><span class="cl-bar"><i style="width:{min(100, round(100 * got / need))}%"></i></span>'
-                f'<small>{got:,} of {need:,} {e(unit)}</small></span></div>'
+            near_html = (f'<section class="cl-sec"><h4>{_t("Almost there")}</h4><div class="cl-near">' + "".join(
+                f'<div class="cl-nr"><span>{_sev.slot(_sev.svg("idle", rest=True, look=[k], label=e(_t(_closet.BY[k]["name"]))), 34)}</span>'
+                f'<span><b>{e(_t(_closet.BY[k]["name"]))}</b><span class="cl-bar"><i style="width:{min(100, round(100 * got / need))}%"></i></span>'
+                f'<small>{_t("{n} of {of} {unit}", n=f"{got:,}", of=f"{need:,}", unit=e(_t(unit)))}</small></span></div>'
                 for k, got, need, unit in view.get("near")) + "</div></section>")
         secs = []
         for g in _closet.GROUPS:
             todo = [t for t in _closet.THINGS if t["group"] == g and t["k"] not in have]
             if todo:
-                secs.append(f'<section class="cl-sec"><h4>{e(g)} <small>{len(todo)} to go</small></h4><div class="cl-grid lk">'
+                secs.append(f'<section class="cl-sec"><h4>{e(_t(g))} <small>{_t("{n} to go", n=len(todo))}</small></h4><div class="cl-grid lk">'
                             + "".join(_earn_tile(t, progress) for t in todo) + "</div></section>")
-        main = near_html + ("".join(secs) or f'<div class="cl-next">All {len(_closet.THINGS)} earned.</div>')
-    off = "" if cfg.get("sev", True) else '<div class="st-note">Pip is off in Settings, so nobody sees it for now.</div>'
+        main = near_html + ("".join(secs) or f'<div class="cl-next">{_t("All {n} earned.", n=len(_closet.THINGS))}</div>')
+    off = "" if cfg.get("sev", True) else f'<div class="st-note">{_t("Pip is off in Settings, so nobody sees it for now.")}</div>'
     return (f'<div id="due-crew" class="dc-frame dc-set dc-closet">{_css(cfg)}<style>{SETTINGS_CSS}{SEV_CSS}{CLOSET_CSS}{_sev.CSS}</style>'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span></div>'
-            f'<div class="st-bar"><a class="st-back" href="#" {_st_click("closetclose")}>&lsaquo; Board</a><b>Pip&rsquo;s closet</b>'
-            f'<span class="cl-n">{len(have)} of {len(_closet.THINGS)}</span></div>'
-            f'<div class="cl-wrap">{me}<div class="cl-main"><div class="cl-pills" role="group" aria-label="Show">{pills}</div>'
+            f'<div class="st-bar"><a class="st-back" href="#" {_st_click("closetclose")}>&lsaquo; {_t("Board")}</a><b>{_t("Pip&rsquo;s closet")}</b>'
+            f'<span class="cl-n">{_t("{n} of {of}", n=len(have), of=len(_closet.THINGS))}</span></div>'
+            f'<div class="cl-wrap">{me}<div class="cl-main"><div class="cl-pills" role="group" aria-label="{_t("Show")}">{pills}</div>'
             f'{main}</div></div>{off}</div>')
 
 
@@ -252,17 +265,17 @@ def closet_line(news, look, first=False):
         return ""
     k = news[-1]
     t = _closet.BY[k]
-    fig = _sev.svg("hop", rest=True, look=_closet.wear(look, k) if k not in look else look, label="Your Pip")
+    fig = _sev.svg("hop", rest=True, look=_closet.wear(look, k) if k not in look else look, label=_t("Your Pip"))
     if first and len(news) > 1:
-        words = f'<b>Pip&rsquo;s closet is open.</b> Your days so far earned it {len(news)} things.'
-        acts = f'<a class="wc" href="#" onclick="{_pycmd("closet")}">See them</a>'
+        words = f'<b>{_t("Pip&rsquo;s closet is open.")}</b> {_t("Your days so far earned it {n} things.", n=len(news))}'
+        acts = f'<a class="wc" href="#" onclick="{_pycmd("closet")}">{_t("See them")}</a>'
     elif len(news) > 1:
-        names = ", ".join(e(_closet.BY[x]["name"]) for x in news[:-1]) + " and " + e(t["name"])
-        words = f'<b>New for your Pip:</b> {names}.'
-        acts = f'<a class="wc" href="#" onclick="{_pycmd("closet")}">See them</a>'
+        names = ", ".join(e(_t(_closet.BY[x]["name"])) for x in news[:-1]) + _t(" and ") + e(_t(t["name"]))
+        words = f'<b>{_t("New for your Pip:")}</b> {names}.'
+        acts = f'<a class="wc" href="#" onclick="{_pycmd("closet")}">{_t("See them")}</a>'
     else:
-        words = f'<b>New for your Pip: {e(t["name"])}.</b> {e(t["rule"])}.'
-        acts = (f'<a class="wc" href="#" onclick="{_pycmd("closetwear:" + k)}">{"Be one" if t["slot"] == _closet.COSTUME else "Wear it"}</a>'
-                f'<a class="wc" href="#" onclick="{_pycmd("closet")}">Closet</a>')
+        words = f'<b>{_t("New for your Pip: {name}.", name=e(_t(t["name"])))}</b> {e(_t(t["rule"]))}.'
+        acts = (f'<a class="wc" href="#" onclick="{_pycmd("closetwear:" + k)}">{_t("Be one") if t["slot"] == _closet.COSTUME else _t("Wear it")}</a>'
+                f'<a class="wc" href="#" onclick="{_pycmd("closet")}">{_t("Closet")}</a>')
     return (f'<div class="dc-wrap cl-earn"><span class="dc-fig">{_sev.slot(fig, 40)}</span><span>{words}</span>{acts}'
-            f'<a class="wx" href="#" title="Later" onclick="{_pycmd("closetnew")}">&times;</a></div>')
+            f'<a class="wx" href="#" title="{_t("Later")}" onclick="{_pycmd("closetnew")}">&times;</a></div>')
