@@ -1905,9 +1905,16 @@ def test_asks_and_tips_v390():
           and "if (D.title && !folded) { words.title = D.title; } else { words.removeAttribute('title'); }" in fj
           and "if (peek && !still && !D.open && bub.animate)" in fj and "pad.style.height = (box.offsetHeight + 12) + 'px'" in fj
           and "send(D.fold && !folded ? 'knowsbar:open' : 'knowsbar')" in fj)
-    check("tip: its bubble wears the tipper's colour round its edge (mine with Pip off); who knows it, the plain line (Sam: too alike)",
-          "var edge = D.kind === 'tip' ? 'border:2px solid ' + (withPip ? peek.pips[0].a[night ? 1 : 0] : acc) + ';' : '';" in fj
-          and "+ card + edge);" in fj and tip["kind"] == "tip" and knows["kind"] == "knows")
+    check("tip: a note, not a speech bubble (SC, 3.9.12; Sam, 3.9.0: too alike): a wash of its writer's colour (mine with Pip off), "
+          "a folded corner, Tip over its words; a crewmate's or my own; who knows it, the plain bubble",
+          "var note = !!peek && (D.kind === 'tip' || D.kind === 'hook');" in fj and "color-mix(in srgb, ' + tint + ' 13%, ' + c.bg + ')" in fj
+          and "var tint = note ? (withPip ? peek.pips[0].a[night ? 1 : 0] : acc) : '';" in fj and "linear-gradient(225deg, transparent 50%, ' + tint + ' 50%)" in fj
+          and "text-transform:uppercase;color:' + tint + ';', 'Tip')" in fj and "+ card + edge);" in fj and tip["kind"] == "tip" and knows["kind"] == "knows")
+    check("tip: its writer's Pip waves while the note is folded and holds it out once it's opened (Show, or drawn again opened)",
+          "if (fig && note && peek.pips[0].held) {" in fj and "pip(fig, {pip: {svg: peek.pips[0].held, a: peek.pips[0].a}, sevcss: D.sevcss}, night, '');" in fj
+          and "var drawn = note && D.open && peek.pips[i].held ? {svg: peek.pips[i].held, a: peek.pips[i].a} : peek.pips[i];" in fj
+          and 'p["held"] = peek_pip(u, "again")' in open(os.path.join(REPO, "due_crew", "cards.py"), encoding="utf-8").read()
+          and "m-again" in (K.my_peek_pip() or {}).get("held", "") and "m-peek" in (K.my_peek_pip() or {}).get("svg", ""))
     check("fold: in the bar the same, a click opens it, then its act and its click as before",
           "var folded = !!(D.fold && !D.open);" in bj and "var act = folded ? 'Show' : D.act;" in bj
           and "if (D.actcmd && !folded)" in bj and "if (folded) { s.removeAttribute('title'); }" in bj
