@@ -10,6 +10,7 @@ from .. import emoji_drawer as _emoji_drawer
 from .. import sev as _sev
 from .. import shows as _shows
 from ..backend.shapes import DOODLE_INKS, clean_doodle
+from ..words import later as _later, t as _t
 
 from .base import BOARD_FONT, accent_pair
 from .page import SHOW_JS
@@ -20,13 +21,13 @@ from .windows import POP_JS
 DOODLE_PAPER, DOODLE_LINE, DOODLE_INK = "#fffdf7", "#e6dfcc", "#2b2d29"
 
 
-def doodle_html(d, accent=None, label="A drawing"):
+def doodle_html(d, accent=None, label=None):
     """3.9.1: a doodle cheer's drawing, as an SVG of its strokes on the pad's
     300 x 170, or a sign's words; "" for anything clean_doodle drops. The
     caller sets the paper behind it. accent: the sender's colour (an accent
     name; its light shade, on paper in either theme). Numbers and escaped
     words only: a doodle never carries markup or a colour of its own."""
-    return _doodle_art(clean_doodle(d), accent, label)
+    return _doodle_art(clean_doodle(d), accent, label or _t("A drawing"))
 
 
 def _doodle_art(d, accent, label):
@@ -58,18 +59,20 @@ def doodle_landing(cheer, entries, cfg):
         return None
     e = next((x for x in entries or [] if x.get("user_id") == cheer.get("from") and not x.get("you")), {})
     name = str(cheer.get("name") or e.get("name") or "?")
-    out = {"html": doodle_html(d, e.get("accent"), f"{name}’s drawing"), "sign": d["k"] == "sign",
+    out = {"html": doodle_html(d, e.get("accent"), _t("{name}’s drawing", name=name)), "sign": d["k"] == "sign",
            "a": list(accent_pair(e.get("accent"))), "pip": None,
            # its caption, as on the fridge: the note under it, and who it's from (text, never markup)
            "note": str(cheer.get("note") or "")[:80], "from": name.split(" ")[0][:40], "ni": int(cheer.get("ni", -1))}
     if cfg.get("sev", True):
-        out["pip"] = _sev.svg("stretch", "idle", look=e.get("look"), label=_html.escape(f"{name}’s Pip", quote=True))
+        out["pip"] = _sev.svg("stretch", "idle", look=e.get("look"), label=_html.escape(_t("{name}’s Pip", name=name), quote=True))
     return out
 
 
 CHEER_WINDOW_JS = r"""
 (function () {
     var V = __VIEW__;
+    var WD = V.w || {};
+    function say(s) { return WD[s] || s; }  // a phrase in the language in use (cheer_overlay_js sends them: English is the key)
     var T = window.dcPop.theme(), tok = T.tok;
     var bg = tok('bg', '#ffffff', '#1c1c1c'), ink = tok('ink', '#333333', '#dfe1dc'), line = tok('line', '#e2e2da', '#3d403b'),
         well = tok('well', '#f2f2ec', '#2b2d29'), muted = tok('muted', '#6f736b', '#9a9e94'),
@@ -83,7 +86,7 @@ CHEER_WINDOW_JS = r"""
         if (text != null) { e.textContent = text; }
         return e;
     }
-    var pop = window.dcPop.make({ id: 'dc-cheer', label: 'Cheer ' + V.name, z: 80, pad: '9vh 16px 16px' }), back = pop.back;
+    var pop = window.dcPop.make({ id: 'dc-cheer', label: say('Cheer {name}').replace('{name}', V.name), z: 80, pad: '9vh 16px 16px' }), back = pop.back;
     var css = el('style');
     css.textContent = pop.css(
         '#dc-cheer *{box-sizing:border-box;}' +
@@ -145,20 +148,20 @@ CHEER_WINDOW_JS = r"""
     var hd = el('div', 'hd');
     if (V.pip) { var pp = el('div', 'pp'); pp.innerHTML = V.pip; hd.appendChild(pp); }
     var ht = el('div');
-    ht.appendChild(el('b', null, 'Cheer ' + V.name));
-    ht.appendChild(el('small', null, 'Lands after their next sync.'));
+    ht.appendChild(el('b', null, say('Cheer {name}').replace('{name}', V.name)));
+    ht.appendChild(el('small', null, say('Lands after their next sync.')));
     hd.appendChild(ht);
     card.appendChild(hd);
 
     // the emoji: the quick picks, or any other
     var emoji = V.emojis[0], em = el('div', 'em');
     em.setAttribute('role', 'group');
-    em.setAttribute('aria-label', 'Emoji');
+    em.setAttribute('aria-label', say('Emoji'));
     var quick = [];
     V.emojis.forEach(function (x) {
         var b = el('button', null, x);
         b.type = 'button';
-        b.setAttribute('aria-label', 'Send ' + x);
+        b.setAttribute('aria-label', say('Send {emoji}').replace('{emoji}', x));
         b.addEventListener('click', function () { unpick(); choose(x, true); });  // 3.9.2's audit: Anki's box goes too
         quick.push([x, b]);
         em.appendChild(b);
@@ -166,9 +169,10 @@ CHEER_WINDOW_JS = r"""
     // other: a drawer of emoji (emoji_drawer.py) in the window's own look, since a page can't open the
     // computer's picker (Sam: "doesn't pop up with the emoji drawer"); its search box takes a typed or pasted one too
     var other = el('button', 'ot', 'other');
+    other.textContent = say('other');
     other.type = 'button';
-    other.title = 'Any emoji';
-    other.setAttribute('aria-label', 'Any other emoji');
+    other.title = say('Any emoji');
+    other.setAttribute('aria-label', say('Any other emoji'));
     other.setAttribute('aria-expanded', 'false');
     other.addEventListener('click', function () {
         if (V.native) { native(); } else if (drawer.style.display === 'none') { openDrawer(); } else { shut(); }
@@ -179,9 +183,9 @@ CHEER_WINDOW_JS = r"""
     // if the computer can't (Linux, or asking failed), the drawer opens instead (dcCheerNoNative)
     var pickIn = el('input', 'ot pk');
     pickIn.style.display = 'none';
-    pickIn.placeholder = 'pick one';
+    pickIn.placeholder = say('pick one');
     pickIn.maxLength = 16;
-    pickIn.setAttribute('aria-label', 'Your emoji');
+    pickIn.setAttribute('aria-label', say('Your emoji'));
     em.appendChild(pickIn);
     // 3.9.2 (Sam: "the custom picker doesn't accept the custom emoji choices"): the computer's picker can't
     // type into this page, so Anki lays its own box over this one (native_emoji.catch), and hands the pick here
@@ -212,10 +216,10 @@ CHEER_WINDOW_JS = r"""
         if (t) { unpick(); choose(t); } else if (pickIn.value.trim()) { pickIn.value = ''; }
     });
     card.appendChild(em);
-    var drawer = el('div', 'dr'), find = el('input', 'tx'), gt = el('div', 'gt'), gr = el('div', 'gr'), none = el('div', 'none', 'Nothing by that name. Paste one in here instead.');
+    var drawer = el('div', 'dr'), find = el('input', 'tx'), gt = el('div', 'gt'), gr = el('div', 'gr'), none = el('div', 'none', say('Nothing by that name. Paste one in here instead.'));
     drawer.style.display = 'none';
-    find.placeholder = 'Find one: heart, coffee, owl…';
-    find.setAttribute('aria-label', 'Find an emoji');
+    find.placeholder = say('Find one: heart, coffee, owl…');
+    find.setAttribute('aria-label', say('Find an emoji'));
     drawer.appendChild(find);
     drawer.appendChild(gt);
     drawer.appendChild(gr);
@@ -284,9 +288,9 @@ CHEER_WINDOW_JS = r"""
     }
     function choose(x, stay) {
         var q = V.emojis.indexOf(x) >= 0;
-        other.textContent = q ? 'other' : x;
+        other.textContent = q ? say('other') : x;
         other.className = q ? 'ot' : 'ot on';
-        other.setAttribute('aria-label', q ? 'Any other emoji' : 'Send ' + x + ' (choose another)');
+        other.setAttribute('aria-label', q ? say('Any other emoji') : say('Send {emoji} (choose another)').replace('{emoji}', x));
         pick(x);
         shut();
         if (!stay) { other.focus(); }  // a quick pick keeps the key on the emoji pressed (3.9.2's QoL pass)
@@ -301,12 +305,12 @@ CHEER_WINDOW_JS = r"""
     // the window is just the emoji and the note (Sam: "they don't always need to send a doodle / sign");
     // a press opens one, a second press on it shuts it, and only what's open is sent
     var mode = '', sgw = el('div', 'sgw'), sg = el('div', 'sg');
-    sgw.appendChild(el('span', 'hint', 'Add'));
+    sgw.appendChild(el('span', 'hint', say('Add')));
     sg.setAttribute('role', 'group');
-    sg.setAttribute('aria-label', 'Add');
+    sg.setAttribute('aria-label', say('Add'));
     var tabs = {};
     [['draw', 'Draw'], ['sign', 'Sign']].forEach(function (x) {
-        var b = el('button', null, x[1]);
+        var b = el('button', null, say(x[1]));
         b.type = 'button';
         b.addEventListener('click', function () { show(mode === x[0] ? '' : x[0]); });
         tabs[x[0]] = b;
@@ -318,7 +322,7 @@ CHEER_WINDOW_JS = r"""
     var draw = el('div', 'pane'), paper = el('div', 'paper'), cv = el('canvas');
     cv.width = W * 2;
     cv.height = H * 2;
-    cv.setAttribute('aria-label', 'Draw here');
+    cv.setAttribute('aria-label', say('Draw here'));
     paper.appendChild(cv);
     draw.appendChild(paper);
     // pen: bit 0 thick; pen >> 1 the colour: 0 the sender's, 1 black, 2 on one of ours (V.inks, DOODLE_INKS's order)
@@ -371,14 +375,14 @@ CHEER_WINDOW_JS = r"""
         var b = el('button', 'sw');
         b.type = 'button';
         b.style.background = x[1];
-        b.title = x[2];
-        b.setAttribute('aria-label', x[2]);
+        b.title = say(x[2]);
+        b.setAttribute('aria-label', say(x[2]));
         b.addEventListener('click', function () { pen = (pen & 1) | (x[0] << 1); tools(); });
         swatches.push([x[0], b]);
         tl.appendChild(b);
     });
     [['Thin', 0], ['Thick', 1]].forEach(function (x) {
-        var b = el('button', 'pl', x[0]);
+        var b = el('button', 'pl', say(x[0]));
         b.type = 'button';
         b.addEventListener('click', function () { pen = (pen & ~1) | x[1]; tools(); });
         widths.push([x[1], b]);
@@ -387,7 +391,7 @@ CHEER_WINDOW_JS = r"""
     tl.appendChild(el('span', 'sp'));
     var count = el('span', 'ct');
     tl.appendChild(count);
-    var undo = el('button', 'lk', 'Undo'), clear = el('button', 'lk', 'Clear');
+    var undo = el('button', 'lk', say('Undo')), clear = el('button', 'lk', say('Clear'));
     undo.type = clear.type = 'button';
     undo.addEventListener('click', function () { strokes.pop(); paint(); });
     clear.addEventListener('click', function () { strokes = []; paint(); });
@@ -401,21 +405,21 @@ CHEER_WINDOW_JS = r"""
     tools();
     card.appendChild(draw);
 
-    var sign = el('div', 'pane'), signIn = el('input', 'tx'), sp = el('div', 'paper'), words = el('div', 'words ph', "you've got this");
+    var sign = el('div', 'pane'), signIn = el('input', 'tx'), sp = el('div', 'paper'), words = el('div', 'words ph', say("you've got this"));
     signIn.maxLength = SIGN;
     signIn.placeholder = "you've got this";
-    signIn.setAttribute('aria-label', 'What your Pip holds up');
+    signIn.setAttribute('aria-label', say('What your Pip holds up'));
     signIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });  // as the note's
     signIn.addEventListener('input', function () {
         var s = signIn.value.replace(/\s+/g, ' ').trim();
-        words.textContent = s || "you've got this";
+        words.textContent = s || say("you've got this");
         words.className = s ? 'words' : 'words ph';
         caption();
     });
     sp.appendChild(words);
     sign.appendChild(signIn);
     sign.appendChild(sp);
-    sign.appendChild(el('div', 'hint', 'A few words for your Pip to hold up when it lands. ' + SIGN + ' letters at most.'));
+    sign.appendChild(el('div', 'hint', say('A few words for your Pip to hold up when it lands. {n} letters at most.').replace('{n}', SIGN)));
     card.appendChild(sign);
     function show(m) {
         mode = m;
@@ -431,18 +435,18 @@ CHEER_WINDOW_JS = r"""
     function caption() {
         if (!note) { return; }
         var has = mode === 'sign' ? !!signIn.value.trim() : mode === 'draw' && strokes.length > 0;
-        note.placeholder = has ? 'A caption under it (optional)' : 'Add a note (optional)';
+        note.placeholder = has ? say('A caption under it (optional)') : say('Add a note (optional)');
     }
     show('');
 
     note = el('input', 'tx');
     note.maxLength = NOTE;
-    note.placeholder = 'Add a note (optional)';
-    note.setAttribute('aria-label', 'Note');
+    note.placeholder = say('Add a note (optional)');
+    note.setAttribute('aria-label', say('Note'));
     note.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
     card.appendChild(note);
 
-    var ft = el('div', 'ft'), go = el('button', 'go', '🎉 Send'), no = el('button', 'no', 'Cancel');
+    var ft = el('div', 'ft'), go = el('button', 'go', '🎉 ' + say('Send')), no = el('button', 'no', say('Cancel'));
     go.type = no.type = 'button';
     ft.appendChild(go);
     ft.appendChild(el('span', 'sp'));
@@ -484,6 +488,23 @@ CHEER_WINDOW_JS = r"""
 """.replace("__INK__", DOODLE_INK)
 
 
+# The Cheer window's words (CHEER_WINDOW_JS says each with say(), English the key), and the pad's colours by name
+_CHEER_WORDS = (
+    _later("Cheer {name}"), _later("Lands after their next sync."), _later("Emoji"), _later("Send {emoji}"), _later("other"),
+    _later("Any emoji"), _later("Any other emoji"), _later("pick one"), _later("Your emoji"),
+    _later("Nothing by that name. Paste one in here instead."), _later("Find one: heart, coffee, owl…"), _later("Find an emoji"),
+    _later("Send {emoji} (choose another)"), _later("Add"), _later("Draw"), _later("Sign"), _later("Draw here"), _later("My colour"),
+    _later("Black"), _later("Thin"), _later("Thick"), _later("Undo"), _later("Clear"), _later("you've got this"),
+    _later("What your Pip holds up"), _later("A few words for your Pip to hold up when it lands. {n} letters at most."),
+    _later("A caption under it (optional)"), _later("Add a note (optional)"), _later("Note"), _later("Send"), _later("Cancel"),
+    _later("Green"), _later("Blue"), _later("Purple"), _later("Teal"), _later("Amber"), _later("Rose"))
+
+
+def _cheer_words():
+    """{English: theirs} for the phrases the language in use says differently ({} in English)."""
+    return {en: said for en, said in ((en, _t(en)) for en in _CHEER_WORDS) if said != en}
+
+
 def cheer_overlay_js(view):
     """3.9.1 (Sam: "make the cheers and doodles modals in the design language
     of our add on"): the Cheer window, drawn on the Decks screen in the
@@ -503,7 +524,7 @@ def cheer_overlay_js(view):
             "emojis": [str(x) for x in view.get("emojis") or []][:8] or ["\U0001F389"],
             "pip": view.get("pip") or "", "pen": pen, "inks": inks,
             "mine": next((i for i, x in enumerate(inks) if x[0].lower() == pen.lower()), -1),
-            "drawer": _emoji_drawer.view(), "native": bool(view.get("native"))}
+            "drawer": _emoji_drawer.view(), "native": bool(view.get("native")), "w": _cheer_words()}
     return POP_JS + CHEER_WINDOW_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
 
 
@@ -530,7 +551,7 @@ def cheer_pips(cheers, entries, cfg, most=3):
         seen.add(u)
         e = by.get(u) or {}
         name = str(ch.get("name") or e.get("name") or "?")
-        label = _html.escape(f'{name}’s Pip', quote=True)
+        label = _html.escape(_t("{name}’s Pip", name=name), quote=True)
         look = e.get("look")
         note = next((str(c.get("note")) for c in cheers if c.get("from") == u and c.get("note")), "")
         out.append({"svg": _sev.svg("hello", "popup", look=look, label=label),
@@ -549,8 +570,8 @@ def and_more(names, most=3):
     """"Dre", "Dre and Mo", "Dre, Mo and Ana", "Dre, Mo, Ana and 2 more"."""
     names = [str(n) for n in names]
     if len(names) > most:
-        return ", ".join(names[:most]) + f" and {len(names) - most} more"
-    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1] if names else ""
+        return _t("{names} and {n} more", names=", ".join(names[:most]), n=len(names) - most)
+    return names[0] if len(names) == 1 else _t("{names} and {last}", names=", ".join(names[:-1]), last=names[-1]) if names else ""
 
 
 def finish_js(view):
@@ -564,11 +585,12 @@ def finish_js(view):
     board_eval, never in the board's HTML; the plan's name goes in as text."""
     sets = int(view.get("sets") or 0)
     num = {"sets": sets, "cards": int(view.get("cards") or 0), "weeks": int(view.get("weeks") or 0)}
-    bits = [f"{sets:,} set{'s' if sets != 1 else ''}", f"{num['cards']:,} card{'s' if num['cards'] != 1 else ''}"]
+    bits = [_t("{n} set", n=f"{sets:,}") if sets == 1 else _t("{n} sets", n=f"{sets:,}"),
+            _t("{n} card", n=f"{num['cards']:,}") if num["cards"] == 1 else _t("{n} cards", n=f"{num['cards']:,}")]
     if num["weeks"]:
-        bits.append(f"{num['weeks']:,} week{'s' if num['weeks'] != 1 else ''}")
+        bits.append(_t("{n} week", n=f"{num['weeks']:,}") if num["weeks"] == 1 else _t("{n} weeks", n=f"{num['weeks']:,}"))
     pip = view.get("pip") or None
-    data = {"name": str(view.get("name") or "the plan"), "sub": " · ".join(bits), "n": max(1, min(40, sets)),
+    data = {"name": str(view.get("name") or _t("the plan")), "sub": " · ".join(bits), "n": max(1, min(40, sets)),
             "share": "duecrew:planjoyshare:" + _re.sub(r"[^A-Za-z0-9_-]", "", str(view.get("pid") or "")) + ":fin",
             "a": list(view.get("a") or ["#2e7d32", "#7cc47f"]), "pip": pip, "ms": int(_shows.FINISH_SECONDS * 1000),
             "linger": int(_shows.BANNER_SECONDS * 1000)}
@@ -593,6 +615,11 @@ def finish_js(view):
         })(0);
     })();
     """ % (_json.dumps(data).replace("</", "<\\/"), _json.dumps(_sev.CSS).replace("</", "<\\/") if pip else "null", SHOW_JS)
+
+
+def _js_text(text):
+    """A phrase as a JS string in single quotes, as the scripts here write theirs (no </ to end a script it sits in)."""
+    return "'" + _json.dumps(str(text))[1:-1].replace("'", "\\'").replace("</", "<\\/") + "'"
 
 
 def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None, show=None, doodle=None):
@@ -623,7 +650,8 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
     senders_json = _json.dumps([dict(p.get("poses") or {}, name=p.get("name") or "", note=p.get("note") or "", emoji=p.get("emoji") or "\U0001F389", a=p["a"])
                                 for p in (pips or [])][:3]).replace("</", "<\\/") if show else "[]"
     season_one = _json.dumps((list(season or []) or [""])[0])
-    doodle_json = _json.dumps({k: doodle.get(k) for k in ("html", "sign", "a", "pip", "note", "from", "ni")}
+    doodle_json = _json.dumps(dict({k: doodle.get(k) for k in ("html", "sign", "a", "pip", "note", "from", "ni")},
+                                   by=_t("from {name}", name=str(doodle.get("from") or "")))
                               if doodle and doodle.get("html") else None).replace("</", "<\\/")
     return """
     (function() {
@@ -664,7 +692,7 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
             linger = 5000;
             banner.style.cursor = 'pointer';
             var sub = document.createElement('div');
-            sub.textContent = 'click to send one back';
+            sub.textContent = %s;
             sub.style.cssText = 'font-size:11px;font-weight:400;opacity:0.7;margin-top:2px;';
             banner.appendChild(sub);
             banner.addEventListener('click', function() {
@@ -702,7 +730,7 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
                     cap.appendChild(q);
                 }
                 var by = document.createElement('div');
-                by.textContent = 'from ' + dd.from;
+                by.textContent = dd.by || ('from ' + dd.from);
                 by.style.cssText = 'font-weight:700;opacity:.75;margin-top:2px;';
                 cap.appendChild(by);
                 p.appendChild(cap);
@@ -870,5 +898,5 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
         document.body.appendChild(wrap);
         setTimeout(function() { wrap.remove(); }, 3800);
     })();
-    """ % (back_cmd, banner, notes_json, pips_json, doodle_json, DOODLE_PAPER, DOODLE_LINE, DOODLE_INK, show_json, SHOW_JS if show_json != "null" else "",
+    """ % (back_cmd, banner, notes_json, _js_text(_t("click to send one back")), pips_json, doodle_json, DOODLE_PAPER, DOODLE_LINE, DOODLE_INK, show_json, SHOW_JS if show_json != "null" else "",
            senders_json, _json.dumps(_sev.CSS).replace("</", "<\\/") if show_json != "null" else "null", CHEER_PIP, season_one, emoji_list)

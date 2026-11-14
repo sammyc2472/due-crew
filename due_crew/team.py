@@ -10,6 +10,7 @@ import math
 
 from . import plans as P
 from . import schedule as S
+from .words import month as _month, t as _t
 
 DAYS = 14          # the window; the trend compares it with the 14 before
 ROWS = 6
@@ -474,7 +475,9 @@ START_WEEKS = 8       # weeks a tile each; before them, one tile
 
 def _range(a, b):
     """"14–20 Sep", "28 Sep–4 Oct": a week's days, as dates say them."""
-    return f"{a.day}–{b.day} {b:%b}" if a.month == b.month else f"{a.day} {a:%b}–{b.day} {b:%b}"
+    if a.month == b.month:
+        return _t("{from_day}–{to_day} {month}", from_day=a.day, to_day=b.day, month=_month(b.month))
+    return _t("{from_day} {from_month}–{to_day} {to_month}", from_day=a.day, from_month=_month(a.month), to_day=b.day, to_month=_month(b.month))
 
 
 def way_of(tag):
@@ -592,14 +595,14 @@ def started_tiles(first_of, tags_of, know, active, today, prefer=None):
                 "_tags": {c: [t for t in tags_of.get(c) or [] if _in_way(t, prefer)] for c in cids}}
     for w in sorted(groups):
         a = monday - datetime.timedelta(days=7 * w)
-        when = "This week" if w == 0 else "Last week" if w == 1 else _range(a, a + datetime.timedelta(days=6))
+        when = _t("This week") if w == 0 else _t("Last week") if w == 1 else _range(a, a + datetime.timedelta(days=6))
         out.append(tile(S.iso(a), when, groups[w]))
     if before:
         edge = monday - datetime.timedelta(days=7 * max(kept))
-        out.append(tile("before", f"Before {edge.day} {edge:%b}", before))
+        out.append(tile("before", _t("Before {day} {month}", day=edge.day, month=_month(edge.month)), before))
     fresh = [c for c in active if c not in first_of]
     if fresh:
-        out.append({"key": "new", "name": "Not started", "n": len(fresh), "started": 0, "know": None,
+        out.append({"key": "new", "name": _t("Not started"), "n": len(fresh), "started": 0, "know": None,
                     "find": {"cids": sorted(fresh)}})
     return out
 
@@ -668,7 +671,7 @@ def subjects_by(paths_of, know, active=None, decks=False, by=None):
     # a pick no longer among the ways shown falls back to the best (so one is always on)
     fam = next((f for f in order[:4] if by is not None and key(f) == str(by)), order[0] if order else None)
     ways = [{"key": key(f), "score": round(cuts[f][0], 4), "on": f == fam,
-             "name": ("Subdecks" if decks else P._word(names[f][-1]) if f else "Tags")[:NAME_MAX]} for f in order[:4]]
+             "name": (_t("Subdecks") if decks else P._word(names[f][-1]) if f else _t("Tags"))[:NAME_MAX]} for f in order[:4]]
     if fam is None:
         return [], ways
     cut = cuts[fam][1]
@@ -725,7 +728,7 @@ def missed_in(t, missed):
 
 def study_missed(n):
     """The map's Study, in words: "Study the 41 you missed"."""
-    return "Study the one you missed" if n == 1 else f"Study the {n:,} you missed"
+    return _t("Study the one you missed") if n == 1 else _t("Study the {n} you missed", n=f"{n:,}")
 
 
 def fsrs_gap(right, n, target):
@@ -767,13 +770,13 @@ def bingo_line(ev):
     stamps = sum(1 for q in ev["squares"] if q["done"]) + (1 if ev["middle"]["done"] else 0)
     lines = int(ev.get("lines") or 0)
     if lines >= 8:
-        state = "the whole card"
+        state = _t("the whole card")
     elif lines:
-        state = "BINGO" if lines == 1 else f"{lines} lines"
+        state = _t("BINGO") if lines == 1 else _t("{n} lines", n=lines)
     else:
         left = min(sum(1 for c in line if not done(c)) for line in LINES)
-        state = "one away from bingo" if left == 1 else f"{left} away from bingo"
-    return f"{stamps} of 9 · {state}"
+        state = _t("one away from bingo") if left == 1 else _t("{n} away from bingo", n=left)
+    return f'{_t("{n} of 9", n=stamps)} · {state}'
 
 
 def closest(card, ev):
