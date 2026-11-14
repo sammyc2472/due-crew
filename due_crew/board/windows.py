@@ -12,7 +12,13 @@ from datetime import date as _date
 from .. import songs as _songs
 
 from .base import _ago, _fmt_time, _label, _pycmd, today_text
-from .page import VEIL_IDS
+from .page import VEIL_IDS, js_q, js_words
+from .. import words as _words
+from ..words import later as _later, t as _t
+
+# a month's whole name ("since June", a crewmate's card), said with _t
+MONTH_NAMES = (_later("January"), _later("February"), _later("March"), _later("April"), _later("May"), _later("June"), _later("July"),
+               _later("August"), _later("September"), _later("October"), _later("November"), _later("December"))
 
 
 # 3.9.8 (the tidy-ups): one overlay for the board's seven windows (the Cheer
@@ -150,9 +156,12 @@ POP_JS = r"""
 # The answer is one duecrew:sheet command: its id (new each time, so a page
 # can't answer a question it wasn't asked) and URI-encoded JSON {ok, text,
 # at, check}; Cancel, Esc and the backdrop send {ok: false}.
+# 3.10.0: the script's own words in another language come with the view (w, {English: theirs}); W() reads them.
+SHEET_WORDS = (_later("Nothing matches."), _later("Find"))
 SHEET_JS = r"""
 (function () {
     var V = __VIEW__;
+    function W(s) { return (V.w && V.w[s]) || s; }
     var T = window.dcPop.theme(), tok = T.tok, night = T.night, dcStyle = T.style;
     var bg = tok('bg', '#ffffff', '#1c1c1c'), ink = tok('ink', '#333333', '#dfe1dc'), line = tok('line', '#e2e2da', '#3d403b'),
         well = tok('well', '#f2f2ec', '#2b2d29'), muted = tok('muted', '#6f736b', '#9a9e94'),
@@ -245,14 +254,14 @@ SHEET_JS = r"""
             rows.push(b);
             ls.appendChild(b);
         });
-        var none = el('div', 'none', 'Nothing matches.');
+        var none = el('div', 'none', W('Nothing matches.'));
         none.style.display = 'none';
         ls.appendChild(none);
         if (rows.length > 10) {
             find = el('input', 'tx');
             find.type = 'search';
-            find.placeholder = 'Find';
-            find.setAttribute('aria-label', 'Find');
+            find.placeholder = W('Find');
+            find.setAttribute('aria-label', W('Find'));
             find.addEventListener('input', function () {
                 var q = find.value.trim().toLowerCase(), first = -1;
                 rows.forEach(function (b, i) {
@@ -352,8 +361,11 @@ def sheet_js(view):
         f = None
     ck = view.get("check")
     data = {"id": str(view.get("id") or ""), "title": str(view.get("title") or ""), "text": str(view.get("text") or ""),
-            "yes": str(view.get("yes") or "OK"), "no": str(view.get("no") or "Cancel"), "danger": bool(view.get("danger")),
+            "yes": str(view.get("yes") or _t("OK")), "no": str(view.get("no") or _t("Cancel")), "danger": bool(view.get("danger")),
             "field": f, "check": {"label": str(ck.get("label") or ""), "on": bool(ck.get("on"))} if ck else None}
+    said = js_words(SHEET_WORDS)
+    if said:
+        data["w"] = said
     return POP_JS + SHEET_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
 
 
@@ -363,9 +375,12 @@ def sheet_js(view):
 # magic.HOWTO's, the window's ? the same; a try opens the window with it.
 # It waits for the board to be clear (no window, no show over it) and for the
 # field under the deck list, where Magic search lives (3.9.9), to be on the page.
+MAGIC_HOWTO_WORDS = (_later("Magic search"), _later("New"), _later("Try it: {q}"), _later("Then, with what it finds"),
+                     _later("Open Magic search"), _later("Got it"))
 MAGIC_HOWTO_JS = r"""
 (function () {
     var V = __VIEW__;
+    function W(s) { return (V.w && V.w[s]) || s; }
     if (document.getElementById('dc-magic')) { return; }
     var BUSY = __BUSY__;
     function clear() {
@@ -388,7 +403,7 @@ MAGIC_HOWTO_JS = r"""
         if (text != null) { e.textContent = text; }
         return e;
     }
-    var pop = window.dcPop.make({ id: 'dc-magic', label: 'Magic search', z: 82, pad: '6vh 16px 16px' }), back = pop.back;
+    var pop = window.dcPop.make({ id: 'dc-magic', label: W('Magic search'), z: 82, pad: '6vh 16px 16px' }), back = pop.back;
     var css = el('style');
     css.textContent = pop.css(
         '#dc-magic *{box-sizing:border-box;}' +
@@ -418,8 +433,8 @@ MAGIC_HOWTO_JS = r"""
     var t = el('div', 't');
     t.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">' +
         '<circle cx="10" cy="11" r="6.2"/><path d="M19.4 20.4l-4.7-4.7"/><path d="M19 1.6l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9z" fill="' + hours + '" stroke="none"/></svg>';
-    t.appendChild(el('b', null, 'Magic search'));
-    t.appendChild(el('span', 'new', 'New'));
+    t.appendChild(el('b', null, W('Magic search')));
+    t.appendChild(el('span', 'new', W('New')));
     card.appendChild(t);
     card.appendChild(el('p', null, V.lede));
     var how = el('div', 'how');
@@ -434,7 +449,7 @@ MAGIC_HOWTO_JS = r"""
             tries.forEach(function (q, i) {
                 var b = el('button', null, (x.label || [])[i] || q);
                 b.type = 'button';
-                b.title = 'Try it: ' + q;
+                b.title = W('Try it: {q}').replace('{q}', function () { return q; });
                 b.addEventListener('click', function () { say('try', q); });
                 tr.appendChild(b);
             });
@@ -444,12 +459,12 @@ MAGIC_HOWTO_JS = r"""
     });
     card.appendChild(how);
     var then = el('div', 'then');
-    then.appendChild(el('b', null, 'Then, with what it finds'));
+    then.appendChild(el('b', null, W('Then, with what it finds')));
     var ul = el('ul');
     (V.then || []).forEach(function (x) { ul.appendChild(el('li', null, x)); });
     then.appendChild(ul);
     card.appendChild(then);
-    var ft = el('div', 'ft'), go = el('button', 'go', 'Open Magic search'), no = el('button', 'no', 'Got it');
+    var ft = el('div', 'ft'), go = el('button', 'go', W('Open Magic search')), no = el('button', 'no', W('Got it'));
     go.type = no.type = 'button';
     ft.appendChild(el('span', 'w', V.foot));
     ft.appendChild(no);
@@ -481,6 +496,9 @@ def magic_howto_js(view):
          "parts": [{"t": str(x.get("t") or ""), "w": str(x.get("w") or ""), "code": str(x.get("code") or ""),
                     "try": [str(q) for q in x.get("try") or []], "label": [str(q) for q in x.get("label") or []]}
                    for x in view.get("parts") or [] if isinstance(x, dict)]}
+    said = js_words(MAGIC_HOWTO_WORDS)
+    if said:
+        v["w"] = said
     busy = list(VEIL_IDS) + ["dc-show", "dc-flurry"]  # Wrapped, Settings and the closet take the You box with the board
     return POP_JS + (MAGIC_HOWTO_JS.replace("__BUSY__", _json.dumps(busy))
             .replace("__VIEW__", _json.dumps(v).replace("</", "<\\/")))
@@ -495,23 +513,23 @@ def stranger_card_js(info):
     emoji, so no colour or look), or None."""
     sev_fig = info.get("sev")
     name = _html.escape(str(info.get("name", "?"))) if sev_fig else _label(info.get("name", "?"), info.get("emoji"))
-    squad = _html.escape(str(info.get("squad") or "squad"))
+    squad = _html.escape(str(info.get("squad") or _t("squad")))
     numberless = all(info.get(k) is None for k in ("reviews", "time_ms", "retention", "streak"))
     if info.get("show_up") or numberless:
         # show-up, theirs or mine: presence is the whole story, no rank
-        where = f'in {squad}'
-        bits = ["showed up today" if info.get("today") else "not today"]
+        where = _t("in {squad}", squad=squad)
+        bits = [_t("showed up today") if info.get("today") else _t("not today")]
         if info.get("week") is not None:
-            bits.append(f'{int(info["week"])}/7 days this week')
+            bits.append(_t("{n}/7 days this week", n=int(info["week"])))
     else:
-        where = (f'#{int(info["rank"])} in {squad} today' if info.get("rank")
-                 else f'in {squad}')
-        when = "today" if info.get("today") else "last sync"
-        bits = [f'{format(int(info.get("reviews") or 0), ",")} reviews {when}',
+        where = (_t("#{n} in {squad} today", n=int(info["rank"]), squad=squad) if info.get("rank")
+                 else _t("in {squad}", squad=squad))
+        n = format(int(info.get("reviews") or 0), ",")
+        bits = [_t("{n} reviews today", n=n) if info.get("today") else _t("{n} reviews last sync", n=n),
                 _fmt_time(int(info.get("time_ms") or 0))]
         if info.get("retention") is not None:
-            bits.append(f'{float(info["retention"]):.1f}% retention')
-        bits.append(f'{int(info.get("streak") or 0)}-day streak')
+            bits.append(_t("{pct}% retention", pct=f'{float(info["retention"]):.1f}'))
+        bits.append(_t("{n}-day streak", n=int(info.get("streak") or 0)))
     stat = " &middot; ".join(bits)
     head = (f'<div style="display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0;">'
             f'<span style="font-size: 15px; font-weight: 700;">{name}</span>'
@@ -522,19 +540,19 @@ def stranger_card_js(info):
     inner = _json.dumps(head + f'<div style="font-size: 12px; opacity: 0.8; padding: 6px 0 2px;">{stat}</div>')
     uid = str(info.get("uid", ""))
     if info.get("knocked_me"):
-        act_label = _json.dumps("\U0001F91D Add back")
+        act_label = _json.dumps("\U0001F91D " + _t("Add back"))
         act_cmd, act_primary = _json.dumps(f"duecrew:addback:{uid}"), "true"
     elif info.get("pending"):
-        act_label = _json.dumps("\u23F3 Waiting")
+        act_label = _json.dumps("\u23F3 " + _t("Waiting"))
         act_cmd, act_primary = _json.dumps(None), "false"
     else:
-        act_label = _json.dumps("\U0001F91D Add")
+        act_label = _json.dumps("\U0001F91D " + _t("Add"))
         act_cmd, act_primary = _json.dumps(f"duecrew:knock:{uid}"), "true"
     extras = []
     if info.get("founder_me"):
-        extras = [("Remove", f"duecrew:squadkick:{uid}"),
-                  ("Block", f"duecrew:squadblock:{uid}"),
-                  ("Make founder", f"duecrew:squadfounder:{uid}")]
+        extras = [(_t("Remove"), f"duecrew:squadkick:{uid}"),
+                  (_t("Block"), f"duecrew:squadblock:{uid}"),
+                  (_t("Make founder"), f"duecrew:squadfounder:{uid}")]
     extras_json = _json.dumps(extras)
     return POP_JS + """
     (function() {
@@ -575,7 +593,7 @@ def stranger_card_js(info):
             });
         }
         var close = document.createElement('button');
-        close.textContent = 'Close';
+        close.textContent = %s;
         close.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
             'background:none;color:inherit;border:1px solid ' +
             dcLine + ';';
@@ -594,7 +612,7 @@ def stranger_card_js(info):
             tools.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:6px;' +
                 'margin-top:12px;padding-top:10px;border-top:1px solid ' + dcLine + ';';
             var toolsLabel = document.createElement('span');
-            toolsLabel.textContent = 'Founder';
+            toolsLabel.textContent = %s;
             toolsLabel.style.cssText = 'font-size:10.5px;opacity:0.6;margin-right:4px;' +
                 'text-transform:uppercase;letter-spacing:0.08em;';
             tools.appendChild(toolsLabel);
@@ -614,14 +632,15 @@ def stranger_card_js(info):
         back.appendChild(card);
         pop.show(card);  // Esc or the shade closes it; 3.8.0: out of the name and back into it (dcPop)
     })();
-    """ % (_json.dumps(str(info.get("name") or "?")), inner, act_cmd, act_label, act_primary, extras_json)
+    """ % (_json.dumps(str(info.get("name") or "?")), inner, act_cmd, act_label, act_primary, js_q(_t("Close")), extras_json,
+           js_q(_t("Founder")))
 
 
 def luck_card_js(name, lines):
     """2.10: the good-luck card, shown once on the morning of my exam.
     `lines`: [(sender name, note)]. Everything sender-written goes in as
     textContent, never markup. Thanks sends a 💚 back to each of them."""
-    title = _json.dumps(f"\U0001F340 Good luck today, {str(name or 'you')}")
+    title = _json.dumps("\U0001F340 " + (_t("Good luck today, {name}", name=str(name)) if name else _t("Good luck today, you")))
     items = _json.dumps([[str(n), str(t)] for n, t in (lines or [])][:12])
     return POP_JS + """
     (function() {
@@ -657,12 +676,12 @@ def luck_card_js(name, lines):
         var row = document.createElement('div');
         row.style.cssText = 'display:flex;gap:8px;margin-top:14px;';
         var close = document.createElement('button');
-        close.textContent = 'Close';
+        close.textContent = %s;
         close.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
             'background:none;color:inherit;border:1px solid ' + line + ';';
         close.addEventListener('click', function() { pop.close(); });
         var thanks = document.createElement('button');
-        thanks.textContent = 'Thanks, crew';
+        thanks.textContent = %s;
         thanks.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
             'background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;font-weight:600;';
         thanks.addEventListener('click', function() {
@@ -678,7 +697,7 @@ def luck_card_js(name, lines):
         back.appendChild(card);
         pop.show(card);  // Esc or the shade closes it; 3.8.0: out of the name and back into it (dcPop)
     })();
-    """ % (title, title, items)
+    """ % (title, title, items, js_q(_t("Close")), js_q(_t("Thanks, crew")))
 
 
 HEAT_LEVELS = ((1, 1), (10, 2), (50, 3), (150, 4))
@@ -701,9 +720,9 @@ def _profile_song(profile):
     link = 'style="color: inherit; font-weight: 700; text-decoration: none; border-bottom: 1px dotted currentColor;"'
     shut = "document.getElementById('dc-profile').remove();"
     if profile.get("you"):
-        act = (f'<a href="#" {link} onclick="{shut}if(window.dcDance){{dcDance.search();}}return false;">Change</a>')
+        act = (f'<a href="#" {link} onclick="{shut}if(window.dcDance){{dcDance.search();}}return false;">{_t("Change")}</a>')
     else:
-        act = f'<a href="#" {link} onclick="{shut}{_pycmd("songlisten:" + str(profile.get("uid") or ""))}">Listen</a>'
+        act = f'<a href="#" {link} onclick="{shut}{_pycmd("songlisten:" + str(profile.get("uid") or ""))}">{_t("Listen")}</a>'
     return (f'<div style="font-size: 12px; padding: 4px 0 0; display: flex; gap: 6px; align-items: baseline; min-width: 0;">'
             f'<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;">&#9834; '
             f'<b>{_html.escape(song["t"])}</b> &middot; {_html.escape(song["a"])}</span>'
@@ -729,11 +748,11 @@ def profile_overlay_js(profile):
     if you:
         kicker = ('<div style="font-size: 10px; font-weight: 700; '
                   'letter-spacing: 0.09em; text-transform: uppercase; '
-                  'opacity: 0.6; margin-bottom: 6px;">As your crew sees it</div>')
+                  f'opacity: 0.6; margin-bottom: 6px;">{_t("As your crew sees it")}</div>')
     bits = [f'<span style="font-size: 15px; font-weight: 700;">{name}</span>']
     if profile.get("streak") is not None:
         bits.append(f'<span style="opacity: 0.7; font-size: 12px;">'
-                    f'{int(profile["streak"])}-day streak</span>')
+                    f'{_t("{n}-day streak", n=int(profile["streak"]))}</span>')
     ago_txt, _tone = _ago(profile.get("last_active", ""))
     if ago_txt:
         bits.append(f'<span style="opacity: 0.55; font-size: 11px; '
@@ -745,10 +764,10 @@ def profile_overlay_js(profile):
     today = profile.get("today")
     if today and not profile.get("paused"):
         head += (f'<div style="font-size: 12px; opacity: 0.8; padding: 4px 0 0;">'
-                 f'Today: {today_text(*today)}</div>')
+                 f'{_t("Today: {what}", what=today_text(*today))}</div>')
     if profile.get("paused"):
         head += ('<div style="font-size: 12px; font-style: italic; '
-                 'opacity: 0.7; padding: 4px 0 0;">on a break</div>')
+                 f'opacity: 0.7; padding: 4px 0 0;">{_t("on a break")}</div>')
     if profile.get("exam"):
         head += (f'<div class="dcex" style="font-size: 12px; font-weight: 700; '
                  f'padding: 4px 0 0;">&#128214; '
@@ -764,7 +783,7 @@ def profile_overlay_js(profile):
             link = ('style="color: inherit; text-decoration: none; '
                     'border-bottom: 1px dotted currentColor;"')
             edit = (f' <a href="#" {link} onclick="{_pycmd("status")}">'
-                    f'{"edit" if status else "Set a status"}</a>')
+                    f'{_t("edit") if status else _t("Set a status")}</a>')
         quoted = f'&ldquo;{_html.escape(status)}&rdquo;' if status else ""
         head += (f'<div style="font-size: 12px; opacity: 0.8; padding: 4px 0 0;">'
                  f'{quoted}{edit}</div>')
@@ -777,14 +796,14 @@ def profile_overlay_js(profile):
         closet = ""
         if sev_fig:  # 3.8.2: dress your Pip; the emoji stays for squads, bingo and older add-ons
             closet = (f'<a href="#" {link} onclick="document.getElementById(\'dc-profile\').remove();{_pycmd("closet")}">'
-                      f'Pip&rsquo;s closet</a> &middot; ')
+                      f'{_t("Pip&rsquo;s closet")}</a> &middot; ')
         head += (f'<div style="font-size: 12px; opacity: 0.8; padding: 4px 0 0;">{closet}'
                  f'<a href="#" {link} onclick="{_pycmd("emoji")}">'
-                 f'{"Change emoji" if profile.get("emoji") else "Pick an emoji"}</a></div>')
+                 f'{_t("Change emoji") if profile.get("emoji") else _t("Pick an emoji")}</a></div>')
 
     cells = profile.get("cells")
     if cells is None:
-        private = "Your heatmap is private." if you else "Their heatmap is private."
+        private = _t("Your heatmap is private.") if you else _t("Their heatmap is private.")
         grid = (f'<div style="font-size: 12px; opacity: 0.7; margin: 12px 0;">'
                 f'{private}</div>')
     else:
@@ -814,8 +833,10 @@ def profile_overlay_js(profile):
             # 3.8.0: on my own card, a day I studied opens its cards in Browse
             if you and day and n > 0:
                 d = _date.fromisoformat(day)
-                return (f'<i class="dchm h{lvl}" title="{d:%a} {d.day} {d:%b} \u00b7 {n:,} review{"s" if n != 1 else ""}. '
-                        f'Browse them" onclick="{_pycmd("heatday:" + day)}"></i>')
+                when = f"{_words.weekday(d.weekday())} {d.day} {_words.month(d.month)}"
+                tip = (_t("{when} \u00b7 {n} reviews. Browse them", when=when, n=f"{n:,}") if n != 1
+                       else _t("{when} \u00b7 {n} review. Browse them", when=when, n=f"{n:,}"))
+                return f'<i class="dchm h{lvl}" title="{tip}" onclick="{_pycmd("heatday:" + day)}"></i>'
             return f'<i class="dchm h{lvl if lvl >= 0 else "x"}"></i>'
         col_html = ""
         for col in cols[-26:]:
@@ -834,48 +855,53 @@ def profile_overlay_js(profile):
                     f'<span>{dots}</span></div>')
 
         if duet.get("mine_week") and duet.get("theirs_week"):
-            lines += (_drow("You", duet["mine_week"])
+            lines += (_drow(_t("You"), duet["mine_week"])
                       + _drow(short, duet["theirs_week"]))
         run, best = int(duet.get("run") or 0), int(duet.get("best") or 0)
         if run > 0:
-            unit = "day" if run == 1 else "days"
-            tail = f" &mdash; best run: {best}." if best > run else "."
+            bold = "<b>" + (_t("{n} day in a row together", n=run) if run == 1 else _t("{n} days in a row together", n=run)) + "</b>"
+            said = (_t("You two have studied {run} &mdash; best run: {best}.", run=bold, best=best) if best > run
+                    else _t("You two have studied {run}.", run=bold))
             lines += (f'<div style="font-size: 12px; padding: 4px 0 2px;">'
-                      f'You two have studied <b>{run} {unit} in a row '
-                      f'together</b>{tail}</div>')
+                      f'{said}</div>')
         elif best > 1:
+            bold = "<b>" + _t("{n} days", n=best) + "</b>"
             lines += (f'<div style="font-size: 12px; padding: 4px 0 2px;">'
-                      f'Best run together: <b>{best} days</b>.</div>')
+                      f'{_t("Best run together: {days}.", days=bold)}</div>')
     if profile.get("same_days") is not None:
         # named by the month the heatmap above starts, so the two agree
         try:
-            since = f' since {_date.fromisoformat(str(profile.get("start"))).strftime("%B")}'
+            since = _t(MONTH_NAMES[_date.fromisoformat(str(profile.get("start"))).month - 1])
         except (TypeError, ValueError):
             since = ""
         n = int(profile["same_days"])
+        bold = "<b>" + (_t("{n} day", n=n) if n == 1 else _t("{n} days", n=n)) + "</b>"
+        said = (_t("You&rsquo;ve both studied on {days} since {month}.", days=bold, month=since) if since
+                else _t("You&rsquo;ve both studied on {days}.", days=bold))
         lines += (f'<div style="font-size: 12px; padding: 2px 0;">'
-                  f'You&rsquo;ve both studied on <b>{n} day{"" if n == 1 else "s"}</b>{since}.</div>')
+                  f'{said}</div>')
     if profile.get("decks_line"):
-        prefix = "Shares with your crew: " if you else "Shares with you: "
+        decks = _html.escape(str(profile["decks_line"]))
         lines += (f'<div style="font-size: 12px; padding: 2px 0; opacity: 0.8;">'
-                  f'{prefix}{_html.escape(str(profile["decks_line"]))}</div>')
+                  f'{_t("Shares with your crew: {decks}", decks=decks) if you else _t("Shares with you: {decks}", decks=decks)}</div>')
 
     if you:
         link = ('style="color: inherit; font-weight: 700; text-decoration: none; '
                 'border-bottom: 1px dotted currentColor;"')
+        whens = (f'<a href="#" {link} '
+                 f'onclick="{_pycmd("sharetoday")}">{_t("today")}</a> &middot; '
+                 f'<a href="#" {link} onclick="{_pycmd("shareweek")}">{_t("week")}</a> &middot; '
+                 f'<a href="#" {link} onclick="{_pycmd("sharemonth")}">{_t("month")}</a> &middot; '
+                 f'<a href="#" {link} onclick="{_pycmd("shareyear")}">{_t("year")}</a>')
         lines += (f'<div style="font-size: 12px; padding: 8px 0 0; opacity: 0.85;">'
-                  f'Copy for the chat: <a href="#" {link} '
-                  f'onclick="{_pycmd("sharetoday")}">today</a> &middot; '
-                  f'<a href="#" {link} onclick="{_pycmd("shareweek")}">week</a> &middot; '
-                  f'<a href="#" {link} onclick="{_pycmd("sharemonth")}">month</a> &middot; '
-                  f'<a href="#" {link} onclick="{_pycmd("shareyear")}">year</a></div>')
+                  f'{_t("Copy for the chat: {whens}", whens=whens)}</div>')
 
     inner = _json.dumps(head + grid + lines)
     if you:
-        act_label, act_primary = _json.dumps("Privacy…"), "false"
+        act_label, act_primary = _json.dumps(_t("Privacy…")), "false"
         act_cmd = _json.dumps("duecrew:settings:privacy")
     else:
-        act_label, act_primary = _json.dumps("\U0001F389 Send a cheer"), "true"
+        act_label, act_primary = _json.dumps("\U0001F389 " + _t("Send a cheer")), "true"
         act_cmd = _json.dumps(f"duecrew:cheerpick:{profile.get('uid', '')}")
     return POP_JS + """
     (function() {
@@ -934,7 +960,7 @@ def profile_overlay_js(profile):
             pop.close();
             if (typeof pycmd !== 'undefined') { pycmd(%s + '|' + window.dcBK); }
         });
-        var close = btn('Close', false);
+        var close = btn(%s, false);
         close.addEventListener('click', function() { pop.close(); });
         row.appendChild(act);
         var spacer = document.createElement('div');
@@ -945,4 +971,4 @@ def profile_overlay_js(profile):
         back.appendChild(card);
         pop.show(card);  // Esc or the shade closes it; 3.8.0: out of the name and back into it (dcPop)
     })();
-    """ % (_json.dumps(str(profile.get("name") or "?")), inner, act_label, act_primary, act_cmd)
+    """ % (_json.dumps(str(profile.get("name") or "?")), inner, act_label, act_primary, act_cmd, js_q(_t("Close")))
