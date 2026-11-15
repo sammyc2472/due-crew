@@ -1323,3 +1323,18 @@ def test_polaroid_tape_is_the_pips_colour():
     check("the fridge: someone no longer in my crew keeps the colour it came in", f"--ft:rgba({rgb(purple[1])},.6)" in gone)
     check("the scrapbook's polaroid is taped in the same: its person's colour now, else the one it came in",
           "background: var(--a)" in srcs.due_src("board/scrapbook.py") and "accent_pair(now or x.get(\"a\"))" in srcs.due_src("board/scrapbook.py"))
+
+
+def test_field_log_15_nov():
+    """The field log of 14 Nov: view:insights on 3.9.12 (5 times, 3 people) was the map's own `_map_know`, missing
+    from views.INSIGHTS, so every Insights with a map slipped; req:settings:404 was a new account's first pull."""
+    import re as _re
+    from due_crew import views
+    src = srcs.due_src("team_flow.py")
+    keys = set(_re.findall(r'out\["([a-z_]+)"\]', src[src.index("def _work_steps("):src.index("def _since_ms(")]))
+    keys |= set(_re.findall(r'out\["(_map_[a-z]+)"\]', src))
+    check("every key the Insights view is given is in its shape", keys and keys <= set(views.INSIGHTS), sorted(keys - set(views.INSIGHTS)))
+    check("a map's view fits: no slip", views.insights_wrong({"map": [], "map_by": "deck", "_map_know": {"x": 1}, "_map_missed": set(), "map_ways": []}) == [])
+    from due_crew.backend import api
+    check("a new account's first GET /settings 404 isn't counted as going wrong; anything else is",
+          ("GET", "/settings", 404) in api.EXPECTED and "not in EXPECTED" in open(api.__file__).read() and ("PUT", "/settings", 404) not in api.EXPECTED)

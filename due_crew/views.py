@@ -86,6 +86,7 @@ PLAN_CARD = {
 
 # You › Insights for a deck (board._insights_html)
 INSIGHTS = {
+    "_map_know": dict,     # what each tile's cards are known as (team_flow._map): the map's level, never drawn
     "_map_missed": (set, frozenset, list, tuple),
     "ahead": dict,
     "aim": dict,

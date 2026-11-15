@@ -88,6 +88,11 @@ def _with_kept_docs(plans, kept):
     return out
 
 
+
+# Answers that are how a request says "nothing yet", not something going wrong (the field log, 15 Nov: GET /settings
+# 404 is every new account's first pull, before its first save): not counted for Sam
+EXPECTED = {("GET", "/settings", 404)}
+
 class Saved:
     """put_settings's answer: true when it saved. `rev`, the server's rev now
     (None from a Worker before 3.8.1); `conflict`, the doc someone saved
@@ -224,7 +229,7 @@ class ApiClient:
             data = r.json() if r.content else {}
         except ValueError:
             data = {}
-        if r.status_code >= 300:
+        if r.status_code >= 300 and (method, path, r.status_code) not in EXPECTED:
             _errs.count(_errs.req_code(path, r.status_code))  # 3.9.9: a request that failed, by route and status
         if r.status_code == 401 and auth:
             if not self.session.get("auth_dead"):
