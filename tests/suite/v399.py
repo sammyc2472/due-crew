@@ -1338,3 +1338,26 @@ def test_field_log_15_nov():
     from due_crew.backend import api
     check("a new account's first GET /settings 404 isn't counted as going wrong; anything else is",
           ("GET", "/settings", 404) in api.EXPECTED and "not in EXPECTED" in open(api.__file__).read() and ("PUT", "/settings", 404) not in api.EXPECTED)
+
+
+def test_never_imports_itself_by_name():
+    """SC's crash, 15 Nov: the reviewer's "Due Crew: your tip…" did __import__("due_crew.cards"), but AnkiWeb installs
+    the add-on in a folder named 2035408484, so it raised ModuleNotFoundError. Every import of its own modules is
+    relative; no code names the package (an import, __import__ or import_module of "due_crew…")."""
+    import ast
+    bad = []
+    for root, _dirs, files in os.walk(os.path.join(REPO, "due_crew")):
+        for f in files:
+            if not f.endswith(".py"):
+                continue
+            path = os.path.join(root, f)
+            for n in ast.walk(ast.parse(open(path, encoding="utf-8").read())):
+                if isinstance(n, ast.ImportFrom) and n.level == 0 and (n.module or "").split(".")[0] == "due_crew":
+                    bad.append((path, n.lineno))
+                elif isinstance(n, ast.Import) and any(a.name.split(".")[0] == "due_crew" for a in n.names):
+                    bad.append((path, n.lineno))
+                elif (isinstance(n, ast.Call) and n.args and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str)
+                      and n.args[0].value.split(".")[0] == "due_crew"
+                      and getattr(n.func, "id", getattr(n.func, "attr", "")) in ("__import__", "import_module")):
+                    bad.append((path, n.lineno))
+    check("the add-on never imports itself by its folder's name (AnkiWeb's is 2035408484)", bad == [], bad)

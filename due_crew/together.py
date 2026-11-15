@@ -355,7 +355,8 @@ def reviewer_menu(reviewer, menu):
     # 3.9.11: my own hook on this card (hooks.py), on any card
     from . import hooks
     hk = menu.addAction(_t("Due Crew: your tip…") if hooks.get(card.note().guid) else _t("Due Crew: add a tip…"))
-    hk.triggered.connect(lambda: __import__("due_crew.cards", fromlist=["hook_edit"]).hook_edit(card))
+    from . import cards  # never by the folder's name: AnkiWeb installs it as 2035408484 (SC's crash, 15 Nov)
+    hk.triggered.connect(lambda: cards.hook_edit(card))
     # 3.7.3: a card in a plan whose team I'm on can go to the team too
     from . import team_flow
     if team_flow.plan_for_card(card):
