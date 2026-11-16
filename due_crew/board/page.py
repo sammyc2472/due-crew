@@ -8,12 +8,25 @@ import os as _os
 import re as _re
 
 from .. import sev as _sev
+from ..words import t as _t
 
 from .party import PARTY_JS
 from .due import DUE_JS
 
 
 _HERE = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))  # due_crew/, where motion.js and show.js are
+
+def js_q(text):
+    """A phrase as a script's own string, in single quotes as its source writes them ('Close'); no '</'."""
+    return "'" + _json.dumps(str(text))[1:-1].replace("'", "\\'").replace("</", "<\\/") + "'"
+
+
+def js_words(phrases):
+    """3.10.0: a script's words in the language in use, {English: theirs}, for the page's data: only those
+    that differ, so in English nothing is sent and the script says its own."""
+    said = ((p, _t(p)) for p in phrases)
+    return {p: s for p, s in said if s != p}
+
 
 _LEAD_CSS = _re.compile(r'^(<div id="due-crew"[^>]*>)((?:\s*<style>.*?</style>)+)', _re.S)
 
@@ -135,7 +148,7 @@ FIND_JS = r"""
           return q.every(function (w) { return k.indexOf(' ' + w) >= 0; });
         }).slice(0, 7);
         if (!hits.length) {
-          var n = document.createElement('span'); n.className = 'st-none'; n.textContent = 'Nothing by that name';
+          var n = document.createElement('span'); n.className = 'st-none'; n.textContent = inp.getAttribute('data-none') || 'Nothing by that name';
           box.appendChild(n);
         }
         hits.forEach(function (h, i) {

@@ -11,7 +11,8 @@ from aqt.qt import (
     QSpinBox, QVBoxLayout, Qt,
 )
 
-from . import heading, note, styled
+from . import heading, laid, note, styled
+from ..words import t as _t, tn as _tn
 
 
 def _qdate(iso):
@@ -37,12 +38,12 @@ class PauseDialog(QDialog):
         super().__init__(parent)
         styled(self)  # 3.9.1: the board's look
         self.until = None
-        self.setWindowTitle("Pause")
+        self.setWindowTitle(_t("Pause"))
         self.setMinimumWidth(380)
         root = QVBoxLayout(self)
-        heading(self, root, f"Pause {name}")
+        heading(self, root, _t("Pause {name}", name=name))
         row = QHBoxLayout()
-        row.addWidget(QLabel("Until"))
+        row.addWidget(QLabel(_t("Until")))
         self.date = QDateEdit()
         self.date.setCalendarPopup(True)
         self.date.setDisplayFormat("ddd d MMM yyyy")
@@ -51,11 +52,11 @@ class PauseDialog(QDialog):
         row.addWidget(self.date)
         row.addStretch()
         root.addLayout(row)
-        root.addWidget(_note(("From your Away dates. " if from_away else "")
-                             + "Nothing opens while it's paused. On the day after, it asks what to do with what you missed."))
+        root.addWidget(_note((_t("From your Away dates.") + " " if from_away else "")
+                             + _t("Nothing opens while it's paused. On the day after, it asks what to do with what you missed.")))
         buttons = QDialogButtonBox()
-        buttons.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
-        ok = buttons.addButton("Pause", QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.addButton(_t("Cancel"), QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
+        ok = buttons.addButton(_t("Pause"), QDialogButtonBox.ButtonRole.AcceptRole)
         ok.setDefault(True)
         ok.clicked.connect(self._ok)
         root.addWidget(buttons)
@@ -78,20 +79,20 @@ class BackDialog(QDialog):
         super().__init__(parent)
         styled(self)  # 3.9.1: the board's look
         self.choice = None
-        self.setWindowTitle("Welcome back")
+        self.setWindowTitle(_t("Welcome back"))
         self.setMinimumWidth(420)
         root = QVBoxLayout(self)
-        heading(self, root, f"Welcome back. {n_units} set{'s' if n_units != 1 else ''} opened while you were away.")
-        self.push = QRadioButton(f"Push my dates back {days} day{'s' if days != 1 else ''}")
+        heading(self, root, _tn("Welcome back. {n} set opened while you were away.", "Welcome back. {n} sets opened while you were away.", n_units))
+        self.push = QRadioButton(_tn("Push my dates back {n} day", "Push my dates back {n} days", days))
         self.push.setChecked(True)
-        self.open = QRadioButton(f"Open the {n_units} set{'s' if n_units != 1 else ''} now")
+        self.open = QRadioButton(_tn("Open the {n} set now", "Open the {n} sets now", n_units))
         group = QButtonGroup(self)
         group.addButton(self.push)
         group.addButton(self.open)
         root.addWidget(self.push)
         root.addWidget(self.open)
-        root.addWidget(_note("Only your copy changes. The plan stays the same for everyone else"
-                             + (f", and {event[0]} is still {event[1]}." if event else ".")))
+        root.addWidget(_note(_t("Only your copy changes. The plan stays the same for everyone else, and {event} is still {day}.", event=event[0], day=event[1])
+                             if event else _t("Only your copy changes. The plan stays the same for everyone else.")))
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         buttons.accepted.connect(self._ok)
         root.addWidget(buttons)
@@ -113,21 +114,19 @@ class ShiftDialog(QDialog):
         super().__init__(parent)
         styled(self)  # 3.9.1: the board's look
         self.days = None
-        self.setWindowTitle("Push my dates back")
+        self.setWindowTitle(_t("Push my dates back"))
         self.setMinimumWidth(380)
         root = QVBoxLayout(self)
         heading(self, root, str(name))
         row = QHBoxLayout()
-        row.addWidget(QLabel("My dates run"))
         self.spin = QSpinBox()
         self.spin.setRange(0, 365)
         self.spin.setValue(int(current or 0))
-        row.addWidget(self.spin)
-        row.addWidget(QLabel("days after the plan's"))
+        laid(row, _t("My dates run {n} days after the plan's"), n=self.spin)  # one phrase around the box
         row.addStretch()
         root.addLayout(row)
-        root.addWidget(_note("Only your copy moves; events stay on their days. 0 puts you back on the plan's dates. "
-                             "Sets already open stay open."))
+        root.addWidget(_note(_t("Only your copy moves; events stay on their days. 0 puts you back on the plan's dates. "
+                                "Sets already open stay open.")))
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._ok)
         buttons.rejected.connect(self.reject)

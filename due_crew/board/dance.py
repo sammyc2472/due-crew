@@ -13,7 +13,10 @@ from .. import songs as _songs
 
 from .base import BOARD_FONT, DEFAULT_ACCENT, _by_theme, _pycmd, _token_block, accent_pair, initial, palette, button_reset
 from .pip import my_look
+from .page import js_words
 from .windows import POP_JS, pop_named
+from .. import words as _words
+from ..words import later as _later, t as _t
 
 
 # 3.9.6, song of the moment (Sam's sign-off on the mock's dance floor, with his
@@ -331,7 +334,8 @@ def _dance_when(at, today=None):
     except ValueError:
         return ""
     n = ((today or _dt.date.today()) - d).days
-    return "picked today" if n <= 0 else "picked yesterday" if n == 1 else f"since {d.day} {d.strftime('%b')}"
+    return (_t("picked today") if n <= 0 else _t("picked yesterday") if n == 1
+            else _t("since {day} {month}", day=d.day, month=_words.month(d.month)))
 
 
 def _dance_cover(song, size=64):
@@ -349,10 +353,10 @@ def _dance_badge(who):
     """Apple's "Listen on Apple Music" badge, as Apple serves it, opening the song on Apple Music
     (duecrew:songapple); when the image doesn't load, the same words as a link."""
     cmd = _pycmd(f"songapple:{who}")
-    return (f'<span class="bdg"><a href="#" title="Listen on Apple Music" onclick="{cmd}">'
-            f'<img src="{_html.escape(_songs.BADGE_URL)}" alt="Listen on Apple Music" height="{_songs.BADGE_H}" loading="lazy" '
+    return (f'<span class="bdg"><a href="#" title="{_t("Listen on Apple Music")}" onclick="{cmd}">'
+            f'<img src="{_html.escape(_songs.BADGE_URL)}" alt="{_t("Listen on Apple Music")}" height="{_songs.BADGE_H}" loading="lazy" '
             f'onerror="this.parentNode.hidden=true;this.parentNode.nextElementSibling.hidden=false"></a>'
-            f'<a class="bdt" href="#" hidden onclick="{cmd}">Listen on Apple Music</a></span>')
+            f'<a class="bdt" href="#" hidden onclick="{cmd}">{_t("Listen on Apple Music")}</a></span>')
 
 
 def _dance_listen(who, view):
@@ -362,13 +366,13 @@ def _dance_listen(who, view):
     the song there (songlisten:<uid>:<app>). Settings changes it."""
     app = view.get("app") if view.get("app") in dict(_songs.APPS) else ""
     if app:
-        word = "Copy title and artist" if app == "other" else f"Listen in {_html.escape(_songs.app_name(app))}"
+        word = _t("Copy title and artist") if app == "other" else _t("Listen in {app}", app=_html.escape(_songs.app_name(app)))
         return f'<button type="button" class="bt pri" onclick="{_pycmd("songlisten:" + who)}">{word}</button>'
-    short = {"other": "Other"}
-    tip = {"other": "Copies the title and artist"}
-    apps = "".join(f'<button type="button" class="bt" title="{tip.get(k, "Opens it in " + n)}" '
+    short = {"other": _t("Other")}
+    tip = {"other": _t("Copies the title and artist")}
+    apps = "".join(f'<button type="button" class="bt" title="{tip[k] if k in tip else _t("Opens it in {app}", app=n)}" '
                    f'onclick="{_pycmd(f"songlisten:{who}:{k}")}">{short.get(k, n)}</button>' for k, n in _songs.APPS)
-    return f'<div class="lsn" role="group" aria-label="Listen in"><span class="lw">Listen in</span>{apps}</div>'
+    return f'<div class="lsn" role="group" aria-label="{_t("Listen in")}"><span class="lw">{_t("Listen in")}</span>{apps}</div>'
 
 
 def _dance_card(who, song, view, name=""):
@@ -377,23 +381,23 @@ def _dance_card(who, song, view, name=""):
     cover). Mine: Change… and Take it off instead of Listen."""
     e = _html.escape
     mine = who == "me"
-    head = "&#9834; Your study soundtrack" if mine else f"&#9834; {e(name)}&rsquo;s study soundtrack"
+    head = "&#9834; " + (_t("Your study soundtrack") if mine else _t("{name}&rsquo;s study soundtrack", name=e(name)))
     when = _dance_when(song.get("at"))
     if when and not mine:
         head += f" &middot; {when}"
     row = ""
     if mine:
-        acts = ('<button type="button" class="bt pri" data-find>Change&hellip;</button>'
-                f'<button type="button" class="bt" onclick="{_pycmd("songclear")}">Take it off</button>')
+        acts = (f'<button type="button" class="bt pri" data-find>{_t("Change&hellip;")}</button>'
+                f'<button type="button" class="bt" onclick="{_pycmd("songclear")}">{_t("Take it off")}</button>')
     else:
         listen = _dance_listen(who, view)
         acts, row = ("", listen) if listen.startswith('<div class="lsn"') else (listen, "")
-    label = "Your song" if mine else f"{name}’s song"
+    label = _t("Your song") if mine else _t("{name}’s song", name=name)
     return (f'<div class="df-pop" data-card="{e(who)}" role="dialog" aria-label="{e(label)}" hidden>'
-            f'<div class="ph"><span>{head}</span><button type="button" class="x" data-close aria-label="Close">&times;</button></div>'
+            f'<div class="ph"><span>{head}</span><button type="button" class="x" data-close aria-label="{_t("Close")}">&times;</button></div>'
             f'<div class="sg">{_dance_cover(song)}<div class="tx"><b>{e(song["t"])}</b><span class="mt">{_dance_line(song)}</span>'
             f'{f"<span class=acts>{acts}</span>" if acts else ""}</div></div>{row}'
-            f'<div class="ft"><span class="cr">{e(_songs.CREDIT)}</span>{_dance_badge(who)}</div>'
+            f'<div class="ft"><span class="cr">{e(_t(_songs.CREDIT))}</span>{_dance_badge(who)}</div>'
             f'{_dance_off(view) if mine else ""}</div>')
 
 
@@ -403,15 +407,15 @@ def _dance_off(view=None):
     now = (view or {}).get("motion") or "gentle"
     ways = " &middot; ".join(
         f'<b>{t}</b>' if k == now else f'<a href="#" onclick="{_pycmd("dancemotion:" + k)}">{t}</a>'
-        for k, t in (("gentle", "Gentle"), ("lively", "Lively"), ("still", "Still")))
-    return (f'<div class="df-off"><span class="df-mo">Dancing: {ways}</span>'
-            f'<a href="#" title="Settings &rsaquo; Board brings it back" '
-            f'onclick="{_pycmd("dancehide")}">Turn off the dance floor</a></div>')
+        for k, t in (("gentle", _t("Gentle")), ("lively", _t("Lively")), ("still", _t("Still"))))
+    return (f'<div class="df-off"><span class="df-mo">{_t("Dancing: {ways}", ways=ways)}</span>'
+            f'<a href="#" title="{_t("Settings &rsaquo; Board brings it back")}" '
+            f'onclick="{_pycmd("dancehide")}">{_t("Turn off the dance floor")}</a></div>')
 
 
 def dance_off_js():
     """The line that stands in the floor's corner for a few seconds once it's turned off: Undo brings it back."""
-    line = (f'Dance floor off<a href="#" onclick="{_pycmd("danceshow")}">Undo</a>')
+    line = (f'{_t("Dance floor off")}<a href="#" onclick="{_pycmd("danceshow")}">{_t("Undo")}</a>')
     return ("(function(){var o=document.getElementById('dc-off');if(o){o.remove();}"
             "o=document.createElement('div');o.id='dc-off';o.setAttribute('role','status');o.innerHTML=" + _json.dumps(line) + ";"
             "var s=document.createElement('style');s.textContent=" + _json.dumps(DANCE_OFF_CSS) + ";o.appendChild(s);"
@@ -425,10 +429,10 @@ def _dance_list(crew, view=None):
         f'<li><button type="button" data-open="{e(p["uid"])}" style="--fa-l:{accent_pair(p.get("accent"))[0]};'
         f'--fa-d:{accent_pair(p.get("accent"))[1]}"><span class="nt" aria-hidden="true">&#9834;</span>'
         f'<span class="tx"><b>{e(p["song"]["t"])}</b><span class="mt">{e(p["name"])} &middot; {e(p["song"]["a"])}</span></span>'
-        f'{"<span class=new>new</span>" if p.get("fresh") else ""}</button></li>' for p in crew)
-    return (f'<div class="df-pop" data-card="*" role="dialog" aria-label="Your crew&rsquo;s songs" hidden>'
-            f'<div class="ph"><span>&#9834; Your crew&rsquo;s songs &middot; {len(crew)}</span>'
-            f'<button type="button" class="x" data-close aria-label="Close">&times;</button></div>'
+        f'{"<span class=new>" + _t("new") + "</span>" if p.get("fresh") else ""}</button></li>' for p in crew)
+    return (f'<div class="df-pop" data-card="*" role="dialog" aria-label="{_t("Your crew&rsquo;s songs")}" hidden>'
+            f'<div class="ph"><span>&#9834; {_t("Your crew&rsquo;s songs")} &middot; {len(crew)}</span>'
+            f'<button type="button" class="x" data-close aria-label="{_t("Close")}">&times;</button></div>'
             f'<ul class="df-ls">{rows}</ul>{_dance_off(view)}</div>')
 
 
@@ -441,7 +445,7 @@ def _dance_dancer(i, p, view, place):
     back = i >= 3
     name = str(p.get("name") or "?")
     if view.get("pip", True):
-        fig = _sev.slot(_sev.svg("idle", rest=True, look=p.get("look") or None, label=e(f"{name}’s Pip")),
+        fig = _sev.slot(_sev.svg("idle", rest=True, look=p.get("look") or None, label=e(_t("{name}’s Pip", name=name))),
                         DANCE_PIP_BACK if back else DANCE_PIP)
     else:
         fig = f'<span class="fc">{e(initial(name))}</span>'
@@ -449,7 +453,7 @@ def _dance_dancer(i, p, view, place):
     mark = '<b class="st">&#9733;</b> ' if p.get("fresh") else "&#9834; "
     cls = f'dz d{i} v{i % 3}{" bk" if back else ""}{" fresh" if p.get("fresh") else ""}{" say" if i == place else ""}'
     x = (i - 3) * DANCE_SLOT + DANCE_SLOT // 2 if back else i * DANCE_SLOT
-    said = f"{name}’s song: {s['t']} by {s['a']}"
+    said = _t("{name}’s song: {title} by {artist}", name=name, title=s["t"], artist=s["a"])
     # the drawing, the name and the bubble spill out of the place (a hat, a long title); the button is laid over it
     # each Pip blinks on its own clock (Sam: "they're blinking at the same time"; sev.blink, as a room's seats)
     return (f'<span class="{cls}" style="--x:{x};--i:{i};--fa-l:{light};--fa-d:{dark};{_sev.blink_css(i)}">'
@@ -466,10 +470,10 @@ def _dance_dj(view, cfg):
         look = my_look(cfg)
         if "headphones" not in _closet.shown(look):
             look = _closet.wear(look, "headphones")
-        fig = _sev.slot(_sev.svg("idle" if me else "hello", rest=True, look=look, label="Your Pip, the DJ"), DANCE_DJ)
+        fig = _sev.slot(_sev.svg("idle" if me else "hello", rest=True, look=look, label=_t("Your Pip, the DJ")), DANCE_DJ)
     else:
         fig = '<span class="fc">&#9834;</span>'
-    ask = "" if me else '<span class="bub on"><span>Put on a song?</span></span>'
+    ask = "" if me else f'<span class="bub on"><span>{_t("Put on a song?")}</span></span>'
     return f'<span class="dj" style="{_sev.blink_css(DANCE_MAX)}"><span class="pp">{fig}</span>{ask}</span>'
 
 
@@ -479,8 +483,10 @@ def _dance_keys(view, cfg):
     isn't in either: it plays when the floor is first drawn with it."""
     import hashlib
     crew = [[p.get("uid"), p.get("name"), p.get("accent"), p.get("look"), p.get("song")] for p in view.get("crew") or []]
+    # 3.10.0: another language's floor is another floor (its words are drawn into it); English's key is as it was
+    lang = [] if _words.lang() == _words.EN else [_words.lang()]
     scene = _json.dumps([crew, view.get("me"), bool(view.get("ask")), bool(view.get("pip", True)), view.get("motion"), my_look(cfg),
-                         cfg.get("theme", "auto"), cfg.get("accent", DEFAULT_ACCENT)], sort_keys=True, default=str)
+                         cfg.get("theme", "auto"), cfg.get("accent", DEFAULT_ACCENT)] + lang, sort_keys=True, default=str)
     k = hashlib.sha1(scene.encode()).hexdigest()[:12]
     c = hashlib.sha1(_json.dumps([k, view.get("app")]).encode()).hexdigest()[:12]
     return k, c
@@ -513,28 +519,29 @@ def dance_html(view, cfg):
     shown = crew[:DANCE_MAX - 1] if many else crew
     place = next((i for i, p in enumerate(shown) if p.get("fresh")), 0)  # the first bubble: a new song's, else the newest
     dancers = "".join(_dance_dancer(i, p, view, place) for i, p in enumerate(shown))
+    every = _t("All {n} of your crew&rsquo;s songs", n=len(crew))
     if many:
         last = DANCE_MAX - 1
         x = (last - 3) * DANCE_SLOT + DANCE_SLOT // 2 if last >= 3 else last * DANCE_SLOT
         dancers += (f'<button type="button" class="df-more" data-open="*" style="--x:{x}" '
-                    f'aria-label="All {len(crew)} of your crew&rsquo;s songs">+{len(crew) - len(shown)}</button>')
+                    f'aria-label="{every}">+{len(crew) - len(shown)}</button>')
     if len(crew) > 1:
-        dancers += (f'<button type="button" class="df-ct" data-open="*" aria-label="All {len(crew)} of your crew&rsquo;s songs">'
+        dancers += (f'<button type="button" class="df-ct" data-open="*" aria-label="{every}">'
                     f'&#9834; {len(crew)}</button>')
     if not crew:
-        dancers += '<span class="df-em">No one&rsquo;s picked a song yet.</span>'
+        dancers += f'<span class="df-em">{_t("No one&rsquo;s picked a song yet.")}</span>'
     e = _html.escape
-    said = f"Your song: {me['t']} by {me['a']}" if me else "Put on a song"
+    said = _t("Your song: {title} by {artist}", title=me["t"], artist=me["a"]) if me else _t("Put on a song")
     booth = (f'<button type="button" class="df-bo" data-open="{"me" if me else "search"}" aria-label="{e(said)}">'
              f'{_dance_dj(view, cfg)}{dance_booth_svg(me)}'
-             f'<span class="tag{"" if me else " no"}">{"&#9834; " + e(me["t"]) if me else "No song yet"}</span></button>')
+             f'<span class="tag{"" if me else " no"}">{"&#9834; " + e(me["t"]) if me else _t("No song yet")}</span></button>')
     # 3.9.12: on my song's last day (songs.last_day), till answered: Keep (three more days), Change (the search), ×
     ask = ""
     if me and view.get("ask"):
-        ask = (f'<div class="df-ask" role="group" aria-label="Still this one?"><b>Still this one?</b><small>{e(me["t"])}</small>'
-               f'<a href="#" onclick="{_pycmd("songkeep")}">Keep</a><i>&middot;</i>'
-               f'<button type="button" class="lk" data-open="search">Change</button>'
-               f'<a class="ax" href="#" title="Not now" aria-label="Not now" onclick="{_pycmd("songaskoff")}">&times;</a></div>')
+        ask = (f'<div class="df-ask" role="group" aria-label="{_t("Still this one?")}"><b>{_t("Still this one?")}</b><small>{e(me["t"])}</small>'
+               f'<a href="#" onclick="{_pycmd("songkeep")}">{_t("Keep")}</a><i>&middot;</i>'
+               f'<button type="button" class="lk" data-open="search">{_t("Change")}</button>'
+               f'<a class="ax" href="#" title="{_t("Not now")}" aria-label="{_t("Not now")}" onclick="{_pycmd("songaskoff")}">&times;</a></div>')
     cards = ("".join(_dance_card(p["uid"], p["song"], view, p["name"]) for p in crew)
              + (_dance_card("me", me, view) if me else "") + (_dance_list(crew, view) if crew else ""))
     # each crewmate in their colour, by day or by night as the board (one selector a call: _by_theme prefixes it)
@@ -542,19 +549,23 @@ def dance_html(view, cfg):
                        for sel in ("#dc-dance .dz", "#dc-dance .df-ls button"))
     folded = bool(view.get("folded"))
     n = len(crew)
-    chip = (f'<button type="button" class="df-chip" data-fold="0" title="Open the dance floor" '
-            f'aria-label="Open the dance floor{f": {n} song" + ("" if n == 1 else "s") if n else ""}">{DANCE_RECORD}'
+    opens = (_t("Open the dance floor") if not n else _t("Open the dance floor: {n} song", n=n) if n == 1
+             else _t("Open the dance floor: {n} songs", n=n))
+    chip = (f'<button type="button" class="df-chip" data-fold="0" title="{_t("Open the dance floor")}" '
+            f'aria-label="{opens}">{DANCE_RECORD}'
             f'<span>&#9834;{f" {n}" if n else ""}</span>'
             f'{"<b class=st>&#9733;</b>" if any(p.get("fresh") for p in crew) else ""}</button>')
     # the floor under the dancers there are: from the farthest one's left, less a little
     xs = [(i - 3) * DANCE_SLOT + DANCE_SLOT // 2 if i >= 3 else i * DANCE_SLOT for i in range(len(shown) + many)]
     fl = max(-10, DANCE_AREA - max(xs) - 60 - 24) if xs else -10
+    said_js = js_words(DANCE_WORDS)  # the script's words (the search sheet's), only in a language that isn't its English
+    said_js = f'data-w="{e(_json.dumps(said_js), quote=True)}" ' if said_js else ""
     floor = (f'<div id="dc-dance" class="dm-{motion}{" fold" if folded else ""}" data-k="{key}" data-c="{cards_key}" '
-             f'data-me="{1 if me else 0}" data-badge="{e(_songs.BADGE_URL)}" '
-             f'role="group" aria-label="Your crew&rsquo;s songs">'
+             f'data-me="{1 if me else 0}" data-badge="{e(_songs.BADGE_URL)}" {said_js}'
+             f'role="group" aria-label="{_t("Your crew&rsquo;s songs")}">'
              f'<style>{_dance_tokens(cfg, "#dc-dance")}\n{_dance_tokens(cfg, "#dc-song")}\n{tones}</style>'  # DANCE_CSS: dance_js's
              f'<div class="df-sc"><div class="df-fl" style="--fl:{fl}px"></div><div class="df-dn">{dancers}</div>{booth}'
-             f'<button type="button" class="df-fd" data-fold="1" title="Fold it into the corner" aria-label="Fold the dance floor">'
+             f'<button type="button" class="df-fd" data-fold="1" title="{_t("Fold it into the corner")}" aria-label="{_t("Fold the dance floor")}">'
              f'<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 L6 8 L9.5 4.5" fill="none" stroke="currentColor" '
              f'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>{ask}</div>'
              f'<div class="df-cards">{cards}</div>{chip}</div>')
@@ -574,6 +585,12 @@ def dance_html(view, cfg):
 # beat swallowed clicks in the mock). One bubble at a time, its turn passed along. The search's songs come
 # back as dcSong.results({q, songs, error}): words as
 # text, a cover only from Apple's image host.
+# 3.10.0: the script's own words (the search sheet's) in English here; in another language the floor carries
+# them (data-w, {English: theirs}, DANCE_WORDS said by js_words) and W() reads them.
+DANCE_WORDS = (_later("Your study soundtrack"), _later("Close"), _later("Search for a song or artist"), _later("Songs"),
+               _later("Your crew sees it. The search goes from this computer to Apple Music."), _later("Listen on Apple Music"),
+               _songs.CREDIT_SEARCH, _later("Use this"), _later("Take it off"), _later("Cancel"), _later("Searching…"),
+               _later("Couldn’t reach Apple Music just now. Try again in a moment."), _later("Nothing by that name. Try the artist."))
 DANCE_JS = r"""
 window.dcDance = window.dcDance || (function () {
     var REST = __REST__, TICK = __TICK__, SAY = __SAY__;
@@ -598,6 +615,11 @@ window.dcDance = window.dcDance || (function () {
         return e;
     }
     function focus(x) { if (x && x.isConnected && x.focus) { try { x.focus({ preventScroll: true }); } catch (err) { /* gone */ } } }
+    function W(s) {  // a word of the script's, in the reader's language when the floor carries it (data-w), else as written
+        var f = floor();
+        if (f && f !== S.wf) { S.wf = f; try { S.w = JSON.parse(f.getAttribute('data-w') || 'null'); } catch (err) { S.w = null; } }
+        return (S.w && S.w[s]) || s;
+    }
     // the dancers on show (a narrow window folds the floor to one)
     function dancers(f) { return Array.prototype.filter.call(f.querySelectorAll('.dz'), function (d) { return d.offsetParent !== null; }); }
     function say(f, i) {
@@ -786,8 +808,8 @@ window.dcDance = window.dcDance || (function () {
         return c;
     }
     function badge(src) {  // Apple's, as served; its words when it doesn't load
-        var b = el('span', 'bdg'), img = el('img'), t = el('span', 'bdt', 'Listen on Apple Music');
-        img.alt = 'Listen on Apple Music';
+        var b = el('span', 'bdg'), img = el('img'), t = el('span', 'bdt', W('Listen on Apple Music'));
+        img.alt = W('Listen on Apple Music');
         img.height = __BADGE_H__;
         t.hidden = true;
         img.addEventListener('error', function () { img.hidden = true; t.hidden = false; });
@@ -801,18 +823,18 @@ window.dcDance = window.dcDance || (function () {
         if (!f || S.sheet) { return; }
         close();
         var mine = f.getAttribute('data-me') === '1', src = f.getAttribute('data-badge') || '';
-        var pop = window.dcPop.make({ id: 'dc-song', label: 'Your study soundtrack', z: 82, pad: '10vh 16px 16px' });
+        var pop = window.dcPop.make({ id: 'dc-song', label: W('Your study soundtrack'), z: 82, pad: '10vh 16px 16px' });
         var back = pop.back, card = el('div', 'sw'), head = el('div', 'sh'), x = el('button', 'x', '×');
         back.appendChild(card);
-        head.appendChild(el('b', null, 'Your study soundtrack'));
+        head.appendChild(el('b', null, W('Your study soundtrack')));
         x.type = 'button';
-        x.setAttribute('aria-label', 'Close');
+        x.setAttribute('aria-label', W('Close'));
         head.appendChild(x);
         card.appendChild(head);
         var inp = el('input', 'sq');
         inp.type = 'text';  // not 'search': its own clear button is the system's to draw
-        inp.placeholder = 'Search for a song or artist';
-        inp.setAttribute('aria-label', 'Search for a song or artist');
+        inp.placeholder = W('Search for a song or artist');
+        inp.setAttribute('aria-label', W('Search for a song or artist'));
         inp.autocomplete = 'off';
         inp.spellcheck = false;
         inp.maxLength = 80;
@@ -820,10 +842,10 @@ window.dcDance = window.dcDance || (function () {
         var st = el('div', 'ss'), ls = el('ul', 'sr');
         st.setAttribute('aria-live', 'polite');
         ls.setAttribute('role', 'listbox');
-        ls.setAttribute('aria-label', 'Songs');
+        ls.setAttribute('aria-label', W('Songs'));
         card.appendChild(st);
         card.appendChild(ls);
-        card.appendChild(el('div', 'sn', 'Your crew sees it. The search goes from this computer to Apple Music.'));
+        card.appendChild(el('div', 'sn', W('Your crew sees it. The search goes from this computer to Apple Music.')));
         if (src) {  // at the foot, Apple's credit and badge beside the covers: the picked song's page (or the first's)
             var bd = badge(src), apple = function () {
                 var s2 = S.sheet, id = s2 && (s2.picked || (s2.rows[0] && s2.rows[0].getAttribute('data-id')));
@@ -831,17 +853,18 @@ window.dcDance = window.dcDance || (function () {
             };
             bd.setAttribute('role', 'link');
             bd.tabIndex = 0;
-            bd.title = 'Listen on Apple Music';
+            bd.title = W('Listen on Apple Music');
             bd.style.cursor = 'pointer';
             bd.addEventListener('click', apple);
             bd.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); apple(); } });
-            var cf = el('div', 'ft');
-            cf.appendChild(el('span', 'cr', __CREDIT__));
+            var cf = el('div', 'ft'), cr = el('span', 'cr', __CREDIT__);
+            cr.textContent = W(cr.textContent);
+            cf.appendChild(cr);
             cf.appendChild(bd);
             card.appendChild(cf);
         }
-        var ft = el('div', 'sf'), go = el('button', 'go', 'Use this'), off = mine ? el('button', 'no', 'Take it off') : null,
-            no = el('button', 'no', 'Cancel');
+        var ft = el('div', 'sf'), go = el('button', 'go', W('Use this')), off = mine ? el('button', 'no', W('Take it off')) : null,
+            no = el('button', 'no', W('Cancel'));
         go.type = no.type = 'button';
         go.disabled = true;
         ft.appendChild(go);
@@ -856,7 +879,7 @@ window.dcDance = window.dcDance || (function () {
             clearTimeout(S.qt);
             var q = inp.value.replace(/\s+/g, ' ').trim();
             if (q.length < 2) { S.q = ''; rows([]); st.textContent = ''; return; }
-            st.textContent = 'Searching…';
+            st.textContent = W('Searching…');
             S.qt = setTimeout(function () { S.q = q; send('songsearch:' + encodeURIComponent(q)); }, 400);
         });
         inp.addEventListener('keydown', function (e) {
@@ -925,8 +948,8 @@ window.dcDance = window.dcDance || (function () {
             return x && /^\d{1,16}$/.test(String(x.id)) && typeof x.t === 'string' && typeof x.a === 'string';
         });
         rows(o.error ? [] : got);
-        s.st.textContent = o.error ? 'Couldn’t reach Apple Music just now. Try again in a moment.'
-            : got.length ? '' : 'Nothing by that name. Try the artist.';
+        s.st.textContent = o.error ? W('Couldn’t reach Apple Music just now. Try again in a moment.')
+            : got.length ? '' : W('Nothing by that name. Try the artist.');
     }
     function closeSearch() {
         if (S.sheet) { S.sheet.pop.close(); }  // dcPop: the shade, the key back, the motion layer's way out

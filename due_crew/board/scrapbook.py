@@ -7,7 +7,9 @@ numbers open each year's page, and the year picture card is its Share."""
 import html as _html
 
 from ..logo import board_mark
+from .. import scrapbook as _scrap
 from .. import sev as _sev
+from ..words import t as _t
 
 from .base import ACCENTS, CARD_SHADOW, _by_theme, _pycmd, _short_day, accent_pair, button_reset
 from .cheers import DOODLE_INK, _doodle_art
@@ -48,6 +50,11 @@ SCRAP_CSS = """
     #due-crew .sb-pin { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 18px; margin-top: 20px; }
     #due-crew .sb-col { display: grid; gap: 22px; align-content: start; min-width: 0; }
     #due-crew .sb-k { margin: 0; position: relative; display: block; min-width: 0; }
+    /* scattered on the page (_scatter): each lies a little askew, and straightens under the pointer */
+    #due-crew .sb-s { position: relative; min-width: 0; transform: translate(var(--dx, 0), var(--dy, 0)) rotate(var(--r, 0deg)); transition: transform .15s ease-out; }
+    #due-crew .sb-s:hover, #due-crew .sb-s:focus-within { transform: none; z-index: 2; }
+    #due-crew .sb-col:nth-child(2) { padding-top: 16px; } #due-crew .sb-col:nth-child(3) { padding-top: 6px; }
+    @media (prefers-reduced-motion: reduce) { #due-crew .sb-s { transition: none; } }
     #due-crew .sb-k .sv-slot { --sv-a: var(--a); flex: none; }
     #due-crew .sb-k:not(:hover) .sv, #due-crew .sb-k:not(:hover) .sv * { animation: none !important; }
     #due-crew .sb-acts { position: absolute; right: 6px; top: 6px; display: flex; gap: 4px; opacity: 0; }
@@ -123,7 +130,7 @@ def _who(x, person, pip):
     """Their Pip as it is now (in my crew, with Pip on), their name and the day."""
     e = _html.escape
     name = e(str(x.get("name") or "?"))
-    fig = (_sev.slot(_sev.svg("idle", rest=True, look=person.get("look"), label=f"{name}’s Pip"), SCRAP_PIP)
+    fig = (_sev.slot(_sev.svg("idle", rest=True, look=person.get("look"), label=_t("{name}’s Pip", name=name)), SCRAP_PIP)
            if pip and isinstance(person, dict) and person else "")
     when = _short_day(x.get("at"))
     return f'<figcaption class="sb-w">{fig}<b>{name}</b>{f" &middot; {when}" if when else ""}</figcaption>'
@@ -131,9 +138,9 @@ def _who(x, person, pip):
 
 def _acts(x, pin=False):
     k = x.get("key") or ""
-    up = (f'<button type="button" title="Back on your Decks screen" onclick="{_pycmd("scrappin:" + k)}">Pin up</button>' if pin else "")
-    return (f'<span class="sb-acts">{up}<button type="button" class="del" title="Delete it for good" '
-            f'onclick="{_pycmd("scrapdel:" + k)}">Delete</button></span>')
+    up = (f'<button type="button" title="{_t("Back on your Decks screen")}" onclick="{_pycmd("scrappin:" + k)}">{_t("Pin up")}</button>' if pin else "")
+    return (f'<span class="sb-acts">{up}<button type="button" class="del" title="{_t("Delete it for good")}" '
+            f'onclick="{_pycmd("scrapdel:" + k)}">{_t("Delete")}</button></span>')
 
 
 def _keepsake(x, people, pip, my_look):
@@ -143,24 +150,36 @@ def _keepsake(x, people, pip, my_look):
     tone = _tone(x, person)
     if k == "pz":
         note = f'<div class="fq">&ldquo;{e(x["n"])}&rdquo;</div>' if x.get("n") else ""
-        art = _doodle_art(x["d"], x.get("a"), str(x.get("name") or "?") + "’s drawing")
+        art = _doodle_art(x["d"], x.get("a"), _t("{name}’s drawing", name=str(x.get("name") or "?")))
         return (f'<figure class="sb-k sb-pz" style="{tone}"><div class="fp">{art}</div>{note}{_who(x, person, pip)}{_acts(x, True)}</figure>')
     if k == "luck":
-        return (f'<figure class="sb-k sb-luck" style="{tone}"><div class="kk">Good luck &middot; before your exam</div>'
+        return (f'<figure class="sb-k sb-luck" style="{tone}"><div class="kk">{_t("Good luck &middot; before your exam")}</div>'
                 f'<div class="q">{e(x["n"])}</div>{_who(x, person, pip)}{_acts(x)}</figure>')
     if k == "tip":
-        part = f' &middot; on a card in {e(x["part"])}' if x.get("part") else ""
-        return (f'<figure class="sb-k sb-tip" style="{tone}"><div class="kk">A tip that helped{part}</div>'
+        part = " &middot; " + _t("on a card in {part}", part=e(x["part"])) if x.get("part") else ""
+        return (f'<figure class="sb-k sb-tip" style="{tone}"><div class="kk">{_t("A tip that helped")}{part}</div>'
                 f'<div class="q">{e(x["n"])}</div>{_who(x, person, pip)}{_acts(x)}</figure>')
     if k == "cheer":
         emoji = e(x.get("e") or "") or "&#127881;"
         return (f'<figure class="sb-k sb-cheer" style="{tone}"><span class="e">{emoji}</span>'
                 f'<div class="q">&ldquo;{e(x["n"])}&rdquo;</div>{_who(x, person, False)}{_acts(x)}</figure>')
-    fig = (f'<span class="mp">{_sev.slot(_sev.svg(x.get("pose") or "cheer", rest=True, look=my_look, label="Your Pip"), SCRAP_ME)}</span>'
+    fig = (f'<span class="mp">{_sev.slot(_sev.svg(x.get("pose") or "cheer", rest=True, look=my_look, label=_t("Your Pip")), SCRAP_ME)}</span>'
            if pip else "")
     when = _short_day(x.get("at"))
-    return (f'<figure class="sb-k sb-mine">{fig}<div><div class="kk">You{f" &middot; {when}" if when else ""}</div>'
+    return (f'<figure class="sb-k sb-mine">{fig}<div><div class="kk">{_t("You")}{f" &middot; {when}" if when else ""}</div>'
             f'<b class="h">{e(x["head"])}</b>{f"""<div class="u">{e(x["sub"])}</div>""" if x.get("sub") else ""}</div>{_acts(x)}</figure>')
+
+
+def _scatter(x):
+    """3.9.12 (SC: a month's drawings "spread around that month", scattered like a real scrapbook's page): how one
+    keepsake lies, from its own key so it lies the same at every draw: a tilt, a nudge, how wide, which side of its
+    column. Never over another's words: the nudge is smaller than the gap between them."""
+    h = int(_scrap.key(x), 16)
+    tilt = ((h % 61) - 30) / 10.0                    # -3.0 to 3.0 degrees
+    dx, dy = (h >> 6) % 13 - 6, (h >> 10) % 15 - 7     # px
+    wide = {"pz": 80 + (h >> 14) % 15, "cheer": 100}.get(x["k"], 88 + (h >> 14) % 11)  # % of the column
+    side = ("start", "center", "end")[(h >> 18) % 3]
+    return f"--r:{tilt:.1f}deg;--dx:{dx}px;--dy:{dy}px;width:{wide}%;justify-self:{side}"
 
 
 def _columns(items, people, pip, my_look):
@@ -168,7 +187,7 @@ def _columns(items, people, pip, my_look):
     cols, tall = [[] for _ in range(SCRAP_COLS)], [0] * SCRAP_COLS
     for x in items:
         i = tall.index(min(tall))
-        cols[i].append(_keepsake(x, people, pip, my_look))
+        cols[i].append(f'<div class="sb-s" style="{_scatter(x)}">{_keepsake(x, people, pip, my_look)}</div>')
         tall[i] += _WEIGHT.get(x["k"], 3)
     return "".join(f'<div class="sb-col">{"".join(c)}</div>' for c in cols if c)
 
@@ -193,26 +212,27 @@ def scrapbook_html(view, cfg, people=None, my_look=None):
                     f'onclick="{_pycmd("scrapyear:" + str(int(y)))}">{int(y)}</button>' for y in view.get("years") or [year])
     n = int(view.get("n") or 0)
     stats = "".join(f'<span><b>{e(str(a))}</b> {e(str(b))}</span>' for a, b in view.get("ystats") or [])
-    ypage = (f'<div class="sb-y"><div class="k">{year}{" so far" if view.get("so_far") else ""}</div>'
+    ypage = (f'<div class="sb-y"><div class="k">{_t("{year} so far", year=year) if view.get("so_far") else year}</div>'
              f'<div class="l">{_line(view.get("yline") or ())}</div>'
              + (f'<div class="s">{stats}</div>' if stats else "")
-             + f'<div class="a"><a href="#" onclick="{_pycmd("scrapshare:" + str(year))}">Share my year</a></div></div>')
+             + f'<div class="a"><a href="#" onclick="{_pycmd("scrapshare:" + str(year))}">{_t("Share my year")}</a></div></div>')
     months = ""
     for m in view.get("months") or []:
         pin = _columns(m.get("items") or [], people, pip, my_look)
-        months += (f'<div class="sb-m"><div class="k">{e(str(m.get("name") or ""))}</div>'
+        months += (f'<div class="sb-m"><div class="k">{e(_scrap.month_said(str(m.get("name") or "")))}</div>'
                    f'<div class="l">{_line(m.get("line") or ())}</div>'
                    + (f'<div class="s">{e(str(m["sub"]))}</div>' if m.get("sub") else "")
                    + (f'<div class="sb-pin">{pin}</div>' if pin else "") + '</div>')
     if not n:
-        months += ('<div class="sb-none">Nothing kept yet this year. A drawing or a sign you take down from your Decks screen comes here, '
-                   'with good-luck cards, tips that helped, cheers that came with words, and what you finish.</div>')
-    foot = ('<div class="sb-foot"><span>Kept on this computer. Never sent.</span>'
-            + (f'<a href="#" onclick="{_pycmd("scrapempty")}">Empty the scrapbook&hellip;</a>' if view.get("any") else "") + '</div>')
+        none = _t("Nothing kept yet this year. A drawing or a sign you take down from your Decks screen comes here, "
+                  "with good-luck cards, tips that helped, cheers that came with words, and what you finish.")
+        months += f'<div class="sb-none">{none}</div>'
+    foot = (f'<div class="sb-foot"><span>{_t("Kept on this computer. Never sent.")}</span>'
+            + (f'<a href="#" onclick="{_pycmd("scrapempty")}">{_t("Empty the scrapbook&hellip;")}</a>' if view.get("any") else "") + '</div>')
     return (f'<div id="due-crew" class="dc-frame dc-sb">{_css(cfg)}<style>{_sev.CSS}{SCRAP_CSS}{_scrap_theme(cfg)}</style>'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span><span></span></div>'
-            f'<div class="sb-bar"><a class="back" href="#" onclick="{_pycmd("scrapclose")}">&lsaquo; Board</a><b>Scrapbook</b>'
-            f'<span class="sp"></span>{years}<span class="sb-n">{n:,} keepsake{"s" if n != 1 else ""}</span></div>'
+            f'<div class="sb-bar"><a class="back" href="#" onclick="{_pycmd("scrapclose")}">&lsaquo; {_t("Board")}</a><b>{_t("Scrapbook")}</b>'
+            f'<span class="sp"></span>{years}<span class="sb-n">{_t("{n} keepsake", n=f"{n:,}") if n == 1 else _t("{n} keepsakes", n=f"{n:,}")}</span></div>'
             f'{ypage}{months}{foot}</div>')
 
 
@@ -220,9 +240,10 @@ def scrapbook_line(year, so_far, look, pip=True):
     """The board's line, 1 December to 15 January (Wrapped's, 3.9.0): the
     year's page is ready in the scrapbook. The x is for the year, on every
     computer (the account's wrapped_seen). Pip off: a gift."""
-    fig = (f'<span class="dc-fig">{_sev.slot(_sev.svg("hop", rest=True, look=look, label="Your Pip"), 40)}</span>'
+    fig = (f'<span class="dc-fig">{_sev.slot(_sev.svg("hop", rest=True, look=look, label=_t("Your Pip")), 40)}</span>'
            if pip else "<span>&#127873;</span>")
+    mine = _t("Your {year} so far", year=int(year)) if so_far else _t("Your {year}", year=int(year))
     return (f'<div class="dc-wrap wr-line">{fig}'
-            f'<span><b>Your {int(year)}{" so far" if so_far else ""}</b> is in your scrapbook: the year, and what your crew sent you.</span>'
-            f'<a class="wc" href="#" onclick="{_pycmd("scrapbook:" + str(int(year)))}">Open &#9654;</a>'
-            f'<a class="wx" href="#" title="Not this year" onclick="{_pycmd("wrappedx:" + str(int(year)))}">&times;</a></div>')
+            f'<span>{_t("{year} is in your scrapbook: the year, and what your crew sent you.", year=f"<b>{mine}</b>")}</span>'
+            f'<a class="wc" href="#" onclick="{_pycmd("scrapbook:" + str(int(year)))}">{_t("Open")} &#9654;</a>'
+            f'<a class="wx" href="#" title="{_t("Not this year")}" onclick="{_pycmd("wrappedx:" + str(int(year)))}">&times;</a></div>')

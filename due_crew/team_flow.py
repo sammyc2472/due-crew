@@ -31,6 +31,7 @@ from . import team as T
 from .app import _bg, _state, cfg, client, save_cfg
 from .backend.shapes import TransportError
 from .errs import oops
+from .words import later as _later, t as _t
 
 FRESH = 60          # seconds a fetched team is shown before the tab asks again
 INSIGHTS_FRESH = 600
@@ -58,7 +59,7 @@ def plan_squads():
     on = teams()
     if not on:
         return []
-    return [{"id": PICK + p["id"], "pid": p["id"], "name": str(p.get("name") or "Plan"),
+    return [{"id": PICK + p["id"], "pid": p["id"], "name": str(p.get("name") or _t("Plan")),
              "unread": T.unread(on[p["id"]], _seen(p["id"]))}
             for p in _plans_flow().followed() if p.get("id") in on]
 
@@ -96,7 +97,7 @@ def open_squad(pid):
     c = cfg()
     from .board import hidden_tabs
     if "squads" in hidden_tabs(c):
-        tooltip("The Squads tab is hidden. Settings brings it back.")
+        tooltip(_t("The Squads tab is hidden. Settings brings it back."))
         return
     c["squad"], c["period"] = PICK + pid, "squads"
     save_cfg(c)
@@ -210,8 +211,8 @@ def _mark_seen(pid, data):
         pf._psave(pc)
 
 
-JOIN_SAYS = ("The others in it see your name and the days you show up, and your questions and answers; "
-             "your progress counts for the plan's authors. Never your numbers.")
+JOIN_SAYS = _later("The others in it see your name and the days you show up, and your questions and answers; "
+                   "your progress counts for the plan's authors. Never your numbers.")
 
 
 def join(pid, ask=False):
@@ -219,7 +220,7 @@ def join(pid, ask=False):
     first (the one-time ask and the Follow dialog already said it)."""
     if ask:
         from . import sheets
-        sheets.confirm("Join this plan's squad?", JOIN_SAYS, "Join", lambda: _join(pid, True))
+        sheets.confirm(_t("Join this plan's squad?"), _t(JOIN_SAYS), _t("Join"), lambda: _join(pid, True))
         return
     _join(pid, False)
 
@@ -231,7 +232,7 @@ def _join(pid, ask):
         if gen != app.generation:
             return
         if not isinstance(data, dict):
-            tooltip("This squad is full." if data == 409 else "Couldn't join just now.")
+            tooltip(_t("This squad is full.") if data == 409 else _t("Couldn't join just now."))
             return
         _state.setdefault("team_view", {})[pid] = {"at": time.time(), "data": data, "state": "ok"}
         if data.get("on") and pid not in teams():
@@ -240,7 +241,7 @@ def _join(pid, ask):
                 "shown": int(data.get("shown") or 0), "of": int(data.get("count") or 1), "faces": [], "who": [], "act": [], "last": None}})
         app.swap(cfg())
         if ask:
-            tooltip("You're in. It's on the Squads tab.")
+            tooltip(_t("You're in. It's on the Squads tab."))
         app.sync(light=True)  # today's showed-up goes now, not at the next sync
     _bg(lambda: cl.team_join(pid, wk), done)
 
@@ -248,8 +249,8 @@ def _join(pid, ask):
 def leave(pid, ask=True):
     if ask:
         from . import sheets
-        sheets.confirm("Leave this plan's squad?", "Your progress stops counting for its authors; "
-                       "your questions and answers stay.", "Leave", lambda: leave(pid, False))
+        sheets.confirm(_t("Leave this plan's squad?"), _t("Your progress stops counting for its authors; "
+                                                         "your questions and answers stay."), _t("Leave"), lambda: leave(pid, False))
         return
     gen, cl = app.generation, client()
 
@@ -257,7 +258,7 @@ def leave(pid, ask=True):
         if gen != app.generation:
             return
         if not ok:
-            tooltip("Couldn't leave just now.")
+            tooltip(_t("Couldn't leave just now."))
             return
         _state.setdefault("team_view", {})[pid] = {"at": time.time(), "data": {"on": False, "count": 0}, "state": "ok"}
         (cl.session.get("teams") or {}).pop(pid, None)  # its pill goes now
@@ -284,11 +285,11 @@ def _after(pid, msg_ok=None):
             _state.setdefault("team_draft", {}).pop(pid, None)
             fetch(pid, force=True)
         elif status == 429:
-            tooltip("That's a lot of questions today. Try again tomorrow.")
+            tooltip(_t("That's a lot of questions today. Try again tomorrow."))
         elif status == 403:
-            tooltip("Join its squad first.")
+            tooltip(_t("Join its squad first."))
         else:
-            tooltip("Couldn't send it just now.")
+            tooltip(_t("Couldn't send it just now."))
     return done
 
 
@@ -317,7 +318,7 @@ def reply(pid, ask_id):
         if text:
             cl = client()
             _bg(_send(lambda: cl.team_ask(pid, text, parent=int(ask_id))), _after(pid))
-    sheets.ask_text("Reply", "Your answer.", go, yes="Send")
+    sheets.ask_text(_t("Reply"), _t("Your answer."), go, yes=_t("Send"))
 
 
 def _ask_by_id(pid, ask_id):
@@ -345,8 +346,8 @@ def remove(pid, ask_id):
     if not a or not a.get("remove"):
         return
     cl = client()
-    sheets.confirm("Remove this answer?" if parent else "Remove this question?",
-                   "" if parent else "Its answers go with it.", "Remove",
+    sheets.confirm(_t("Remove this answer?") if parent else _t("Remove this question?"),
+                   "" if parent else _t("Its answers go with it."), _t("Remove"),
                    lambda: _bg(_send(lambda: cl.team_remove(pid, a["id"])), _after(pid)), danger=True)
 
 
@@ -365,7 +366,7 @@ def see_card(pid, ask_id):
         return
     nid = mw.col.db.scalar("SELECT id FROM notes WHERE guid = ?", a["guid"])
     if not nid:
-        tooltip("That card isn't in your collection.")
+        tooltip(_t("That card isn't in your collection."))
         return
     cid = mw.col.db.scalar("SELECT id FROM cards WHERE nid = ? AND ord = ?", nid, int(a.get("ord") or 0)) or 0
     import aqt
@@ -381,8 +382,8 @@ def ask_card(card):
     if not pid:
         return
     from . import sheets
-    sheets.ask_text("Ask the squad", "Your question about this card.",
-                    lambda text: _ask_card(card, pid, text), yes="Ask")
+    sheets.ask_text(_t("Ask the squad"), _t("Your question about this card."),
+                    lambda text: _ask_card(card, pid, text), yes=_t("Ask"))
 
 
 def _ask_card(card, pid, text):
@@ -399,7 +400,7 @@ def _ask_card(card, pid, text):
                 topic = name
                 break
     cl, guid, ordn = client(), note.guid, int(card.ord)
-    _bg(_send(lambda: cl.team_ask(pid, text, guid=guid, ord=ordn, topic=topic)), _after(pid, "Asked the squad."))
+    _bg(_send(lambda: cl.team_ask(pid, text, guid=guid, ord=ordn, topic=topic)), _after(pid, _t("Asked the squad.")))
 
 
 def ask_this_card():
@@ -408,10 +409,10 @@ def ask_this_card():
     card = getattr(getattr(mw, "reviewer", None), "card", None) if getattr(mw, "state", "") == "review" else None
     if not card:
         from .board import ASK_KBD
-        tooltip(f"{ASK_KBD} asks your squad about the card you're reviewing.")
+        tooltip(_t("{keys} asks your squad about the card you're reviewing.", keys=ASK_KBD))
         return
     if not plan_for_card(card):
-        tooltip("This card isn't on a plan whose squad you're in.")
+        tooltip(_t("This card isn't on a plan whose squad you're in."))
         return
     ask_card(card)
 
@@ -1038,12 +1039,12 @@ def _tag_plans(col, did):
         if st and int(st.get("deck_id") or 0) == int(did):
             doc = pf.mine(p)["doc"]
             if P.plan_tags(doc):
-                out.append((p["id"], str(p.get("name") or "Plan"), doc, pf._swap(st)))
+                out.append((p["id"], str(p.get("name") or _t("Plan")), doc, pf._swap(st)))
                 seen.add(p["id"])
     name = str(col.decks.name(did) or "").lower()
     for a in client().session.get("plans_authored") or []:
         if a.get("id") not in seen and str((a.get("doc") or {}).get("deck") or "").lower() == name and P.plan_tags(a["doc"]):
-            out.append((a["id"], str(a.get("name") or "Plan"), a["doc"], None))
+            out.append((a["id"], str(a.get("name") or _t("Plan")), a["doc"], None))
     return out
 
 
@@ -1058,7 +1059,7 @@ def _plan_ways(col, did, active, know):
         held = [(t["name"], P.tag_path(doc, t), idx.plan_tag_cards(doc, t, swap)) for t in P.plan_tags(doc)]
         tiles, none = T.plan_tiles(held, know, active)
         key = f"~plan:{pid}"
-        out[key] = ({"key": key, "name": f"{name}'s tags"[:T.NAME_MAX], "score": 0.0, "on": False, "none": none}, tiles)
+        out[key] = ({"key": key, "name": _t("{name}'s tags", name=name)[:T.NAME_MAX], "score": 0.0, "on": False, "none": none}, tiles)
     return out
 
 
@@ -1075,12 +1076,12 @@ def _map(col, did, deck, cutoff):
     if not rows or not know:
         return [], by, know, []
     pick = str((cfg().get("ins_map_by") or {}).get(str(did)) or "") or None
-    active = {int(cid) for cid, _t, _d in rows}
+    active = {int(cid) for cid, _tg, _d in rows}
     tags_of = {int(cid): str(tags or "").split() for cid, tags, _d in rows}
     tiles, ways = T.subjects_by(tags_of, know, active, by=None if pick == DECKS_WAY else pick)
     root = str(col.decks.name(did) or "")
     names, paths = {}, {}
-    for cid, _t, d in rows:
+    for cid, _tg, d in rows:
         if int(d) not in names:
             names[int(d)] = str(col.decks.name(int(d)) or "")
         name = names[int(d)]
@@ -1092,7 +1093,7 @@ def _map(col, did, deck, cutoff):
                                  or len(tiles) < 2)
     if dtiles:
         ways = [dict(w, on=not by_decks and w["on"]) for w in ways]
-        ways.append({"key": DECKS_WAY, "name": "Subdecks", "score": dways[0]["score"], "on": by_decks})
+        ways.append({"key": DECKS_WAY, "name": _t("Subdecks"), "score": dways[0]["score"], "on": by_decks})
         ways.sort(key=lambda w: -w["score"])
     shown = dtiles if by_decks else tiles
     # 3.9.2 (Sam's pick C2-A): by when I started them, a week a tile, named by what each week was;
@@ -1110,7 +1111,7 @@ def _map(col, did, deck, cutoff):
             ways = [dict(w, on=False) for w in ways]
             shown = start
     # 3.9.2 (Sam's pick): picked, but all I've started is from one week: said, not snapped back to topics
-    ways.append({"key": T.START_WAY, "name": "When you started them", "score": 0.0, "on": len(start) >= 2,
+    ways.append({"key": T.START_WAY, "name": _t("When you started them"), "score": 0.0, "on": len(start) >= 2,
                  "one": pick == T.START_WAY and len(start) == 1})
     plan_ways = _plan_ways(col, did, active, know) if active else {}
     if plan_ways:  # 3.8.1: a plan's own tags, only when picked, after the deck's own ways
@@ -1154,7 +1155,7 @@ def share_map(did):
     trail, cur = _map_at(did)
     if len(cur) < 2 or not mw.col:
         return
-    deck = str(mw.col.decks.name(did) or "").split("::")[-1] or "My deck"
+    deck = str(mw.col.decks.name(did) or "").split("::")[-1] or _t("My deck")
     title = " \u00b7 ".join([deck] + [str(t["name"]) for t in trail])
     prev = None if trail else view.get("map_prev")
     from .ui.map_card_dialog import MapCardDialog
@@ -1218,7 +1219,7 @@ def open_map(did, i):
         _state.setdefault("map_at", {})[did] = [x["key"] for x in trail] + [t["key"]]
         app.swap(cfg())
     else:
-        _plans_flow()._browse(_find_cids(mw.col, did, t.get("find")), empty="Nothing to show.")
+        _plans_flow()._browse(_find_cids(mw.col, did, t.get("find")), empty=_t("Nothing to show."))
 
 
 def map_up(did, n):
@@ -1232,7 +1233,7 @@ def browse_map(did):
     """The trail's Browse all: the open tile's cards in this deck."""
     trail, _cur = _map_at(did)
     if mw.col and trail:
-        _plans_flow()._browse(_find_cids(mw.col, did, trail[-1].get("find")), empty="Nothing to show.")
+        _plans_flow()._browse(_find_cids(mw.col, did, trail[-1].get("find")), empty=_t("Nothing to show."))
 
 
 def deck_map(did):
@@ -1370,7 +1371,7 @@ def browse(did, key):
         rows = (((_state.get("insights") or {}).get(did) or {}).get("view") or {}).get("rows") or []
         r = rows[int(key)] if int(key) < len(rows) else None
         cids = (_find_cids(mw.col, did, r.get("find")) if r and r.get("find") else []) or cids
-    _plans_flow()._browse(cids, empty="Nothing to show.")
+    _plans_flow()._browse(cids, empty=_t("Nothing to show."))
 
 
 def fsrs(did, open_it=True):

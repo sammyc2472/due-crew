@@ -4,12 +4,15 @@ A part of the board (due_crew/board/, 3.9.8): see its __init__."""
 
 import datetime as _dt
 import html as _html
+import json as _json
 import re as _re
 import sys as _sys
 
 from .. import due as _D
+from ..words import lang as _lang, later as _later, month as _month, t as _t, weekday as _weekday
 
 from .base import _pycmd, _tab_word
+from .insights import _tn
 from .planweek import _remark_lines, _topic_a, _topic_go, _wbar, _why_shut
 from .plancards import _opened_line
 
@@ -374,22 +377,37 @@ DUE_JS = r"""
     }
     return { text: t, rule: null };
   }
-  function repeatLabel(r) {
-    if (r === '0123456') { return 'every day'; }
-    if (r === '01234') { return 'weekdays'; }
+  // W: the words in the language in use (due.py's _due_words, on the add line), or nothing: English
+  function repeatLabel(r, W) {
+    W = W || {};
+    if (r === '0123456') { return W.daily || 'every day'; }
+    if (r === '01234') { return W.weekdays || 'weekdays'; }
     var out = [];
-    for (var i = 0; i < r.length; i++) { var n = WEEK[+r.charAt(i)]; out.push(n.charAt(0).toUpperCase() + n.slice(1, 3)); }
-    return 'every ' + out.join(', ');
+    for (var i = 0; i < r.length; i++) {
+      var n = WEEK[+r.charAt(i)];
+      out.push(W.days ? W.days[+r.charAt(i)] : n.charAt(0).toUpperCase() + n.slice(1, 3));
+    }
+    return W.every ? W.every.replace('{days}', out.join(', ')) : 'every ' + out.join(', ');
   }
-  function label(d, today) {
-    if (d === '') { return 'Later'; }
-    if (d === today) { return 'Today'; }
-    if (d === plus(today, 1)) { return 'Tomorrow'; }
+  function label(d, today, W) {
+    W = W || {};
+    if (d === '') { return W.later || 'Later'; }
+    if (d === today) { return W.today || 'Today'; }
+    if (d === plus(today, 1)) { return W.tomorrow || 'Tomorrow'; }
     var x = day(d);
+    if (W.date && W.days && W.months) {
+      return W.date.replace('{wd}', W.days[(x.getUTCDay() + 6) % 7]).replace('{day}', x.getUTCDate())
+        .replace('{month}', W.months[x.getUTCMonth()]);
+    }
     return DAYS[x.getUTCDay()].charAt(0).toUpperCase() + DAYS[x.getUTCDay()].slice(1) + ' ' + x.getUTCDate() + ' ' +
       MONTHS[x.getUTCMonth()].charAt(0).toUpperCase() + MONTHS[x.getUTCMonth()].slice(1, 3);
   }
   function el(id) { return document.getElementById(id); }
+  function words() {
+    var s = el('du-said');
+    try { return s && s.getAttribute('data-w') ? JSON.parse(s.getAttribute('data-w')) : {}; } catch (e) { return {}; }
+  }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
   window.dcDue = {
     raw: false,
     preview: function () {
@@ -398,8 +416,10 @@ DUE_JS = r"""
       var rp = parseRepeat(inp.value);
       var p = rp.rule ? null : parse(inp.value, box.getAttribute('data-today'));
       if ((!rp.rule && p.day === null) || this.raw) { said.innerHTML = ''; return; }
-      said.innerHTML = '&rarr; ' + (rp.rule ? repeatLabel(rp.rule) : label(p.day, box.getAttribute('data-today'))) +
-        '<a href="#" title="Keep the words as text" onclick="dcDue.raw=true;dcDue.preview();return false;">&times;</a>';
+      var W = words();
+      said.innerHTML = '&rarr; ' + esc(rp.rule ? repeatLabel(rp.rule, W) : label(p.day, box.getAttribute('data-today'), W)) +
+        '<a href="#" title="' + esc(W.keep || 'Keep the words as text') +
+        '" onclick="dcDue.raw=true;dcDue.preview();return false;">&times;</a>';
     },
     pick: function () {
       var sel = el('du-when'), dt = el('du-date');
@@ -448,14 +468,14 @@ def _due_tick(cmd, on, label):
 
 def _due_mine(r, short=False):
     e = _html.escape
-    tick = _due_tick("duetick:" + r["id"], r["done"], "Done" if not r["done"] else "Not done")
+    tick = _due_tick("duetick:" + r["id"], r["done"], _t("Done") if not r["done"] else _t("Not done"))
     if r.get("ahead"):
         tick = '<span class="du-bx"></span>'  # 3.8.0: a repeat's next day ticks on that day
-    tag = f'<a href="#" class="du-tag" title="Move, edit or delete" onclick="{_pycmd("dueitem:" + r["id"])}">{e(r["tag"])} &#9662;</a>'
+    tag = f'<a href="#" class="du-tag" title="{_t("Move, edit or delete")}" onclick="{_pycmd("dueitem:" + r["id"])}">{e(r["tag"])} &#9662;</a>'
     if short:
         return (f'<div class="du-ln{" done" if r["done"] else ""}">{tick}<span>{e(r["text"])}</span>'
                 f'<span class="n">{tag}</span></div>')
-    do = (f'<a href="#" class="du-go" onclick="{_pycmd("duedo:" + r["id"])}">Do today</a>'
+    do = (f'<a href="#" class="du-go" onclick="{_pycmd("duedo:" + r["id"])}">{_t("Do today")}</a>'
           if not r["day"] and not r["done"] else "")
     return (f'<div class="du-r{" done" if r["done"] else ""}">{tick}<span class="t"><span class="x">{e(r["text"])}</span></span>'
             f'<span class="end">{do}{tag}</span></div>')
@@ -469,7 +489,7 @@ def _due_every(r, short=False):
     if r.get("url", "").startswith("https://"):
         text = f'<a href="#" title="{e(r["url"])}" onclick="{_pycmd("duelink:" + r["key"])}">{text}</a>'
     tick = ('<span class="du-bx"></span>' if r.get("ahead")
-            else _due_tick(f'duetodo:{r["key"]}', r["done"], "Done" if not r["done"] else "Not done"))
+            else _due_tick(f'duetodo:{r["key"]}', r["done"], _t("Done") if not r["done"] else _t("Not done")))
     if short:
         return (f'<div class="du-ln{" done" if r["done"] else ""}">{tick}<span><b>{e(r["label"])}</b> &middot; {text}'
                 f' <span class="du-m">&middot; {e(r["plan"])}</span></span><span class="n">{e(r["tag"])}</span></div>')
@@ -492,17 +512,17 @@ def _date_more(r, topics=False):
     later, own = bool(r.get("future")), bool(r.get("own"))
     acts = []
     if total:
-        acts.append(f'<a href="#" onclick="{_pycmd(f"planbrowse:{pid}:{uid}")}">Browse {total:,} card{"s" if total != 1 else ""}</a>')
+        acts.append(f'<a href="#" onclick="{_pycmd(f"planbrowse:{pid}:{uid}")}">{_tn("Browse {n} card", "Browse {n} cards", total)}</a>')
     if not later and 0 < seen < total:
-        acts.append(f'<a href="#" onclick="{_pycmd(f"planleft:{pid}:{uid}")}">{total - seen:,} left</a>')
+        acts.append(f'<a href="#" onclick="{_pycmd(f"planleft:{pid}:{uid}")}">{_t("{n} left", n=f"{total - seen:,}")}</a>')
     if later or r.get("shut"):
-        acts.append(f'<a href="#" onclick="{_pycmd(f"plannow:{pid}:{uid}")}">Open now</a>')
+        acts.append(f'<a href="#" onclick="{_pycmd(f"plannow:{pid}:{uid}")}">{_t("Open now")}</a>')
     if not own and not r.get("done"):  # from today on, a date not done moves later on my copy
-        acts.append(f'<a href="#" onclick="{_pycmd(f"planmove:{pid}:{uid}")}">Move&hellip;</a>')
+        acts.append(f'<a href="#" onclick="{_pycmd(f"planmove:{pid}:{uid}")}">{_t("Move&hellip;")}</a>')
     if later and not own:
-        acts.append(f'<a href="#" onclick="{_pycmd(f"planskip:{pid}:{uid}")}">Skip it</a>')
+        acts.append(f'<a href="#" onclick="{_pycmd(f"planskip:{pid}:{uid}")}">{_t("Skip it")}</a>')
     if r.get("moved"):
-        acts.append(f'<a href="#" onclick="{_pycmd(f"planmoveback:{pid}:{uid}")}">Put it back</a>')
+        acts.append(f'<a href="#" onclick="{_pycmd(f"planmoveback:{pid}:{uid}")}">{_t("Put it back")}</a>')
     what = ""
     if topics and r.get("topics"):
         what = "".join(f'<span>{f"<b>{e(str(g))}</b> &middot; " if g else ""}'
@@ -513,7 +533,7 @@ def _date_more(r, topics=False):
     if not body:
         return name, ""
     did = f"dc-dd-{_re.sub(r'[^A-Za-z0-9]', '', pid)}-{_re.sub(r'[^A-Za-z0-9]', '', uid)}"
-    link = (f'<a class="du-nm" href="#" title="Its cards, and what you can do with it" '
+    link = (f'<a class="du-nm" href="#" title="{_t("Its cards, and what you can do with it")}" '
             f'onclick="var x=document.getElementById(\'{did}\');if(x)x.hidden=!x.hidden;return false;">{name}</a>')
     return link, f'<div class="du-dd" id="{did}" hidden>{body}</div>'
 
@@ -545,19 +565,19 @@ def _due_plan(r):
             if ln.get("url", "").startswith("https://"):
                 # opened by Anki in the browser, never inside the Decks screen
                 text = f'<a href="#" title="{e(ln["url"])}" onclick="{_pycmd("duelink:" + ln["key"])}">{text}</a>'
-            tick = (_due_tick(f'duetodo:{ln["key"]}', ln["done"], "Done") if ln["can"]
+            tick = (_due_tick(f'duetodo:{ln["key"]}', ln["done"], _t("Done")) if ln["can"]
                     else '<span class="du-bx"></span>')
             subs += (f'<span class="du-sub">{tick}<span><b>{e(ln["label"])}</b> &middot; {text}</span>'
-                     f'<span class="n">by hand</span></span>')
+                     f'<span class="n">{_t("by hand")}</span></span>')
     extra = []
     if r.get("prep"):
-        extra.append(f'{"after" if r.get("after") else "for"} {e(r["prep"])}')  # 3.8.1: after its event, reinforcement
+        extra.append(_t("after {event}", event=e(r["prep"])) if r.get("after") else _t("for {event}", event=e(r["prep"])))  # 3.8.1: after its event, reinforcement
     if r.get("crew") and int(r["crew"][1]) > 1:
-        extra.append(f'crew {int(r["crew"][0]):,} of {int(r["crew"][1]):,} done')
+        extra.append(_t("crew {n} of {of} done", n=f'{int(r["crew"][0]):,}', of=f'{int(r["crew"][1]):,}'))
     if r.get("upd"):
         # 3.7.3: an author's update adds to this date; it opens when I say
-        said = f'+{int(r["upd"]):,} added' if int(r["upd"]) > 0 else "updated"
-        extra.append(f'{said} &middot; <a href="#" onclick="{_pycmd("planupdopen:" + r["pid"])}">Open</a>')
+        said = _t("+{n} added", n=f'{int(r["upd"]):,}') if int(r["upd"]) > 0 else _t("updated")
+        extra.append(f'{said} &middot; <a href="#" onclick="{_pycmd("planupdopen:" + r["pid"])}">{_t("Open")}</a>')
     meta = " &middot; ".join([f'{e(r["plan"])}'] + extra)
     rest = [(g, xs) for k, (g, xs) in enumerate(groups) if k not in used]
     if rest:  # 3.8.0: each topic opens its cards in Browse; 3.9.5: studies them
@@ -573,8 +593,8 @@ def _due_plan(r):
     go = ""  # 3.8.0: one Study, the box's Study today (its first step is this plan's deck)
     if r.get("study"):  # 3.8.1: but a plan's date with cards open has its own: a cram of just it
         cmd = _pycmd(f"planstudydate:{r['pid']}:{r['uid']}")
-        go = (f'<a href="#" class="du-go" title="A filtered deck: its new cards and the ones due today" '
-              f'onclick="{cmd}">Study</a>')
+        go = (f'<a href="#" class="du-go" title="{_t("A filtered deck: its new cards and the ones due today")}" '
+              f'onclick="{cmd}">{_t("Study")}</a>')
     n = f'<span class="n">{e(r["n"])}</span>' if r["n"] else ""
     name, more = _date_more(r)
     return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t">{name}'
@@ -588,17 +608,18 @@ def _wbar2(through, later, total):
     total = int(total)
     a = 0 if not total else max(0, min(100, round(100 * int(through) / total)))
     b = 0 if not total else max(0, min(100 - a, round(100 * (int(through) + int(later)) / total) - a))
-    return (f'<span class="wbar two" title="{int(through):,} through for today, {int(later):,} back later today, '
-            f'of {total:,}"><i style="width:{a}%"></i><i class="lt" style="width:{b}%"></i></span>')
+    said = _t("{n} through for today, {later} back later today, of {of}", n=f"{int(through):,}", later=f"{int(later):,}", of=f"{total:,}")
+    return f'<span class="wbar two" title="{said}"><i style="width:{a}%"></i><i class="lt" style="width:{b}%"></i></span>'
 
 
-def _due_count(r, noun):
-    """What a bar's row says at its end: "140 due" (or "40 new") before
-    anything's answered, then "84 / 140", then "all done"."""
+def _due_count(r, phrase):
+    """What a bar's row says at its end: "140 due" (or "40 new"; phrase:
+    which, with its {n}) before anything's answered, then "84 / 140", then
+    "all done"."""
     if r["done"]:
-        return "all done"
+        return _t("all done")
     if not r["through"] and not r["later"]:
-        return f'{int(r["whole"]):,} {noun}'
+        return _t(phrase, n=f'{int(r["whole"]):,}')
     return f'{int(r["through"]):,} / {int(r["whole"]):,}'
 
 
@@ -610,14 +631,15 @@ def _due_reviews(r):
         return ""
     said = []
     if r["back"] and not r["done"]:
-        said.append(f'{int(r["back"]):,} back{" at " + e(r["at"]) if r.get("at") else " later"}')
+        said.append(_t("{n} back at {time}", n=f'{int(r["back"]):,}', time=e(r["at"])) if r.get("at")
+                    else _t("{n} back later", n=f'{int(r["back"]):,}'))
     if r["left"] and (r["through"] or r["later"]) and not r["done"]:
-        said.append(f'{int(r["left"]):,} still due')
+        said.append(_t("{n} still due", n=f'{int(r["left"]):,}'))
     small = f'<small>{" &middot; ".join(said)}</small>' if said else ""
     box = _due_box("on" if r["done"] else "part" if r["through"] or r["later"] else "")
     bar = "" if r["done"] else _wbar2(r["through"], r["later"], r["whole"])
-    return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t"><b>Reviews</b>{small}</span>'
-            f'<span class="end"><span class="n">{_due_count(r, "due")}</span></span>{bar}</div>')
+    return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t"><b>{_t("Reviews")}</b>{small}</span>'
+            f'<span class="end"><span class="n">{_due_count(r, _later("{n} due"))}</span></span>{bar}</div>')
 
 
 def _due_misses(m):
@@ -628,13 +650,13 @@ def _due_misses(m):
     if not said:
         return ""
     e = _html.escape
-    head, _sep, rest = said.partition(", ")
+    head, _sep, rest = said.partition(", ")  # "214 reviews, 23 missed": every language's keeps the comma
     text = f'{e(head)}, <b>{e(rest)}</b>' if rest else e(said)
     if m.get("topics"):
-        parts = [f'<a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"duego:miss{i}")}">'
+        parts = [f'<a class="tp" href="#" title="{_t("Browse them")}" onclick="{_pycmd(f"duego:miss{i}")}">'
                  f'{e(str(name))} {len(cids):,}</a>' for i, (name, cids) in enumerate(m["topics"])]
         if int(m.get("elsewhere") or 0):
-            parts.append(f'{int(m["elsewhere"]):,} elsewhere')
+            parts.append(_t("{n} elsewhere", n=f'{int(m["elsewhere"]):,}'))
         text += ": " + " &middot; ".join(parts)
     return f'<div class="du-rc"><span></span><span>{text}</span><span class="end"></span></div>'
 
@@ -645,10 +667,10 @@ def _due_new(r):
     new cards on a plan's day (the ones I started that none of its dates holds)."""
     e = _html.escape
     decks = r.get("decks") or []
-    name = "Other new cards" if r.get("other") else "New cards"
+    name = _t("Other new cards") if r.get("other") else _t("New cards")
     subs = small = ""
     if len(decks) > 5:  # a line a deck up to five; past that, how many
-        small = f"{len(decks):,} decks"
+        small = _t("{n} decks", n=f"{len(decks):,}")
     elif len(decks) > 1:
         subs = "".join(f'<span class="du-sub"><span class="du-bx auto{" on" if th >= tot else ""}"></span>'
                        f'<span><b>{e(d)}</b></span><span class="n">{th:,} / {tot:,}</span></span>'
@@ -656,12 +678,12 @@ def _due_new(r):
     elif decks:
         small = e(decks[0][0])
     if r.get("other"):
-        small = (small + " &middot; " if small else "") + "not on a plan"
+        small = (small + " &middot; " if small else "") + _t("not on a plan")
     small = f"<small>{small}</small>" if small else ""
     box = _due_box("on" if r["done"] else "part" if r["part"] else "", auto=True)
     bar = "" if r["done"] else _wbar2(r["through"], r["later"], r["whole"])
     return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t"><b>{name}</b>{small}{subs}</span>'
-            f'<span class="end"><span class="n">{_due_count(r, "new")}</span></span>{bar}</div>')
+            f'<span class="end"><span class="n">{_due_count(r, _later("{n} new"))}</span></span>{bar}</div>')
 
 
 def _due_short(r):
@@ -680,17 +702,18 @@ def _due_behind(v):
     e = _html.escape
     if not v["behind_n"]:
         return ""
-    out = '<div class="du-bh"><div class="du-sec warn">Behind</div>'
+    out = f'<div class="du-bh"><div class="du-sec warn">{_t("Behind")}</div>'
     for p in v["behind_plans"]:
         left = int(p["left"])
-        what = f'{int(p["dates"])} set{"s" if p["dates"] != 1 else ""}' + (
-            f' &middot; <a class="tp" href="#" title="Browse them" onclick="{_pycmd("planleft:" + p["pid"])}">{left:,} cards to see</a>'
+        what = _tn("{n} set", "{n} sets", 1 if p["dates"] == 1 else 2, n=int(p["dates"])) + (
+            f' &middot; <a class="tp" href="#" title="{_t("Browse them")}" onclick="{_pycmd("planleft:" + p["pid"])}">'
+            f'{_t("{n} cards to see", n=f"{left:,}")}</a>'
             if left else "")
         out += (f'<div class="du-r">{_due_box("", auto=True)}<span class="t"><b>{e(p["plan"])}</b><small>{what}</small></span>'
-                f'<span class="end"><a href="#" class="du-go" onclick="{_pycmd("plancatch:" + p["pid"])}">Catch up&hellip;</a></span></div>')
+                f'<span class="end"><a href="#" class="du-go" onclick="{_pycmd("plancatch:" + p["pid"])}">{_t("Catch up&hellip;")}</a></span></div>')
     out += "".join(_due_mine(r) for r in v["behind_mine"])
     if v["behind_more"]:
-        out += f'<div class="du-q">and {int(v["behind_more"])} more</div>'
+        out += '<div class="du-q">' + _t("and {n} more", n=int(v["behind_more"])) + '</div>'
     return out + "</div>"
 
 
@@ -698,18 +721,32 @@ def _due_add(v, default):
     """The add line: a day button beside it, a day said at the end shown before Enter."""
     today = v["today"]
     t = _dt.date.fromisoformat(today)
-    opts = [("today", "Today"), ((t + _dt.timedelta(days=1)).isoformat(), "Tomorrow")]
-    opts += [((t + _dt.timedelta(days=i)).isoformat(), f"{t + _dt.timedelta(days=i):%a}") for i in range(2, 7)]
-    opts += [("later", "Later"), ("pick", "Pick a day…")]
+    opts = [("today", _t("Today")), ((t + _dt.timedelta(days=1)).isoformat(), _t("Tomorrow"))]
+    opts += [((t + _dt.timedelta(days=i)).isoformat(), _weekday((t + _dt.timedelta(days=i)).weekday())) for i in range(2, 7)]
+    opts += [("later", _t("Later")), ("pick", _t("Pick a day…"))]
     sel = "".join(f'<option value="{k}"{" selected" if k == default else ""}>{lb}</option>' for k, lb in opts)
     maxd = (t + _dt.timedelta(days=730)).isoformat()
-    full = ' disabled placeholder="60 open: tick or delete some first"' if v.get("full") else ' placeholder="Add a to-do…"'
-    return (f'<div class="du-add"><input type="text" id="du-in" maxlength="140" aria-label="Add a to-do"{full} '
+    full = (f' disabled placeholder="{_t("60 open: tick or delete some first")}"' if v.get("full")
+            else f' placeholder="{_t("Add a to-do…")}"')
+    return (f'<div class="du-add"><input type="text" id="du-in" maxlength="140" aria-label="{_t("Add a to-do")}"{full} '
             f'onkeydown="dcDue.key(event)" oninput="dcDue.preview()">'
-            f'<span class="du-said" id="du-said"></span>'
-            f'<select id="du-when" aria-label="Its day" onchange="dcDue.pick()">{sel}</select>'
-            f'<input type="date" id="du-date" min="{today}" max="{maxd}" style="display:none" aria-label="Pick a day">'
-            f'<a href="#" class="du-go" onclick="dcDue.send();return false;">Add</a></div>')
+            f'<span class="du-said" id="du-said"{_due_words()}></span>'
+            f'<select id="du-when" aria-label="{_t("Its day")}" onchange="dcDue.pick()">{sel}</select>'
+            f'<input type="date" id="du-date" min="{today}" max="{maxd}" style="display:none" aria-label="{_t("Pick a day")}">'
+            f'<a href="#" class="du-go" onclick="dcDue.send();return false;">{_t("Add")}</a></div>')
+
+
+def _due_words():
+    """The add line's preview ("→ Tomorrow", "→ every Mon, Thu") is said by DUE_JS, which has English built
+    in: in another language its words ride the line as data-w (nothing in English, so the page is as it was)."""
+    if _lang() == "en":
+        return ""
+    w = {"later": _t("Later"), "today": _t("Today"), "tomorrow": _t("Tomorrow"), "daily": _t("every day"),
+         "weekdays": _t("weekdays"), "every": _t("every {days}", days="{days}"),
+         "date": _t("{wd} {day} {month}", wd="{wd}", day="{day}", month="{month}"),
+         "days": [_weekday(i) for i in range(7)], "months": [_month(i) for i in range(1, 13)],
+         "keep": _t("Keep the words as text")}
+    return f' data-w="{_html.escape(_json.dumps(w), quote=True)}"'
 
 
 # 3.8.0: the two keys as this computer writes them (a Mac: Command for Study, Control for Ask, __init__.py)
@@ -718,7 +755,7 @@ STUDY_KBD, ASK_KBD = ("⌘⇧S", "⌃⇧Q") if _sys.platform == "darwin" else ("
 MAGIC_KBD = "⌘F" if _sys.platform == "darwin" else "Ctrl+F"
 MAGIC_FIELD_ID = "dc-mgf"
 # 3.9.10 (Sam: "get rid of the sample queries… one helpful thing it can prompt a searcher with"): one question
-MAGIC_PROMPT = "What do you want to study?"
+MAGIC_PROMPT = _later("What do you want to study?")
 _MAGIC_FIELD_ICON = ('<svg class="mag" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" '
                      'stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="11" r="6.2"/><path d="M19.4 20.4l-4.7-4.7"/>'
                      '<path class="st" d="M19 1.6l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9z" stroke="none"/></svg>')
@@ -790,17 +827,19 @@ def magic_field(cfg):
     from .base import BOARD_KEY, DEFAULT_ACCENT, _by_theme, _token_block, palette
     accent = (cfg or {}).get("accent", DEFAULT_ACCENT)
     tokens = _by_theme(cfg or {}, "#" + MAGIC_FIELD_ID, _token_block(palette("light", accent)), _token_block(palette("dark", accent)))
-    js = _MAGIC_FIELD_JS
+    hint = _t("A topic, a filter, pasted question IDs…")  # the script's own English, said in the language in use
+    js = _MAGIC_FIELD_JS.replace("'A topic, a filter, pasted question IDs…'", "'" + hint.replace("\\", "\\\\").replace("'", "\\'") + "'")
     from .base import CARD_SHADOW, CARD_SHADOW_HOVER
     sheet = _MAGIC_FIELD_CSS.replace('__SHH__', CARD_SHADOW_HOVER).replace('__SH__', CARD_SHADOW)
     return (f'<style>{tokens}{sheet}</style>'
             f'<div id="{MAGIC_FIELD_ID}" role="search">'
             f'<i class="s s1"></i><i class="s s2"></i><i class="s s3"></i>'
             # the board's command as the board sends it, with what's typed when there is any (a colon after its name)
-            f'<button type="button" class="go" title="Magic search ({MAGIC_KBD})" aria-label="Open Magic search" '
+            f'<button type="button" class="go" title="{_t("Magic search ({keys})", keys=MAGIC_KBD)}" aria-label="{_t("Open Magic search")}" '
             f'onclick="var q=this.parentNode.querySelector(\'input\').value.slice(0,400);'
             f'pycmd(\'duecrew:magic\'+(q?\':\'+encodeURIComponent(q):\'\')+\'|{BOARD_KEY}\');return false;">{_MAGIC_FIELD_ICON}</button>'
-            f'<input type="text" aria-label="Magic search: a topic, a filter, pasted question IDs" placeholder="{_html.escape(MAGIC_PROMPT)}" '
+            f'<input type="text" aria-label="{_t("Magic search: a topic, a filter, pasted question IDs")}" '
+            f'placeholder="{_html.escape(_t(MAGIC_PROMPT))}" '
             f'maxlength="400" autocomplete="off" autocapitalize="off" spellcheck="false">'
             f'<kbd>{MAGIC_KBD}</kbd></div><script>{js}</script>')
 
@@ -822,40 +861,41 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, magic=False)
         ql = mg
         if folded:
             names = " &middot; ".join(lb for _k, lb in more)
-            return (f'<div class="du du-one"><a href="#" onclick="{_pycmd("duefold")}" title="Show"><b>{names}</b></a>'
-                    f'<span class="sp"></span>{ql}<a href="#" class="du-fold" title="Show" '
-                    f'onclick="{_pycmd("duefold")}">Show &#9662;</a></div>')
+            return (f'<div class="du du-one"><a href="#" onclick="{_pycmd("duefold")}" title="{_t("Show")}"><b>{names}</b></a>'
+                    f'<span class="sp"></span>{ql}<a href="#" class="du-fold" title="{_t("Show")}" '
+                    f'onclick="{_pycmd("duefold")}">{_t("Show")} &#9662;</a></div>')
         tab = more_tab if more_tab in dict(more) else more[0][0]
         tabs = "".join(f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{_tab_word(k, lb)}</a>'
                        for k, lb in more)
-        return (f'<div class="du"><div class="du-h"><span class="du-tabs" role="tablist" aria-label="You">{tabs}</span>'
-                f'<span class="sp"></span>{ql}<a href="#" class="du-fold" title="Fold to one line" '
-                f'onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>{more_body}</div>')
+        return (f'<div class="du"><div class="du-h"><span class="du-tabs" role="tablist" aria-label="{_t("You")}">{tabs}</span>'
+                f'<span class="sp"></span>{ql}<a href="#" class="du-fold" title="{_t("Fold to one line")}" '
+                f'onclick="{_pycmd("duefold")}">{_t("Hide")} &#9652;</a></div>{more_body}</div>')
     today = e(v["today"])
     # 3.9.3 (Sam's pick 1, in Study today's place): in the head on every tab and on the folded line ("missing
     # the QID chip on the top right"); QBank QIDs then, Magic search since 3.9.7 (its paste is QIDs' way)
     qids = mg
     done_n, total_n = int(v["done_n"]), int(v["total_n"])
-    count = f"{done_n} of {total_n} done" if total_n else ""
+    count = _t("{n} of {of} done", n=done_n, of=total_n) if total_n else ""
     if v["folded"]:
         bar = _wbar(done_n, total_n) if total_n else ""
         go = ""  # 3.9.3: no Study today (Sam); Ctrl+Shift+S still walks the day
-        behind = f'<span class="du-n" style="color:#c77700">{int(v["behind_n"])} behind</span>' if v["behind_n"] else ""
+        behind = ('<span class="du-n" style="color:#c77700">' + _t("{n} behind", n=int(v["behind_n"])) + '</span>'
+                  if v["behind_n"] else "")
         if v.get("done"):
             # the day's done: what's next, in place of the bar
             nxt = v["tomorrow"][:2] or (v["next"]["names"][:2] if v.get("next") else [])
-            count, bar, go = "&#10003; Done for today", "", (
+            count, bar, go = "&#10003; " + _t("Done for today"), "", (
                 f'<span class="du-n du-tm" title="{", ".join(e(x) for x in nxt)}">'
-                f'{"Tomorrow" if v["tomorrow"] else e(v["next"]["day"])}: '
+                f'{_t("Tomorrow") if v["tomorrow"] else e(v["next"]["day"])}: '
                 f'{", ".join(e(x) for x in nxt)}</span>' if nxt else "")
-        return (f'<div class="du du-one" data-today="{today}"><a href="#" onclick="{_pycmd("duefold")}" title="Show">'
-                f'<b>{e(v["name"])}</b></a><span class="du-n">{count or "nothing today"}</span>{bar}{behind}'
-                f'<span class="sp"></span>{go}{qids}<a href="#" class="du-fold" title="Show the whole list" '
-                f'onclick="{_pycmd("duefold")}">Show &#9662;</a></div>')
+        return (f'<div class="du du-one" data-today="{today}"><a href="#" onclick="{_pycmd("duefold")}" title="{_t("Show")}">'
+                f'<b>{e(v["name"])}</b></a><span class="du-n">{count or _t("nothing today")}</span>{bar}{behind}'
+                f'<span class="sp"></span>{go}{qids}<a href="#" class="du-fold" title="{_t("Show the whole list")}" '
+                f'onclick="{_pycmd("duefold")}">{_t("Show")} &#9662;</a></div>')
     tab = more_tab if more_tab in dict(more) else v["tab"]
     # 3.8.0: Later shows only when it holds something; adding one shows it
-    lists = (("today", "Today"), ("upcoming", "Upcoming")) + (
-        (("later", f'Later{" " + str(v["later_n"]) if v["later_n"] else ""}'),) if v["later"] else ())
+    lists = (("today", _t("Today")), ("upcoming", _t("Upcoming"))) + (
+        (("later", _t("Later") + (" " + str(v["later_n"]) if v["later_n"] else "")),) if v["later"] else ())
     if tab not in dict(lists) and tab not in dict(more):
         tab = "today"
     tabs = "".join(
@@ -863,28 +903,29 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, magic=False)
         for k, lb in lists)
     if more:
         # 3.8.0: Plans and Insights, after a gap: what's mine beyond the day
-        tabs += '</span><span class="du-tabs du-more" role="tablist" aria-label="Plans and Insights">' + "".join(
+        tabs += '</span><span class="du-tabs du-more" role="tablist" aria-label="' + _t("Plans and Insights") + '">' + "".join(
             f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{_tab_word(k, lb)}</a>' for k, lb in more)
     if v.get("done") and tab == "today":
-        count = "&#10003; Done for today"  # 3.8.0: as the folded line says it (and motion.js lights the box once)
+        count = "&#10003; " + _t("Done for today")  # 3.8.0: as the folded line says it (and motion.js lights the box once)
     head = (f'<div class="du-h"><span class="du-tabs" role="tablist" aria-label="{e(v["name"])}">{tabs}</span>'
             f'<span class="sp"></span><span class="du-n">{count if tab in ("today", "upcoming") else ""}</span>{qids}'
-            f'<a href="#" class="du-fold" title="Fold to one line" onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>')
+            f'<a href="#" class="du-fold" title="{_t("Fold to one line")}" onclick="{_pycmd("duefold")}">{_t("Hide")} &#9652;</a></div>')
     if tab in dict(more):
         return f'<div class="du" data-today="{today}">{head}{more_body}</div>'
 
     toast = ""
     if v.get("toast"):
         toast = (f'<div class="du-line"><span>{e(v["toast"]["text"])}</span>'
-                 f'<a href="#" onclick="{_pycmd("dueshow:" + v["toast"]["tab"])}">Show</a></div>')
+                 f'<a href="#" onclick="{_pycmd("dueshow:" + v["toast"]["tab"])}">{_t("Show")}</a></div>')
     body = ""
     if tab == "today":
         if v.get("nudge"):
             # 3.8.1: once a day, past my usual start, nothing studied yet: Fifteen?
             peek = f'<span class="nz">{v["nudge_sev"]}</span>' if v.get("nudge_sev") else "<span>&#9654;</span>"
-            body += (f'<div class="du-nudge">{peek}<span><b>Not started yet today.</b> Fifteen?</span>'
-                     f'<span><a href="#" class="du-go" title="Fifteen minutes, then one question" onclick="{_pycmd("room15")}">Start</a>'
-                     f'<a href="#" class="x" title="Not today" onclick="{_pycmd("duex:fifteen")}">&times;</a></span></div>')
+            body += (f'<div class="du-nudge">{peek}<span><b>{_t("Not started yet today.")}</b> {_t("Fifteen?")}</span>'
+                     f'<span><a href="#" class="du-go" title="{_t("Fifteen minutes, then one question")}" '
+                     f'onclick="{_pycmd("room15")}">{_t("Start")}</a>'
+                     f'<a href="#" class="x" title="{_t("Not today")}" onclick="{_pycmd("duex:fifteen")}">&times;</a></span></div>')
         body += _due_behind(v)
         for r in v["rows"]:
             if r["kind"] == "reviews":
@@ -894,10 +935,11 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, magic=False)
                 back = int(r.get("back") or 0)
                 if not r["due"] and not r["done"] and not back:
                     continue
-                n = ("all done" if r["done"] else f'{int(r["due"]):,} due' if r["due"]
-                     else f'{back:,} back{" at " + e(r["at"]) if r.get("at") else " later"}')
+                n = (_t("all done") if r["done"] else _t("{n} due", n=f'{int(r["due"]):,}') if r["due"]
+                     else _t("{n} back at {time}", n=f"{back:,}", time=e(r["at"])) if r.get("at")
+                     else _t("{n} back later", n=f"{back:,}"))
                 body += (f'<div class="du-r{" done" if r["done"] else ""}">{_due_box("on" if r["done"] else "")}'
-                         f'<span class="t"><b>Reviews</b></span><span class="end"><span class="n">{n}</span></span></div>')
+                         f'<span class="t"><b>{_t("Reviews")}</b></span><span class="end"><span class="n">{n}</span></span></div>')
             elif r["kind"] == "new":
                 body += _due_new(r)
             elif r["kind"] == "plan":
@@ -910,17 +952,17 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, magic=False)
         for sg in v["suggestions"] + v["notes"]:
             body += (f'<div class="du-sg"><span>&#10022;</span><span>{e(sg["text"])}</span><span>'
                      f'<a href="#" onclick="{_pycmd("duego:" + sg["key"])}">{e(sg["go"])}</a>'
-                     f'<a href="#" class="x" title="Not today" onclick="{_pycmd("duex:" + sg["key"])}">&times;</a></span></div>')
+                     f'<a href="#" class="x" title="{_t("Not today")}" onclick="{_pycmd("duex:" + sg["key"])}">&times;</a></span></div>')
         if not v["rows"] and not v["suggestions"] and not v["notes"]:
-            body += '<div class="du-empty">Nothing due today.</div>'
+            body += f'<div class="du-empty">{_t("Nothing due today.")}</div>'
         body += _due_add(v, "today")
     elif tab == "upcoming":
         for dd in v["days"]:  # 3.8.0: Behind is Today's alone
             if dd.get("quiet"):
-                body += f'<div class="du-q">{e(dd["label"])} &middot; nothing due</div>'
+                body += f'<div class="du-q">{e(dd["label"])} &middot; {_t("nothing due")}</div>'
                 continue
-            what = "review day" if dd["review"] and not dd["n"] else ""  # 3.8.0: its rows are the count
-            plus = (f'<a href="#" class="plus" title="Add a to-do for this day" '
+            what = _t("review day") if dd["review"] and not dd["n"] else ""  # 3.8.0: its rows are the count
+            plus = (f'<a href="#" class="plus" title="{_t("Add a to-do for this day")}" '
                     f'onclick="dcDue.plus(\'{e(dd["day"])}\');return false;">+</a>')
             body += (f'<div class="du-dh{" today" if dd["today"] else ""}"><span>{e(dd["head"])}</span>'
                      f'<small>{what}{plus}</small></div>')
@@ -931,6 +973,6 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, magic=False)
         if v["later"]:
             body += "".join(_due_mine(r) for r in v["later"])
         else:
-            body += '<div class="du-empty">Nothing here.</div>'
+            body += f'<div class="du-empty">{_t("Nothing here.")}</div>'
         body += _due_add(v, "later")
     return f'<div class="du" data-today="{today}">{head}{toast}{body}</div>'

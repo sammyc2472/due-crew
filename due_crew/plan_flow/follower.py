@@ -8,6 +8,7 @@ from aqt.utils import tooltip
 
 from .. import app
 from .. import plans as P
+from ..words import t as _t, tn as _tn
 from .. import schedule as S
 from ..app import _bg
 from ..app import _state
@@ -157,7 +158,7 @@ def browse_leeches(pid, uid):
     except Exception:
         oops()
         return
-    _browse(cids, empty="No leeches in it now.")
+    _browse(cids, empty=_t("No leeches in it now."))
 
 
 # -- what Hold back keeps --
@@ -200,17 +201,17 @@ def held_view(pid):
     lines = []
     for name, opens, n in P.held_rows(idx, doc, held, _swap(st)):
         if name is None:
-            lines.append(f"On no set now · {n:,}")
+            lines.append(_t("On no set now · {n}", n=f"{n:,}"))
         else:
-            lines.append(f"{name} · {n:,}" if own or not opens else f"{name} · {P.fmt_day(opens)} · {n:,}")
+            lines.append(f"{name} · {n:,}" if own or not opens else f"{name} · {P.day_said(opens)} · {n:,}")
     if holding:
-        why = ("You said yes to Hold back: the new cards of sets you haven't opened wait, suspended, till you open them."
-               if own else "You said yes to Hold back: the new cards of sets still to come wait, suspended, till their day.")
+        why = (_t("You said yes to Hold back: the new cards of sets you haven't opened wait, suspended, till you open them.")
+               if own else _t("You said yes to Hold back: the new cards of sets still to come wait, suspended, till their day."))
     elif own:
-        why = "You put these back. They open when you open their set again."
+        why = _t("You put these back. They open when you open their set again.")
     else:
-        why = "Hold back is off; these stayed suspended."
-    return {"name": str(p.get("name") or "The plan"), "n": len(held), "lines": lines[:HELD_LINES],
+        why = _t("Hold back is off; these stayed suspended.")
+    return {"name": str(p.get("name") or _t("The plan")), "n": len(held), "lines": lines[:HELD_LINES],
             "more": max(0, len(lines) - HELD_LINES), "why": why, "holding": holding, "leeches": len(shut & idx.leech)}
 
 
@@ -219,7 +220,7 @@ def show_held(pid, ask=None):
     them · Stop holding back · Close."""
     v = held_view(pid)
     if not v or not v["n"]:
-        tooltip("Nothing held back now.")
+        tooltip(_t("Nothing held back now."))
         return
     if ask is None:
         from ..ui.held_dialog import ask_held
@@ -250,8 +251,9 @@ def open_held(pid, stop=False):
     if n:
         _after_change()
     refresh_progress()
-    said = f"Opened {n:,} card{'s' if n != 1 else ''}. Edit › Undo suspends them again." if n else "Nothing to open."
-    tooltip(said + (" Nothing more is held back." if stop else ""), period=5000)
+    said = (P.tn("Opened {n} card. Edit › Undo suspends them again.", "Opened {n} cards. Edit › Undo suspends them again.", n) if n
+            else _t("Nothing to open."))
+    tooltip(said + (" " + _t("Nothing more is held back.") if stop else ""), period=5000)
     app.swap(cfg())
 
 
@@ -349,7 +351,7 @@ def _welcome_one(pid, ask=None):
     if p is None or p.get("paused") or not mw.col or info.get("day") != today:
         return
     days = [str(x) for x in info.get("days") or []]
-    choice = (ask or _ask_away)(str(p.get("name") or "The plan"), days, len(info.get("units") or []), int(info.get("n") or 0))
+    choice = (ask or _ask_away)(str(p.get("name") or _t("The plan")), days, len(info.get("units") or []), int(info.get("n") or 0))
     if choice == "open":
         _release_away(st, today)
         c["plans"] = state
@@ -365,7 +367,7 @@ def _welcome_one(pid, ask=None):
             if gen != app.generation:
                 return
             if res is None:
-                tooltip("Couldn't reach Due Crew. Check your connection. Tomorrow morning asks again.")
+                tooltip(_t("Couldn't reach Due Crew. Check your connection. Tomorrow morning asks again."))
                 app.swap(cfg())
                 return
             pc = _pcfg()
@@ -375,7 +377,8 @@ def _welcome_one(pid, ask=None):
                 _psave(pc)
             if not res.get("paused"):
                 _open_now([x for x in followed() if x["id"] == pid], toast=False)  # what's due on my new days
-            tooltip(f"Your dates moved {n} day{'s' if n != 1 else ''} later. The plan's stay put.", period=5000)
+            tooltip(_tn("Your dates moved {n} day later. The plan's stay put.", "Your dates moved {n} days later. The plan's stay put.", n),
+                    period=5000)
             app.swap(cfg())
         _bg(lambda: cl.set_days(pid, shift=shift), done)
     else:

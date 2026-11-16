@@ -45,7 +45,7 @@ def _head(period, show_up=False, hidden=frozenset(), crew="today", sev=None):
                   f'onclick="{_pycmd("period:" + (crew if key == "crew" else key))}">{_t(label)}</a>')
     # 3.8.1: Pip beside the logo, never on it (the logo itself never changes),
     # and only for a moment: it pops in, plays it, and goes (Sam)
-    beside = (f'<a class="dc-sev once" href="#" title="Pip&rsquo;s closet" onclick="{_pycmd("closet")}" '
+    beside = (f'<a class="dc-sev once" href="#" title="{_t("Pip’s closet")}" onclick="{_pycmd("closet")}" '
               f'style="--ago:{float(sev.get("ago") or 0):.2f}s">{_sev.slot(sev["svg"], 36)}</a>'
               if sev and sev.get("svg") else "")  # 3.8.2: Pip's closet is a click away
     return (f'<div class="dc-head"><span class="dc-title">{board_mark()}{beside}</span>'
@@ -163,21 +163,21 @@ def _row_html(row, rank, cfg, period="today", held=False):
         status = f'<div class="dc-stw"><span class="dc-st" title="{st}">{lead}{st}</span></div>'
     if row["you"]:
         cheer = ""
-        name = (f'{fig}<a class="dc-pl" href="#" title="See what your crew sees" '
+        name = (f'{fig}<a class="dc-pl" href="#" title="{_t("See what your crew sees")}" '
                 f'onclick="{_pycmd("profile:" + str(row["user_id"]))}">{name}</a>')
     else:
         # 3.9.1: the cheer is a pill after the name (and its chip), where the eye already is
         cheer = (f'<a class="dc-cpill" href="#" title="{_t("Send a cheer")}" aria-label="{_html.escape(_t("Cheer {name}", name=str(row["name"])), quote=True)}" '
                  f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881; {_t("Cheer")}</a>') if not held else (
             # 3.9.9 (Off the Board, 11): sent while Due Crew couldn't be reached; it goes with the next refresh that does
-            f'<a class="dc-cpill held" href="#" title="Sends when Due Crew is back" '
-            f'aria-label="Cheer for {_html.escape(str(row["name"]), quote=True)}, waiting to send" '
-            f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881; Waiting<span class="ts"> to send</span></a>')
+            f'<a class="dc-cpill held" href="#" title="{_t("Sends when Due Crew is back")}" '
+            f'aria-label="{_html.escape(_t("Cheer for {name}, waiting to send", name=str(row["name"])), quote=True)}" '
+            f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881; {_t("Waiting")}<span class="ts"> {_t("to send")}</span></a>')
         # 3.0.1: right-click for Mute cheers and Report…
         # 3.8.2: their Pip opens the profile too, outside the name's underline
         sev_link = (f'<a class="dc-rsevl" href="#" tabindex="-1" aria-hidden="true" '
                     f'onclick="{_pycmd("profile:" + str(row["user_id"]))}">{fig}</a>') if fig else ""
-        name = (sev_link + f'<a class="dc-pl" href="#" title="Open profile" '
+        name = (sev_link + f'<a class="dc-pl" href="#" title="{_t("Open profile")}" '
                 f'onclick="{_pycmd("profile:" + str(row["user_id"]))}" '
                 f'oncontextmenu="{_pycmd("rowmenu:" + str(row["user_id"]))}">{name}</a>')
     return (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
@@ -338,14 +338,14 @@ def _bar(name, is_me, d, delta=None, today_labels=(), pip=None):
     if delta:
         chips.append(f'+{delta:,} wk')
     chip_html = (f'<span class="dc-delta">{" &middot; ".join(chips)}</span>' if chips else _DD_ROOM)
-    tip = [f'{seen:,} seen', f'{mature:,} mature']
+    tip = [_t("{n} seen", n=f"{seen:,}"), _t("{n} mature", n=f"{mature:,}")]
     if opened is not None:
-        tip.append(f'{int(opened):,} unsuspended')
-    tip.append(f'{int(d.get("total") or 0):,} total')
+        tip.append(_t("{n} unsuspended", n=f"{int(opened):,}"))
+    tip.append(_t("{n} total", n=f'{int(d.get("total") or 0):,}'))
     if delta:
-        tip.append(f'+{delta:,} this week')
+        tip.append(_t("+{n} this week", n=f"{delta:,}"))
     if ret is not None:
-        tip.append(f'{float(ret):.1f}% retention, last 7 days')
+        tip.append(_t("{pct}% retention, last 7 days", pct=f"{float(ret):.1f}"))
     return (f'<div class="dr{" me" if is_me else ""}" title="{_html.escape(" · ".join(tip))}">'
             f'<span class="dn">{pip or ""}<b>{_html.escape(str(name))}</b></span>'
             f'<div class="dtrack">{open_html}<i class="fs" style="width:{pct(seen)}%;"></i>'
@@ -368,8 +368,8 @@ def _presence_html(fresh, dormant, labels, entries, pick="", cfg=None):
     letters = ""
     for lb in week:
         cls = "sqh on" if lb == labels[0] else "sqh"
-        letters += f'<th class="{cls}">{"MTWTFSS"[datetime.fromisoformat(lb).weekday()]}</th>'
-    said = f"{today_n} showed up today"
+        letters += f'<th class="{cls}">{_t("MTWTFSS")[datetime.fromisoformat(lb).weekday()]}</th>'
+    said = _t("{n} showed up today", n=today_n)
     heads = (_corner(pick) if pick else f'<th class="lt" colspan="2">{said}</th>') + letters
     body = ""
     for row in fresh + dormant:
@@ -378,14 +378,14 @@ def _presence_html(fresh, dormant, labels, entries, pick="", cfg=None):
         cls, note = ("you" if row["you"] else "") + (" sv" if fig else ""), ""
         if row["paused"]:
             cls += " dim"
-            note = ' <span class="dc-note">&middot; on a break</span>'
+            note = f' <span class="dc-note">&middot; {_t("on a break")}</span>'
         elif row["quiet"]:
             cls += " dim"
             txt, tone = _ago(row["last_updated"])
             note = f' <span class="la {tone}">({txt})</span>' if txt else ""
         elif row["stale"]:
             cls += " dim"
-            note = ' <span class="la faded">&middot; yesterday</span>'
+            note = f' <span class="la faded">&middot; {_t("yesterday")}</span>'
         elif row.get("away"):
             note = f' <span class="la faded">&#9992;&#65039; {_html.escape(str(row["away"]))}</span>'
         docs = days_of.get(row["user_id"], {})
@@ -407,34 +407,35 @@ def _tricky_html(tricky, mine=None):
     out = ""
     asked = (tricky or [])[:6]
     if asked:
-        out += '<div class="dc-flag-h">Asked of you</div>'
+        out += f'<div class="dc-flag-h">{_t("Asked of you")}</div>'
     for t in asked:
         who = _html.escape(str(t.get("name", "?")))
-        text = _html.escape(str(t.get("text") or "a card"))
+        text = _html.escape(str(t.get("text") or _t("a card")))
         deck = _html.escape(str(t.get("deck") or ""))
         cmd = f'tricktip:{t.get("uid", "")}:{int(t.get("index", 0))}'
         q = _html.escape(str(t.get("q") or ""))
-        where = f'&ldquo;{text}&rdquo;{" &middot; " + deck if deck else ""}' + (" &middot; you have this down" if t.get("known") else "")
+        where = f'&ldquo;{text}&rdquo;{" &middot; " + deck if deck else ""}' + (" &middot; " + _t("you have this down") if t.get("known") else "")
         say = (f'<b>{who}</b>: &ldquo;{q}&rdquo;' if q
-               else f'<b>{who}</b> finds this one tricky') + f'<small>{where}</small>'
+               else _t("{who} finds this one tricky", who=f"<b>{who}</b>")) + f'<small>{where}</small>'
         out += (f'<div class="dc-flag"><span>{say}</span>'
-                f'<a href="#" title="One line; it shows when the card comes up for them" '
-                f'onclick="{_pycmd(cmd)}">Tip</a></div>')
+                f'<a href="#" title="{_t("One line; it shows when the card comes up for them")}" '
+                f'onclick="{_pycmd(cmd)}">{_t("Tip")}</a></div>')
     mine = (mine or [])[:6]
     if mine:
-        out += '<div class="dc-flag-h">Your asks</div>'
+        out += f'<div class="dc-flag-h">{_t("Your asks")}</div>'
     for a in mine:
-        text = _html.escape(str(a.get("text") or "a card"))
+        text = _html.escape(str(a.get("text") or _t("a card")))
         who = [_html.escape(str(w)) for w in a.get("who") or []]
         if a.get("state") == "answered":
-            said = f'{who[0] if who else "A crewmate"} answered'
-            tag = f'<span class="dc-ask-st on">{len(who) or 1} tip{"" if len(who) <= 1 else "s"}</span>'
+            said = _t("{who} answered", who=who[0] if who else _t("A crewmate"))
+            tag = f'<span class="dc-ask-st on">{_tn("{n} tip", "{n} tips", len(who) or 1)}</span>'
         else:
-            said = (f'{", ".join(who[:2])}{" and more" if len(who) > 2 else ""} '
-                    f'{"knows" if len(who) == 1 else "know"} this') if who else "Nobody's answered yet"
-            tag = ('<span class="dc-ask-st">waiting</span>'
-                   + (f'<a href="#" title="Your crew stops seeing it" '
-                      f'onclick="{_pycmd("unask:" + str(int(a["index"])))}">Take back</a>'
+            first = ", ".join(who[:2])
+            said = (_t("{who} knows this", who=first) if len(who) == 1 else _t("{who} and more know this", who=first) if len(who) > 2
+                    else _t("{who} know this", who=first)) if who else _t("Nobody's answered yet")
+            tag = (f'<span class="dc-ask-st">{_t("waiting")}</span>'
+                   + (f'<a href="#" title="{_t("Your crew stops seeing it")}" '
+                      f'onclick="{_pycmd("unask:" + str(int(a["index"])))}">{_t("Take back")}</a>'
                       if isinstance(a.get("index"), int) else ""))
         out += f'<div class="dc-flag"><span>&ldquo;{text}&rdquo;<small>{said}</small></span>{tag}</div>'
     return out
@@ -462,8 +463,8 @@ def _decks_body(data, deltas=None, sticking=None, pick="", asks="", cfg=None):
     up = bool(pick) and not asks and bool(groups)
     top = f'<div class="dc-pline">{pick}{_DKEY if up else ""}</div>' if pick else ""
     if not groups:  # a friend's alone isn't drawn (extras, since 2.7): the way in
-        return (top + asks + '<div class="dc-line">No shared decks yet. '
-                f'<a href="#" onclick="{_pycmd("decks")}">Pick decks to share</a></div>')
+        return (top + asks + f'<div class="dc-line">{_t("No shared decks yet.")} '
+                f'<a href="#" onclick="{_pycmd("decks")}">{_t("Pick decks to share")}</a></div>')
     html = ""
     for g in groups:
         label = _html.escape(str(g["label"]))  # (3.9.10: no "How it's sticking" beside it; Insights has it)
@@ -475,5 +476,5 @@ def _decks_body(data, deltas=None, sticking=None, pick="", asks="", cfg=None):
     if groups and not up:
         html += f'<div class="dc-line" style="padding-top: 2px;">{_DKEY}</div>'
     # 3.9.10: sharing another deck starts here, under the ones I share (never in the foot: it's this tab's alone)
-    html += f'<div class="dc-add"><a href="#" title="Pick the decks your crew sees" onclick="{_pycmd("decks")}">+ Share a deck</a></div>'
+    html += f'<div class="dc-add"><a href="#" title="{_t("Pick the decks your crew sees")}" onclick="{_pycmd("decks")}">{_t("+ Share a deck")}</a></div>'
     return top + asks + html

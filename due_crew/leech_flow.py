@@ -27,6 +27,7 @@ from aqt.utils import tooltip
 from . import app
 from .app import _state, cfg
 from .errs import oops
+from .words import t as _t
 
 OUT_MAX = 5000   # cards left out, at most
 SLOW_SECS = 30   # a card's answers this slow on average say so
@@ -274,17 +275,17 @@ def bring_back(did, cids):
         _done(did, None)  # gone since the view was drawn
         return
     nids = _untag(col, cids)
-    pos = _undo_step(col, "Due Crew: bring back")
+    pos = _undo_step(col, _t("Due Crew: bring back"))
     try:
         if nids:
             col.tags.bulk_remove(nids, "leech")
         col.sched.unsuspend_cards(cids)
     except Exception:
         oops()
-        tooltip("Couldn't bring them back. Browse › Toggle Suspend.")
+        tooltip(_t("Couldn't bring them back. Browse › Toggle Suspend."))
         return
     _merge(col, pos)
-    _done(did, f"{len(cids):,} back in your reviews." if len(cids) > 1 else "Back in your reviews.")
+    _done(did, _t("{n} back in your reviews.", n=f"{len(cids):,}") if len(cids) > 1 else _t("Back in your reviews."))
 
 
 def fresh(did, cid):
@@ -298,7 +299,7 @@ def fresh(did, cid):
         _done(did, None)
         return
     nids = _untag(col, [int(cid)])
-    pos = _undo_step(col, "Due Crew: learn it fresh")
+    pos = _undo_step(col, _t("Due Crew: learn it fresh"))
     try:
         if nids:
             col.tags.bulk_remove(nids, "leech")
@@ -306,10 +307,10 @@ def fresh(did, cid):
         col.sched.schedule_cards_as_new([int(cid)], restore_position=True, reset_counts=True)
     except Exception:
         oops()
-        tooltip("Couldn't reset it. Browse › Cards › Reset.")
+        tooltip(_t("Couldn't reset it. Browse › Cards › Reset."))
         return
     _merge(col, pos)
-    _done(did, "A new card again.")
+    _done(did, _t("A new card again."))
 
 
 def leave_out(did, cid):
@@ -319,7 +320,7 @@ def leave_out(did, cid):
         have = (have + [int(cid)])[-OUT_MAX:]
     pc["leech_out"] = have
     _pf()._psave(pc)
-    _done(did, "Left out. Put it back from the foot of this list.")
+    _done(did, _t("Left out. Put it back from the foot of this list."))
 
 
 def put_back_out(did, deck):
@@ -366,8 +367,8 @@ def show_tip(did, cid):
         return
     from . import sheets
     words = "\n\n".join(f"{t['name']}: {t['text']}" for t in c["tip"])
-    head = f"{c['tip'][0]['name']}'s tip" if len(c["tip"]) == 1 else "Tips from your crew"
-    sheets.confirm(head, words, "OK", lambda: None)
+    head = _t("{name}'s tip", name=c["tip"][0]["name"]) if len(c["tip"]) == 1 else _t("Tips from your crew")
+    sheets.confirm(head, words, _t("OK"), lambda: None)
 
 
 def ask(did, cid):
@@ -380,20 +381,22 @@ def ask(did, cid):
     from . import sheets
     from .cards import clean_note, flag
     who = c["knows"]
-    lead = (", ".join(who[:-1]) + " and " + who[-1]) if len(who) > 1 else (who[0] if who else "")
+    lead = (", ".join(who[:-1]) + _t(" and ") + who[-1]) if len(who) > 1 else (who[0] if who else "")
     try:
         card = col.get_card(int(cid))
     except Exception:
         _done(did, None)
         return
-    sheets.ask_text("Ask your crew about this card",
-                    f"Goes to everyone in your crew who has it.{' ' + lead + (' has' if len(who) == 1 else ' have') + ' it down.' if who else ''}",
-                    lambda line: flag(card, clean_note(line) or ""), yes="Ask")
+    said = (_t("Goes to everyone in your crew who has it.") if not who
+            else _t("Goes to everyone in your crew who has it. {who} has it down.", who=lead) if len(who) == 1
+            else _t("Goes to everyone in your crew who has it. {who} have it down.", who=lead))
+    sheets.ask_text(_t("Ask your crew about this card"), said,
+                    lambda line: flag(card, clean_note(line) or ""), yes=_t("Ask"))
 
 
 def browse(did):
     v = (_state.get("leech_view") or {}).get(int(did)) or {}
-    _pf()._browse([c["cid"] for c in _listed(v)], empty="No leeches here.")
+    _pf()._browse([c["cid"] for c in _listed(v)], empty=_t("No leeches here."))
 
 
 def open_view(did, on=True):

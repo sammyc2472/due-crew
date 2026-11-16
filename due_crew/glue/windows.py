@@ -30,6 +30,7 @@ from .refresh import _lock, _run, refresh_board
 from .sync import _on_sync_done
 from .render import _rerender
 from .commands import _swap
+from ..words import t as _t
 
 
 def open_auth():
@@ -49,7 +50,7 @@ def open_auth():
             save_cfg(c)
             _welcome()
         else:
-            tooltip(f"Welcome back, {html.escape(name)}.")
+            tooltip(_t("Welcome back, {name}.", name=html.escape(name)))
         _on_sync_done()
         _rerender()
         # 3.1: signed in on a profile that syncs but hasn't yet: the morning's fallback
@@ -80,24 +81,24 @@ def _add_code(code):
         # 3.5.0: a plan's code opens Follow, a squad's opens Squads
         longer = long_code_from(typed)
         if not longer:
-            tooltip("That doesn't look like a code. Pasting the whole invite works too.")
+            tooltip(_t("That doesn't look like a code. Pasting the whole invite works too."))
             return
         _bg(lambda: client().peek_plan(longer),
             lambda r: plan_flow.open_follow(longer) if r and r[0] else open_squads(longer))
         return
     if code == _state["my_code"]:
-        tooltip("That's your own code.")
+        tooltip(_t("That's your own code."))
         return
     cl = client()
 
     def done(result):
         friend, err = result if result else (None, None)
         if not friend:
-            tooltip(html.escape(err or "Couldn't add. Check your connection."))
+            tooltip(html.escape(err or _t("Couldn't add. Check your connection.")))
             return
         name = html.escape(str(friend.get("name") or "?"))
-        tooltip(f"You and {name} are crew." if friend.get("mutual")
-                else f"Added {name}. They'll see it on their board.")
+        tooltip(_t("You and {name} are crew.", name=name) if friend.get("mutual")
+                else _t("Added {name}. They'll see it on their board.", name=name))
         refresh_board(full=True)
 
     _bg(lambda: cl.add_friend(code), done)
@@ -109,12 +110,12 @@ def _redeem(invite):
     def done(result):
         friend, err = result if result else (None, None)
         if not friend:
-            tooltip(html.escape(err or "Couldn't add. Check your connection."))
+            tooltip(html.escape(err or _t("Couldn't add. Check your connection.")))
             return
         name = html.escape(str(friend.get("name") or "?"))
-        tooltip(f"You and {name} are crew." if friend.get("mutual")
-                else f"Added {name}. They'll see it on their board." if friend.get("knocked")
-                else f"{name} isn't in your crew now.")
+        tooltip(_t("You and {name} are crew.", name=name) if friend.get("mutual")
+                else _t("Added {name}. They'll see it on their board.", name=name) if friend.get("knocked")
+                else _t("{name} isn't in your crew now.", name=name))
         refresh_board(full=True)
 
     _bg(lambda: cl.redeem_invite(invite), done)
@@ -226,7 +227,7 @@ def open_scrapbook(year=None):
     if not mw.col:
         return
     if not _scrap_load(year):
-        tooltip("Couldn't open your scrapbook just now.")
+        tooltip(_t("Couldn't open your scrapbook just now."))
         return
     _state["settings_tab"] = None
     _state["closet_open"] = None
@@ -298,20 +299,20 @@ def _scrap_cmd(cmd, parts):
         from .. import closet_flow, scrapbook
         if closet_flow.pin_up(scrapbook.to_fridge(item), client().user_id):
             scrap_flow.forget(arg)
-            tooltip("Pinned up on your Decks screen.")
+            tooltip(_t("Pinned up on your Decks screen."))
         else:
-            tooltip("It’s on your Decks screen already.")
+            tooltip(_t("It’s on your Decks screen already."))
             scrap_flow.forget(arg)
         again()
         return
     if cmd == "scrapdel" and st:
         if scrap_flow.find(arg):
-            sheets.confirm("Delete this?", "It goes for good.", "Delete",
+            sheets.confirm(_t("Delete this?"), _t("It goes for good."), _t("Delete"),
                            lambda: (scrap_flow.forget(arg), again()), danger=True)
         return
     if cmd == "scrapempty" and st:
-        sheets.confirm("Empty the scrapbook?", "Every keepsake in it goes for good, from every year. "
-                       "What’s pinned on your Decks screen stays.", "Empty it",
+        sheets.confirm(_t("Empty the scrapbook?"), _t("Every keepsake in it goes for good, from every year. "
+                                                      "What’s pinned on your Decks screen stays."), _t("Empty it"),
                        lambda: (scrap_flow.empty(), again()), danger=True)
         return
     if cmd == "scrapclose":

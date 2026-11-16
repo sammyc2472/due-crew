@@ -7,6 +7,7 @@ from aqt.utils import tooltip
 
 from .. import app
 from .. import plans as P
+from ..words import t as _t
 from ..app import _state
 from ..app import cfg
 from ..app import client
@@ -44,11 +45,11 @@ def browse_date(pid, uid):
     _browse(cids)
 
 
-def _browse(cids, q=None, empty="None of its cards are in your deck."):
+def _browse(cids, q=None, empty=None):
     """Anki's browser on these cards: `q` when given (a search that finds
     just them), else by id. A search run here; nothing is sent."""
     if not cids:
-        tooltip(empty)
+        tooltip(empty or _t("None of its cards are in your deck."))
         return
     import aqt
     browser = aqt.dialogs.open("Browser", mw)
@@ -61,7 +62,7 @@ def browse_tags(pid):
     path = next(iter((st.get("tags") or {}).values()), "")
     parts = str(path).split("::")
     if len(parts) < 3:
-        tooltip("Its tags aren't in your Anki yet.")
+        tooltip(_t("Its tags aren't in your Anki yet."))
         return
     got = _plan_idx(pid)
     if got and any(t.get("cards") for t in P.plan_tags(got[2])):
@@ -122,7 +123,7 @@ def browse_left(pid, uids=()):
     except Exception:
         oops()
         return
-    _browse(left, empty="Nothing left to see.")
+    _browse(left, empty=_t("Nothing left to see."))
 
 
 def browse_topic(pid, uids, i):
@@ -274,7 +275,7 @@ def open_date(pid, uid):
         _after_change()
         tooltip(opened_line(res), period=5000)
     else:
-        tooltip(f"Nothing new to open in {html.escape(res['names'][0] if res['names'] else 'that set')}.")
+        tooltip(_t("Nothing new to open in {name}.", name=html.escape(res["names"][0] if res["names"] else _t("that set"))))
     refresh_progress()
     app.swap(cfg())
 

@@ -8,6 +8,7 @@ from aqt.utils import tooltip
 
 from .. import app
 from .. import plans as P
+from ..words import t as _t
 from ..app import cfg
 from ..app import client
 from ..app import save_cfg
@@ -79,7 +80,7 @@ def _set_aside(path):
         os.replace(path, bad)
     except OSError:
         return
-    tooltip(f"Due Crew couldn't read this profile's plan file, so it's kept as {os.path.basename(bad)}.",
+    tooltip(_t("Due Crew couldn't read this profile's plan file, so it's kept as {file}.", file=os.path.basename(bad)),
             period=8000)
 
 

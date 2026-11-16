@@ -384,7 +384,12 @@ def count(code):
     """One more of `code` today, from any thread. Never raises: a count
     never stops what it counts."""
     try:
-        if _now["on"] and _now["tally"].add(code, today()) and _now["after"] is not None:
+        day = today()
+        # a computer off the network says so once a day a route, however often it tries (SC, 16 Nov: 141 of a day's
+        # counts were one sync's "offline"; "count once per day"): how many people, not how many tries
+        if isinstance(code, str) and code.endswith(":offline") and _now["on"] and _now["tally"].has(code, day):
+            return
+        if _now["on"] and _now["tally"].add(code, day) and _now["after"] is not None:
             _now["after"]()
     except Exception:
         pass

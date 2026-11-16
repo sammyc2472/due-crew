@@ -7,6 +7,7 @@ request. Plan and date names are the author's: plain text only."""
 from aqt.qt import QDialog, QDialogButtonBox, QLabel, QPushButton, Qt, QVBoxLayout
 
 from . import attach_alive, heading, note
+from ..words import later as _later, t as _t
 
 
 def _plain(text, muted=False):
@@ -25,34 +26,35 @@ class HeldDialog(QDialog):
         attach_alive(self)
         self.choice = None
         n = int(view.get("n") or 0)
-        self.setWindowTitle("Held back")
+        self.setWindowTitle(_t("Held back"))
         self.setMinimumWidth(420)
         root = QVBoxLayout(self)
-        heading(self, root, f"{view.get('name') or 'The plan'} holds back {n:,} card{'s' if n != 1 else ''}")
+        heading(self, root, _t(_later("{plan} holds back {n} card") if n == 1 else _later("{plan} holds back {n} cards"),
+                               plan=view.get('name') or _t("The plan"), n=f"{n:,}"))
         self.why = _plain(view.get("why") or "")
         root.addWidget(self.why)
         lines = [f"• {x}" for x in view.get("lines") or []]
         more = int(view.get("more") or 0)
         if more:
-            lines.append(f"and {more:,} more set{'s' if more != 1 else ''}")
+            lines.append(_t(_later("and {n} more set") if more == 1 else _later("and {n} more sets"), n=f"{more:,}"))
         self.list = _plain("\n".join(lines))
         self.list.setVisible(bool(lines))
         root.addWidget(self.list)
         lee = int(view.get("leeches") or 0)
-        note = ("Open them: one undo step."
-                + (f" {lee:,} more {'is a leech' if lee == 1 else 'are leeches'} and stay{'s' if lee == 1 else ''} suspended."
+        note = (_t("Open them: one undo step.")
+                + (" " + _t(_later("{n} more is a leech and stays suspended.") if lee == 1 else _later("{n} more are leeches and stay suspended."), n=f"{lee:,}")
                    if lee else "")
-                + (" What an author adds to later sets is still held back." if view.get("holding") else ""))
+                + (" " + _t("What an author adds to later sets is still held back.") if view.get("holding") else ""))
         self.note = _plain(note, muted=True)
         root.addWidget(self.note)
         buttons = QDialogButtonBox()
-        buttons.addButton("Close", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
-        self.stop_btn = QPushButton("Stop holding back")
-        self.stop_btn.setToolTip("Opens them, and nothing more is held back.")
+        buttons.addButton(_t("Close"), QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
+        self.stop_btn = QPushButton(_t("Stop holding back"))
+        self.stop_btn.setToolTip(_t("Opens them, and nothing more is held back."))
         self.stop_btn.clicked.connect(lambda: self._go("stop"))
         buttons.addButton(self.stop_btn, QDialogButtonBox.ButtonRole.ActionRole)
         self.stop_btn.setVisible(bool(view.get("holding")))  # after addButton, which shows it
-        self.open_btn = QPushButton("Open them")
+        self.open_btn = QPushButton(_t("Open them"))
         self.open_btn.setDefault(True)
         self.open_btn.clicked.connect(lambda: self._go("open"))
         buttons.addButton(self.open_btn, QDialogButtonBox.ButtonRole.AcceptRole)

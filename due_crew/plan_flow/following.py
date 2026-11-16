@@ -8,6 +8,7 @@ from aqt.utils import tooltip
 
 from .. import app
 from .. import plans as P
+from ..words import t as _t
 from ..app import _bg
 from ..app import cfg
 from ..app import client
@@ -118,8 +119,8 @@ def on_followed(plan, deck_id, swap, late, hold=False, lesson=None):
         # "skip:" saved the passed dates as skipped on my follow, so today's opens as usual
         res = _open_now([fresh], mode="skip" if kind == "skip" and not rest else "open")
         if not ok:
-            tooltip("Following. Couldn't save how you start, so the earlier sets wait here; "
-                    "Plan \u25be \u203a Push my dates back… or Open now on each.", period=7000)
+            tooltip(_t("Following. Couldn't save how you start, so the earlier sets wait here; "
+                       "Plan \u25be \u203a Push my dates back… or Open now on each."), period=7000)
             app.swap(cfg())
             return
         if kind == "catch":
@@ -128,7 +129,7 @@ def on_followed(plan, deck_id, swap, late, hold=False, lesson=None):
             if int(cards or 0):
                 start_catch(pid, days, -(-int(cards) // days))
         elif res is not None and not res["n"]:
-            tooltip(f"Following {html.escape(plan.get('name') or 'the plan')}.")
+            tooltip(_t("Following {name}.", name=html.escape(plan.get("name") or _t("the plan"))))
         app.swap(cfg())
 
     cl = client()

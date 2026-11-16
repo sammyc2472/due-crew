@@ -37,7 +37,7 @@ def keys():
                     if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                         out.setdefault(arg.value, os.path.relpath(path, REPO))
     words = _words()
-    for m in words.MONTHS:
+    for m in words.MONTHS + words.DAYS:
         out.setdefault(m, "due_crew/words.py")
     out.setdefault(words.NOTE, "due_crew/words.py")
     return out

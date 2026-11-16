@@ -1909,6 +1909,8 @@ def test_asks_and_tips_v390():
           "a folded corner, Tip over its words; a crewmate's or my own; who knows it, the plain bubble",
           "var note = !!peek && (D.kind === 'tip' || D.kind === 'hook');" in fj and "color-mix(in srgb, ' + tint + ' 13%, ' + c.bg + ')" in fj
           and "var tint = note ? (withPip ? peek.pips[0].a[night ? 1 : 0] : acc) : '';" in fj and "linear-gradient(225deg, transparent 50%, ' + tint + ' 50%)" in fj
+          # the folded corner is cut off the note, and the shadow follows the cut (SC: nothing behind the fold)
+          and "clip-path:polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);" in fj and "filter:drop-shadow(" in fj and "box-shadow:none;" in fj
           and "text-transform:uppercase;color:' + tint + ';', 'Tip')" in fj and "+ card + edge);" in fj and tip["kind"] == "tip" and knows["kind"] == "knows")
     check("tip: its writer's Pip waves while the note is folded and holds it out once it's opened (Show, or drawn again opened)",
           "if (fig && note && peek.pips[0].held) {" in fj and "pip(fig, {pip: {svg: peek.pips[0].held, a: peek.pips[0].a}, sevcss: D.sevcss}, night, '');" in fj

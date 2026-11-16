@@ -23,6 +23,7 @@ from aqt import mw
 from . import app, songs
 from .app import cfg, save_cfg
 from .errs import oops
+from .words import t as _t
 
 TIMEOUT = 8
 SEEN_KEY = "song_seen"
@@ -289,7 +290,7 @@ def listen(uid, pick=""):
         _open(s, a)
         return
     from . import sheets
-    names = [n for _k, n in songs.APPS]
+    names = [_t(n) for _k, n in songs.APPS]
 
     def then(i):
         key = songs.APPS[i][0]
@@ -299,8 +300,8 @@ def listen(uid, pick=""):
         _open(s, key)
         _redraw()
 
-    sheets.ask_item("Which music app do you use?", "Listen opens your crew's songs there. Settings can change it.",
-                    names, then, yes="Listen")
+    sheets.ask_item(_t("Which music app do you use?"), _t("Listen opens your crew's songs there. Settings can change it."),
+                    names, then, yes=_t("Listen"))
 
 
 def _open(s, key):
@@ -312,7 +313,7 @@ def _open(s, key):
     try:
         from aqt.qt import QApplication
         QApplication.clipboard().setText(songs.words(s))
-        tooltip(f"Copied: {songs.words(s)}")
+        tooltip(_t("Copied: {what}", what=songs.words(s)))
     except Exception:
         oops()
 

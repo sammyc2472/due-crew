@@ -7,6 +7,7 @@ read them as rich text, so it's told not to."""
 from aqt.qt import QDialog, QFrame, QHBoxLayout, QLabel, QPushButton, Qt, QVBoxLayout, QWidget
 
 from . import attach_alive, heading, note
+from ..words import t as _t
 
 
 class WhyDialog(QDialog):
@@ -16,7 +17,7 @@ class WhyDialog(QDialog):
     def __init__(self, parent, groups, on_fix, more=False):
         super().__init__(parent)
         attach_alive(self)
-        self.setWindowTitle("Why isn't it showing?")
+        self.setWindowTitle(_t("Why isn't it showing?"))
         self.setMinimumWidth(460)
         self._fix = on_fix
         lay = QVBoxLayout(self)
@@ -29,7 +30,7 @@ class WhyDialog(QDialog):
         lay.addWidget(note(self.note))
         foot = QHBoxLayout()
         foot.addStretch()
-        close = QPushButton("Close")
+        close = QPushButton(_t("Close"))
         close.clicked.connect(self.close)
         foot.addWidget(close)
         lay.addLayout(foot)
@@ -62,14 +63,14 @@ class WhyDialog(QDialog):
             self.list.addWidget(row)
             self.rows.append((say, btn))
         if not groups:
-            say = QLabel("Nothing to say about these cards.")
+            say = QLabel(_t("Nothing to say about these cards."))
             self.list.addWidget(say)
             self.rows.append((say, None))
         bits = []
         if self._more:
-            bits.append("Only the first 2,000 picked cards were read.")
+            bits.append(_t("Only the first 2,000 picked cards were read."))
         if any(g.get("fix") and g["fix"][0] != "study" for g in groups):
-            bits.append("Each fix is Anki's own, and Edit › Undo takes it back.")
+            bits.append(_t("Each fix is Anki's own, and Edit › Undo takes it back."))
         self.note.setText(" ".join(bits))
         self.note.setVisible(bool(bits))
 

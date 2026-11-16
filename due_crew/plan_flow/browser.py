@@ -8,6 +8,7 @@ from aqt.utils import tooltip
 
 from .. import app
 from .. import plans as P
+from ..words import t as _t
 from .. import schedule as S
 from ..app import _state
 from ..app import cfg
@@ -30,30 +31,30 @@ def browser_menu(browser, menu):
     3.8.1: the ones for writing a plan only for someone who writes one."""
     menu.addSeparator()
     from .. import why_flow
-    why = menu.addAction("Due Crew: why isn't it showing?")
+    why = menu.addAction(_t("Due Crew: why isn't it showing?"))
     why.triggered.connect(lambda: why_flow.explain(browser))
-    opn = menu.addAction("Due Crew: open these…")  # 3.8.0: never suspends; leeches stay
+    opn = menu.addAction(_t("Due Crew: open these…"))  # 3.8.0: never suspends; leeches stay
     opn.triggered.connect(lambda: open_these(browser))
     from .. import magic_flow
     if magic_flow.on():  # 3.9.7: the picked cards in Magic search: study them, keep them, put them on days
-        mg = menu.addAction("Due Crew: put on a day…")
+        mg = menu.addAction(_t("Due Crew: put on a day…"))
         mg.triggered.connect(lambda: magic_flow.from_browser(browser))
     if not client().signed_in:
         return
     if client().session.get("plans_authored"):  # the plans I write or co-author, from the day's refresh
-        action = menu.addAction("Due Crew: add to a plan…")
+        action = menu.addAction(_t("Due Crew: add to a plan…"))
         action.triggered.connect(lambda: add_to_plan(browser))
-        tag = menu.addAction("Due Crew: tag for a plan…")  # 3.8.0: plan tags
+        tag = menu.addAction(_t("Due Crew: tag for a plan…"))  # 3.8.0: plan tags
         tag.triggered.connect(lambda: tag_for_plan(browser))
         if _one_card(browser):  # 3.8.1: a note on one card, for the plan's followers
-            note = menu.addAction("Due Crew: note for the plan's followers…")
+            note = menu.addAction(_t("Due Crew: note for the plan's followers…"))
             note.triggered.connect(lambda: note_for_card(browser))
-        copy = menu.addAction("Due Crew: copy as plan selector")
+        copy = menu.addAction(_t("Due Crew: copy as plan selector"))
         copy.triggered.connect(lambda: copy_selector(browser))
-        out = menu.addAction("Due Crew: export for my AI…")
+        out = menu.addAction(_t("Due Crew: export for my AI…"))
         out.triggered.connect(lambda: export_selected(browser))
     if followed():
-        where = menu.addAction("Due Crew: show on my plan")
+        where = menu.addAction(_t("Due Crew: show on my plan"))
         where.triggered.connect(lambda: show_on_plan(browser))
 
 
@@ -89,7 +90,7 @@ def opens_map():
         if not ahead:
             continue
         idx = P.DeckIndex(mw.col, st["deck_id"])
-        name = str(p.get("name") or "Plan")
+        name = str(p.get("name") or _t("Plan"))
         for day, u in ahead:
             for cid in idx.match(u, _swap(st), p["doc"]):
                 if cid not in cards or day < cards[cid][0]:
@@ -136,7 +137,7 @@ def sidebar_menu(sidebar, menu, item, index):
         return
     menu.addSeparator()
     parent = getattr(sidebar, "browser", None) or mw
-    menu.addAction("Due Crew: open its cards…").triggered.connect(lambda: open_tag(parent, tag))
+    menu.addAction(_t("Due Crew: open its cards…")).triggered.connect(lambda: open_tag(parent, tag))
 
 
 def _tag_words(tag):
@@ -167,7 +168,7 @@ def open_these(browser):
         oops()
         return
     if not cids:
-        tooltip("Select some cards first.")
+        tooltip(_t("Select some cards first."))
         return
     _open_sheet(browser, cids, None, "")
 
@@ -184,8 +185,9 @@ def _on_plans(cids):
         names = [str(u.get("name") or "?") for u in P.units(p["doc"])
                  if idx.match(u, _swap(st), p["doc"]) & want]
         if names:
-            out.append(f"On {p.get('name') or 'a plan'}: {', '.join(names[:3])}"
-                       + (f" and {len(names) - 3} more" if len(names) > 3 else "") + ", which count them")
+            plan, sets = p.get("name") or _t("a plan"), ", ".join(names[:3])
+            out.append(_t("On {plan}: {sets} and {n} more, which count them", plan=plan, sets=sets, n=len(names) - 3) if len(names) > 3
+                       else _t("On {plan}: {sets}, which count them", plan=plan, sets=sets))
         if len(out) == 2:
             break
     return out
@@ -235,7 +237,8 @@ def open_cards_now(cids, name, first=True, study=False):
                 mw.col.decks.select(did)
                 mw.moveToState("overview")
     if n:
-        tooltip(f"Opened {n:,}{' · first in line' if first else ''}. Edit › Undo puts them back.", period=5000)
+        tooltip(_t("Opened {n} · first in line. Edit › Undo puts them back.", n=f"{n:,}") if first
+                else _t("Opened {n}. Edit › Undo puts them back.", n=f"{n:,}"), period=5000)
     app.swap(cfg())
     return n
 
@@ -273,7 +276,7 @@ def show_on_plan(browser):
     except Exception:
         cids = []
     if not cids or not mw.col:
-        tooltip("Pick a card first.")
+        tooltip(_t("Pick a card first."))
         return
     today = _today()
     for p in followed():
@@ -290,9 +293,9 @@ def show_on_plan(browser):
             continue
         u = min(us, key=lambda x: abs((S.d(str(x["opens"])) - S.d(today)).days))
         jump_to(p["id"], str(u["opens"]))
-        tooltip(f"{html.escape(P.plan_title(p))}: {html.escape(str(u.get('name') or '?'))}, {P.fmt_day(u['opens'])}")
+        tooltip(f"{html.escape(P.plan_title(p))}: {html.escape(str(u.get('name') or '?'))}, {P.day_said(u['opens'])}")
         return
-    tooltip("It isn't on a plan you follow.")
+    tooltip(_t("It isn't on a plan you follow."))
 
 
 def jump_to(pid, day):
@@ -324,8 +327,8 @@ def open_export():
 
 
 def _saved(n, path):
-    tooltip(f"Saved {n:,} note{'s' if n != 1 else ''} to {html.escape(os.path.basename(path))}. "
-            "Attach it to your AI chat with the prompt.")
+    tooltip(P.tn("Saved {n} note to {file}. Attach it to your AI chat with the prompt.",
+                 "Saved {n} notes to {file}. Attach it to your AI chat with the prompt.", n, file=html.escape(os.path.basename(path))))
 
 
 def export_selected(browser):
@@ -339,13 +342,13 @@ def export_selected(browser):
         oops()
         return
     if not nids:
-        tooltip("Select some notes first.")
+        tooltip(_t("Select some notes first."))
         return
     from aqt.qt import QFileDialog
     from ..ui.export_dialog import save
     desk = os.path.join(os.path.expanduser("~"), "Desktop")
     start = os.path.join(desk if os.path.isdir(desk) else os.path.expanduser("~"), "cards-for-my-ai.txt")
-    path, _ = QFileDialog.getSaveFileName(browser, "Export for my AI", start, "Text (*.txt)")
+    path, _ = QFileDialog.getSaveFileName(browser, _t("Export for my AI"), start, _t("Text") + " (*.txt)")
     if path:
         save(mw.col, nids, path, True, _saved)
 
@@ -371,12 +374,13 @@ def copy_selector(browser):
         oops()
         return
     if not n:
-        tooltip("Select some notes or cards first.")
+        tooltip(_t("Select some notes or cards first."))
         return
     from aqt.qt import QApplication
     QApplication.clipboard().setText(text)
-    what = f"{n:,} note{'s' if n != 1 else ''}" if notes_mode else f"{n:,} card{'s' if n != 1 else ''}"
-    tooltip(f"Copied {what}. Paste into a set on duecrew.com." + (" A set takes up to 5,000." if n > 5000 else ""))
+    said = (P.tn("Copied {n} note. Paste into a set on duecrew.com.", "Copied {n} notes. Paste into a set on duecrew.com.", n) if notes_mode
+            else P.tn("Copied {n} card. Paste into a set on duecrew.com.", "Copied {n} cards. Paste into a set on duecrew.com.", n))
+    tooltip(said + (" " + _t("A set takes up to 5,000.") if n > 5000 else ""))
 
 
 def tag_for_plan(browser):
@@ -392,7 +396,7 @@ def tag_for_plan(browser):
         return
     nids = [int(n) for n in nids or []]
     if not nids:
-        tooltip("Select some notes first.")
+        tooltip(_t("Select some notes first."))
         return
     guid_of = {}
     for i in range(0, len(nids), 500):
@@ -445,9 +449,9 @@ def tag_for_plan(browser):
                 c.setdefault("authored_tags", {}).setdefault(plan.get("id"), {}).setdefault("tags", {})[str(t["id"])] = path
             _psave(c)
         n = len(added or taken)
-        tooltip((f"Took {n:,} note{'s' if n != 1 else ''} off {html.escape(name)}."
-                 if taken else f"Tagged {n:,} note{'s' if n != 1 else ''} as {html.escape(name)}. ")
-                + ("" if taken else f"{html.escape(plan.get('name') or 'The plan')}'s followers get it with its next update."),
+        tooltip(P.tn("Took {n} note off {name}.", "Took {n} notes off {name}.", n, name=html.escape(name)) if taken
+                else P.tn("Tagged {n} note as {name}.", "Tagged {n} notes as {name}.", n, name=html.escape(name)) + " "
+                + _t("{plan}'s followers get it with its next update.", plan=html.escape(plan.get("name") or _t("The plan"))),
                 period=5000)
 
     TagDialog(browser, client(), [guid_of[n] for n in nids if n in guid_of], on_done=done, outside=outside).exec()
@@ -476,7 +480,7 @@ def note_for_card(browser):
         return
     refs = P.card_refs(mw.col, cids) if len(cids or []) == 1 else []
     if not refs:
-        tooltip("Select one card first.")
+        tooltip(_t("Select one card first."))
         return
     from ..ui.remark_dialog import RemarkDialog
     RemarkDialog(browser, client(), refs[0][0], refs[0][1], on_done=lambda text: tooltip(html.escape(text), period=5000)).exec()
@@ -509,13 +513,13 @@ def add_to_plan(browser):
         except AttributeError:
             cids = browser.selectedCards()
     if not cids and not search:
-        tooltip("Switch the browser to Cards to add single cards to a plan." if notes_mode
-                else "Search for the cards (a tag, say), or select them, first.")
+        tooltip(_t("Switch the browser to Cards to add single cards to a plan.") if notes_mode
+                else _t("Search for the cards (a tag, say), or select them, first."))
         return
     refs = P.card_refs(mw.col, cids) if cids else []  # which cards, never their text
     from ..ui.add_cards_dialog import AddCardsDialog
 
     def added(plan, n):
-        tooltip(f"Added {n:,} card{'s' if n != 1 else ''} to {html.escape(plan.get('name') or 'the plan')}.")
+        tooltip(P.tn("Added {n} card to {name}.", "Added {n} cards to {name}.", n, name=html.escape(plan.get("name") or _t("the plan"))))
 
     AddCardsDialog(browser, client(), refs, _today(), on_added=added, search=search, search_n=search_n).exec()

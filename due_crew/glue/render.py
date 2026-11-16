@@ -34,6 +34,7 @@ from ..wrap import _deck_deltas
 from ..wrap import _exam_eve_info
 from ..wrap import _wrap_data
 from ..wrap import _wrap_info
+from ..words import t as _t
 
 from .refresh import _board_data, _morning_now, _push_if_stale, _run, refresh_board
 
@@ -71,7 +72,7 @@ def _deck_counts(content):
     query a draw, on the main thread (the Decks screen's own draw); whatever goes wrong, Anki's list is as it was."""
     try:
         from .. import deck_counts
-        if not cfg().get(deck_counts.SWITCH) or mw.col is None or not getattr(content, "tree", ""):
+        if not cfg().get(deck_counts.SWITCH, True) or mw.col is None or not getattr(content, "tree", ""):
             return
         col = mw.col
         names = {int(d.id): d.name for d in col.decks.all_names_and_ids()}
@@ -89,7 +90,7 @@ def _deck_counts(content):
 
 
 def _on_render(deck_browser, content):
-    _deck_counts(content)  # 3.9.12: Anki's own list without the siblings it will bury (Settings › Study; off by default)
+    _deck_counts(content)  # 3.9.12: Anki's own list without the siblings it will bury (Settings › Study; on unless turned off: SC, 16 Nov, "start it on")
     app.on_decks_render()
     content.stats += board.key_js()  # 3.9.1: the page's own scripts add the board's key to what they send
     try:
@@ -157,7 +158,7 @@ def _squad_view_with_bingo(c):
                                              bool(squares) and all(q.get("done") for q in squares),
                                              f'{(bv.get("card") or {}).get("wk")}:{bv.get("squad_id")}'))
             if bingo_flow.new_lines(bv):
-                tooltip("BINGO! Your squad just made a line.", period=4000)
+                tooltip(_t("BINGO! Your squad just made a line."), period=4000)
                 _scrap(lambda sf: sf.moment("bingo", "Your squad made a bingo line", "", "cheer", (_state.get("labels") or [None])[0]))
     return sv
 
@@ -178,7 +179,7 @@ def _bingo_cmd(cmd):
         if bv:
             from ..bingo import share_text
             copy_text(share_text(bv["card"], bv["ev"], bv["squad"]))
-            tooltip("Copied.")
+            tooltip(_t("Copied."))
 
 
 def _board_html(c):

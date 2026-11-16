@@ -14,6 +14,8 @@ import datetime as _dt
 import math
 import re
 
+from .words import t as _t
+
 FAMILIES = ("early", "spread", "focus", "volume", "fresh", "often", "clean", "wild")
 DIFF_NAMES = {"e": "easy", "m": "medium", "h": "hard"}
 SQUARE_TYPES = ("window", "minute", "sittings", "parts", "focus", "beat", "rel", "best",
@@ -173,9 +175,15 @@ def _days(f, dow=None):
     return [lb for i, lb in enumerate(f["week"]) if lb <= f["today"] and (dow is None or i in dow)]
 
 
+DAYS, RUNNING = "days", "days running"  # what a count is of (_count)
+
+
 def _count(done, need, unit):
+    """(done, "2 of 3 days"): unit is DAYS (one day: "1 of 1 day") or RUNNING."""
     have = min(done, need)
-    return have >= need, f"{have} of {need} {unit}"
+    if unit == RUNNING:
+        return have >= need, _t("{n} of {of} days running", n=have, of=need)
+    return have >= need, _t("{n} of {of} days", n=have, of=need) if need > 1 else _t("{n} of {of} day", n=have, of=need)
 
 
 def _sessions(ts, gap):
@@ -199,7 +207,7 @@ def _longest_run(ts, gap):
     return best
 
 
-def _tally(f, test, p, unit="days"):
+def _tally(f, test, p):
     """(done, words) for "that many days" (row: that many days in a row,
     this week so far). Days are Monday on; a gap day starts the run again."""
     need = int(p.get("days") or 1)
@@ -211,8 +219,8 @@ def _tally(f, test, p, unit="days"):
             best = max(best, run)
         have = min(best, need)
         done = best >= need
-        return done, "Done" if done else f"{have} of {need} days in a row"
-    return _count(sum(1 for lb in days if test(lb)), need, unit if need > 1 else unit.rstrip("s"))
+        return done, _t("Done") if done else _t("{n} of {of} days in a row", n=have, of=need)
+    return _count(sum(1 for lb in days if test(lb)), need, DAYS)
 
 
 def progress(sq, f):
@@ -227,11 +235,11 @@ def progress(sq, f):
             return _tally(f, lambda lb: any(lo <= _eff_hour(x, roll) < hi for x in times.get(lb, ())), p)
         if t == "minute":
             hit = any(x.strftime("%H:%M") in p["hm"] for lb in _days(f) for x in times.get(lb, ()))
-            return hit, "Done" if hit else "Not yet"
+            return hit, _t("Done") if hit else _t("Not yet")
         if t == "sittings":
             best = max([_sessions(times.get(lb, ()), p["gap"]) for lb in _days(f)] or [0])
             done = best >= p["n"]
-            return done, "Done" if done else f"Best day: {best} of {p['n']} sittings"
+            return done, _t("Done") if done else _t("Best day: {n} of {of} sittings", n=best, of=p["n"])
         if t == "parts":
             parts = p["parts"]
 
@@ -241,13 +249,13 @@ def progress(sq, f):
             done, words = _tally(f, lambda lb: covered(lb) == len(parts), p)
             if done or p.get("row"):
                 return done, words
-            return False, f"Today: {covered(f['today'])} of {len(parts)} parts"
+            return False, _t("Today: {n} of {of} parts", n=covered(f["today"]), of=len(parts))
         if t == "focus":
             if int(p.get("days") or 1) > 1:
                 return _tally(f, lambda lb: _longest_run(times.get(lb, ()), p["gap"]) >= p["minutes"], p)
             best = max([_longest_run(times.get(lb, ()), p["gap"]) for lb in _days(f)] or [0])
             done = best >= p["minutes"]
-            return done, "Done" if done else f"Longest: {int(best)} of {p['minutes']} min"
+            return done, _t("Done") if done else _t("Longest: {n} of {of} min", n=int(best), of=p["minutes"])
         if t == "beat":
             run = best = 0
             for lb in _days(f):
@@ -255,27 +263,27 @@ def progress(sq, f):
                 run = run + 1 if daily.get(lb, 0) > daily.get(prev, 0) else 0
                 best = max(best, run)
             if best >= p["run"]:
-                return True, "Done"
+                return True, _t("Done")
             yday = (_dt.date.fromisoformat(f["today"]) - _dt.timedelta(days=1)).isoformat()
             to_go = daily.get(yday, 0) + 1 - daily.get(f["today"], 0)
-            return False, f"{to_go} more today beats yesterday" if p["run"] == 1 else f"{best} of {p['run']} days running"
+            return False, _t("{n} more today beats yesterday", n=to_go) if p["run"] == 1 else _t("{n} of {of} days running", n=best, of=p["run"])
         if t == "rel":
             target = math.ceil(f["usual"] * p["x"])
             if int(p.get("days") or 1) > 1:
                 return _tally(f, lambda lb: daily.get(lb, 0) >= target, p)
             best = max([daily.get(lb, 0) for lb in _days(f)] or [0])
             if best >= target:
-                return True, "Done"
-            return False, f"{target - daily.get(f['today'], 0)} to go today ({target} is {p['x']}× your usual)"
+                return True, _t("Done")
+            return False, _t("{n} to go today ({target} is {x}× your usual)", n=target - daily.get(f["today"], 0), target=target, x=p["x"])
         if t == "best":
             def beat_month(lb):
                 d = _dt.date.fromisoformat(lb)
                 before = [daily.get((d - _dt.timedelta(days=i)).isoformat(), 0) for i in range(1, p["days"] + 1)]
                 return daily.get(lb, 0) > max(before), max(before)
             if any(daily.get(lb, 0) and beat_month(lb)[0] for lb in _days(f)):
-                return True, "Done"
+                return True, _t("Done")
             top = beat_month(f["today"])[1]
-            return False, f"{top + 1 - daily.get(f['today'], 0)} to go today (your best is {top})"
+            return False, _t("{n} to go today (your best is {top})", n=top + 1 - daily.get(f["today"], 0), top=top)
         if t == "newdays":
             return _tally(f, lambda lb: f["new"].get(lb, 0) > 0, p)
         if t == "newdone":
@@ -293,10 +301,10 @@ def progress(sq, f):
                 run = run + 1 if h is not None and h == last else (1 if h is not None else 0)
                 best = max(best, run)
                 last = h
-            return _count(best, p["run"], "days running")
+            return _count(best, p["run"], RUNNING)
     except (KeyError, TypeError, ValueError):
         pass
-    return False, "Update Due Crew to play this one"
+    return False, _t("Update Due Crew to play this one")
 
 
 # ---- play: what my squad rows carry ----

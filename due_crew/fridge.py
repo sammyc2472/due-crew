@@ -17,7 +17,10 @@ import marshal
 
 from .backend.shapes import clean_doodle, clean_note
 
-KEEP = 12  # what fits around a board on a laptop's screen
+# 3.9.12 (SC: "They shouldn't leave when a 13th arrives. if it gets too crowded, the user can choose to remove
+# extras"): it was 12, what fits around a board on a laptop's screen, and a 13th pushed the oldest into the scrapbook.
+# Now only I take one down; this is the file's ceiling, far past what anyone pins
+KEEP = 100
 
 
 def key(item):

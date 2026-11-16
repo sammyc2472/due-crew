@@ -1459,8 +1459,22 @@ def test_scrapbook_v3910():
     finally:
         dc._reset_runtime, dc._rerender = saved
     n_out = len(SF.items("sam"))
-    check("signing out: the fridge empties into that account's scrapbook, which stays, and another account sees none of it",
-          cf.fridge("sam") == [] and n_out == FR.KEEP + 2 and SF.items("nia") == [], n_out)
+    # 3.9.12 (SC: it took everything off his Decks screen): signed out they're hidden, not moved; back for their owner
+    check("signing out: the drawings wait where they hung, shown to nobody else, and are there again for their owner; the scrapbook is as it was",
+          cf.fridge(None) == [] and cf.fridge("nia") == [] and len(cf.fridge("sam")) == FR.KEEP and n_out == 3 and SF.items("nia") == [], n_out)
+    last = cf.fridge("sam")[-2]  # (the newest there is "day 1", pinned up above and still in the scrapbook)
+    cf.move_fridge(FR.key(last), "r", 40, 120)
+    cf.keep_doodles([{"from": "dre", "name": "Dre", "at": "2026-11-20T10:00:00Z", "note": "for nia", "doodle": draw}], ents, "nia")
+    theirs = [x for x in SF.items("sam") if x.get("n") == last["n"] and x.get("at") == last["at"]]
+    check("another account signing in: the first one's go to its own scrapbook, each with its spot, and Pin up hangs it back there",
+          [x["n"] for x in cf.fridge("nia")] == ["for nia"] and len(SF.items("sam")) > 3 and SF.items("nia") == []
+          and theirs and theirs[0].get("p") == ["r", 40, 120] and S.to_fridge(theirs[0])["p"] == ["r", 40, 120]
+          and "p" not in S.to_fridge({"from": "x", "name": "X", "at": "2026-11-01", "d": draw}), [x.get("p") for x in theirs])
+    # back to how the checks below found things: sam's three in the scrapbook, nobody's fridge
+    for x in [x for x in SF.items("sam") if x["n"] not in ("day 1", "day 2", first["n"])] + [x for x in SF.items("sam") if x["n"] == "day 1"][1:]:
+        SF.forget(S.key(x), "sam")
+    from due_crew.wrap import _wrap_data as _wd
+    _wd().pop("fridge", None), _wd().pop("fridge_uid", None)
 
     # what else is kept
     SF.cheers_in([{"from": "nia", "name": "Nia", "at": "2026-11-02T09:00:00Z", "note": "you got this", "emoji": "💪"},
@@ -1521,7 +1535,7 @@ def test_scrapbook_v3910():
         dc._state["wrapped_open"] = {"year": 2026}
         a_pz = next(x for x in SF.items("sam") if x["k"] == "pz")
         a_luck = next(x for x in SF.items("sam") if x["k"] == "luck")
-        before = len(SF.items("sam"))
+        before, hung = len(SF.items("sam")), len(cf.fridge("sam"))
         send("scrappin:" + S.key(a_pz))
         pinned = (len(SF.items("sam")), [x["n"] for x in cf.fridge("sam")])
         send("scrappin:" + S.key(a_luck))
@@ -1535,8 +1549,8 @@ def test_scrapbook_v3910():
               and dc._state.get("wrapped_open") is None and swaps, (opened, pics, conf))
         check("Pin up puts a polaroid back on the Decks screen and out of the scrapbook (never a note); "
               "Delete and Empty ask first, in red, and only then go",
-              pinned == (before - 1, [a_pz["n"]]) and after_del == before - 2 and SF.items("sam") == []
-              and asked == [("Delete this?", True), ("Empty the scrapbook?", True)] and len(cf.fridge("sam")) == 1, (pinned, after_del, asked))
+              pinned[0] == before - 1 and a_pz["n"] in pinned[1] and len(pinned[1]) == hung + 1 and after_del == before - 2 and SF.items("sam") == []
+              and asked == [("Delete this?", True), ("Empty the scrapbook?", True)] and len(cf.fridge("sam")) == hung + 1, (pinned, after_del, asked))
     finally:
         dc.open_scrapbook, dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen, dc._scrap_load = keep[:6]
         dc._state.clear()
@@ -1547,7 +1561,7 @@ def test_scrapbook_v3910():
         SF._BOOK.update(path=None, data=None, disk=None)
     src = srcs.glue_src()
     check("its ways in: the foot's Scrapbook, Tools › Due Crew › Scrapbook… (Your year… is gone), the December line",
-          '("Scrapbook…", lambda: open_scrapbook())' in src and "Your year…" not in src)
+          '(_later("Scrapbook…"), lambda: open_scrapbook())' in src and "Your year…" not in src)
 
 
 def test_banner_actions_sit_together_v390():
@@ -1767,10 +1781,11 @@ def test_doodle_cheers_v391():
           and "noteEls[dd.ni].remove()" in js and "paper(150, 85, false)" in js and "'from ' + dd.from" in js)
     # the fridge: mine, around the Decks screen, the last KEEP, on this computer
     cheers = [{"from": "dre", "name": "Dre", "at": f"2026-10-{d:02d}T10:00:00Z", "note": f"day {d}", "doodle": draw} for d in range(1, 30)]
+    was, FR.KEEP = FR.KEEP, 12  # the file's ceiling, tried small (3.9.12: it's 100, and only I take one down)
     items = FR.add([], cheers + [{"from": "mo", "name": "Mo", "at": "x", "doodle": None}], {"dre": "purple"})
     again = FR.add(items, cheers[-2:], {})
     check("the fridge: the ones that carried a doodle, each once, with its note, the last 12, colour as it came",
-          FR.KEEP == 12 and len(items) == 12 and items[-1]["at"].startswith("2026-10-29") and items[0]["at"].startswith("2026-10-18")
+          was == 100 and len(items) == 12 and items[-1]["at"].startswith("2026-10-29") and items[0]["at"].startswith("2026-10-18")
           and items[0]["a"] == "purple" and items[-1]["n"] == "day 29" and again == items)
     k = FR.key(items[-1])
     moved = FR.move(items, k, "l", -9000, 250)
@@ -1780,6 +1795,7 @@ def test_doodle_cheers_v391():
           and moved[-1]["p"] == ["l", -FR.REACH, 250] and "p" not in moved[0]
           and FR.move(items, k, "up", 5, 5)[-1].get("p") is None
           and FR.clean([dict(moved[-1], p=["r", 40, 120])])[0]["p"] == ["r", 40, 120]
+          and not setattr(FR, "KEEP", was)
           and FR.clean([{"d": {"k": "pic"}}, 5, {"from": "x", "d": draw, "p": [5, 200]}]) == [{"from": "x", "name": "?", "at": "", "a": "", "n": "", "d": draw}])
     people = {"dre": {"user_id": "dre", "name": "Dre", "look": ["cap"], "accent": "purple"}}
     fr = board.fridge_html(moved[-3:], people, {"sev": True})
@@ -1943,15 +1959,15 @@ def test_fridge_account_and_undo_v391():
     nias = (wrap._wrap_data().get("fridge_uid"), [x["n"] for x in cf.fridge("nia")], cf.fridge("sam"))
     check("fridge to account: an older one is whoever's signed in, then theirs; another account sees none of it, "
           "and its own first drawing starts a fridge of its own",
-          legacy == (1, 1) and adopted == ("sam", 2, []) and nias == ("nia", ["day 3"], []), (legacy, adopted, nias))
+          legacy == (1, 0) and adopted == ("sam", 2, []) and nias == ("nia", ["day 3"], []), (legacy, adopted, nias))
     saved = (dc._reset_runtime, dc._rerender)
     dc._reset_runtime, dc._rerender = (lambda **k: None), (lambda: None)
     try:
         dc._on_signed_out()
     finally:
         dc._reset_runtime, dc._rerender = saved
-    check("fridge to account: signing out empties it (the drawings were that account's)",
-          "fridge" not in wrap._wrap_data() and "fridge_uid" not in wrap._wrap_data() and cf.fridge("nia") == [] and cf.gone() is None)
+    check("fridge to account: signed out they're shown to nobody, and wait for their owner (3.9.12: they were swept into the scrapbook)",
+          cf.fridge(None) == [] and cf.fridge("sam") == [] and [x["n"] for x in cf.fridge("nia")] == ["day 3"] and cf.gone() is None)
     src = srcs.glue_src()
     check("fridge to account: the board draws the signed-in account's, and keeps a landing one for it",
           "fridge=closet_flow.fridge(client().user_id)" in src and 'cf.keep_doodles(fresh, data["entries"], client().user_id)' in src)
@@ -3181,14 +3197,14 @@ def test_sheets_v391():
                                                                       "together.py", "plan_flow.py", "squads.py", "cards.py")}
     check("sheets: what the board asks goes through them: status, name, sign out, delete, a to-do, the plan squad, "
           "a good-luck line, a tip, hold back, reset, change deck, stop following, the founder's tools",
-          all(k in src[f] for f, k in (("social.py", 'sheets.ask_text("Status"'), ("__init__.py", 'sheets.ask_text("Display name"'),
-                                       ("__init__.py", 'sheets.confirm("Sign out?"'), ("__init__.py", 'sheets.confirm("Delete account?"'),
-                                       ("due_flow.py", 'sheets.ask_text("Edit to-do"'), ("team_flow.py", 'sheets.confirm("Join this plan'),
-                                       ("team_flow.py", 'sheets.ask_text("Reply"'), ("team_flow.py", 'sheets.ask_text("Ask the squad"'),
-                                       ("together.py", 'sheets.ask_text("Good-luck card"'), ("together.py", 'sheets.ask_text("Send a tip"'),
-                                       ("plan_flow.py", "sheets.confirm(title, text, yes"), ("plan_flow.py", 'sheets.confirm("Reset to default?"'),
-                                       ("plan_flow.py", 'sheets.ask_item("Change deck"'), ("plan_flow.py", "sheets.confirm_check(title, text, \"Stop\""),
-                                       ("squads.py", 'sheets.confirm("Block?"'), ("squads.py", 'sheets.confirm("Remove?"')))
+          all(k in src[f] for f, k in (("social.py", 'sheets.ask_text(_t("Status")'), ("__init__.py", 'sheets.ask_text(_t("Display name")'),
+                                       ("__init__.py", 'sheets.confirm(_t("Sign out?")'), ("__init__.py", 'sheets.confirm(_t("Delete account?")'),
+                                       ("due_flow.py", 'sheets.ask_text(_t("Edit to-do")'), ("team_flow.py", 'sheets.confirm(_t("Join this plan'),
+                                       ("team_flow.py", 'sheets.ask_text(_t("Reply")'), ("team_flow.py", 'sheets.ask_text(_t("Ask the squad")'),
+                                       ("together.py", 'sheets.ask_text(_t("Good-luck card")'), ("together.py", 'sheets.ask_text(_t("Send a tip")'),
+                                       ("plan_flow.py", "sheets.confirm(title, text, yes"), ("plan_flow.py", 'sheets.confirm(_t("Reset to default?")'),
+                                       ("plan_flow.py", 'sheets.ask_item(_t("Change deck")'), ("plan_flow.py", "sheets.confirm_check(title, text, _t(\"Stop\")"),
+                                       ("squads.py", 'sheets.confirm(_t("Block?")'), ("squads.py", 'sheets.confirm(_t("Remove?")')))
           and not any(x in t for t in src.values() for x in ("QInputDialog", "askUser", "getText(")))
     node = shutil.which("node")
     if not node:

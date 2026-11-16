@@ -43,7 +43,7 @@ def test_calm_offline_v399():
           and D._clock(at - 9 * 86400, now) == "30 Oct" and D._clock(0, now) == "", D._clock(at, now))
     line = D.offline_html(at, now)
     check("offline: the line says it plainly, when, and Try now refreshes (the board's own command)",
-          "Can&rsquo;t reach Due Crew. Your studying still counts and sends when it&rsquo;s back. Last refresh 3:10 PM."
+          "Can’t reach Due Crew. Your studying still counts and sends when it’s back. Last refresh 3:10 PM."
           in line and "duecrew:refresh|" in line and "Try now" in line and 'role="status"' in line)
     page = board.render(data, {"period": "today"}, at, offline=True, notice={"id": 1, "text": "Hi"})
     calm = board.render(data, {"period": "today"}, at)
@@ -1064,7 +1064,7 @@ def test_a_quiet_draw_of_the_same_board_is_skipped_v3912():
 
 def test_deck_counts_without_buried_siblings_v3912():
     """3.9.12 (SC's pick A): Anki's deck list as what there is to do: the smaller of Anki's count and the notes
-    due where a deck buries siblings, a deck and the decks under it; behind a switch, off by default."""
+    due where a deck buries siblings, a deck and the decks under it; behind a switch, on unless turned off (3.10.0)."""
     import due_crew as dc
     from due_crew import deck_counts as DC, settings_model as SM
     names = {1: "T", 2: "T::Kid", 3: "Plain", 4: "Tx"}
@@ -1094,8 +1094,8 @@ def test_deck_counts_without_buried_siblings_v3912():
           and '<span class="zero-count" title="Anki counts 2. 2 are siblings' in DC.rewrite(row(2, 0, 0, 2), {2: (0, 0)}))
     check("the list: a page that isn't shaped as expected is left alone", DC.rewrite("<table>no rows</table>", got) == "<table>no rows</table>"
           and DC.rewrite(None, got) is None)
-    check("the switch: Settings › Study, off by default, this computer's", SM.change(["set", "deck_counts", "1"], {}) == {"deck_counts": True}
-          and SM.BOARD_DEFAULTS["deck_counts"] is False and "Deck counts leave out buried siblings" in board._settings_study({})
+    check("the switch: Settings › Study, on unless turned off (3.10.0, SC: \"start it on\"), this computer's", SM.change(["set", "deck_counts", "1"], {}) == {"deck_counts": True}
+          and SM.BOARD_DEFAULTS["deck_counts"] is True and "Deck counts leave out buried siblings" in board._settings_study({})
           and "deck_counts" not in __import__("due_crew.account", fromlist=["x"]).ACCOUNT_KEYS)
     # the glue: nothing read with the switch off; on, one query and the page's rows rewritten
     asked = []
@@ -1104,14 +1104,14 @@ def test_deck_counts_without_buried_siblings_v3912():
                                     config_dict_for_deck_id=lambda did: {"new": {"bury": bury[did][0]}, "rev": {"bury": bury[did][1]}}),
         db=types.SimpleNamespace(all=lambda q, *a: asked.append((q, a)) or rows), sched=types.SimpleNamespace(today=100))
     saved = (dc.cfg, dc.mw.col)
-    box = {"cfg": {}}
+    box = {"cfg": {"deck_counts": False}}
     try:
         dc.cfg = lambda: box["cfg"]
         dc.mw.col = col
         content = types.SimpleNamespace(tree=tree, stats="")
         dc._deck_counts(content)
         check("off: Anki's list as it was, nothing read", content.tree == tree and asked == [])
-        box["cfg"] = {"deck_counts": True}
+        box["cfg"] = {}  # nothing set: on
         dc._deck_counts(content)
         check("on: one query (today's day), the list rewritten", len(asked) == 1 and asked[0][1] == (100,) and content.tree == out)
         col.db.all = lambda q, *a: 1 / 0
@@ -1207,7 +1207,7 @@ def test_what_offers_a_tip_v3912():
     src = open(os.path.join(REPO, "due_crew", "cards.py"), encoding="utf-8").read()
     check("the offer: Again or Hard since yesterday, or slow, or nearly a leech; and an ask still has its Tip",
           "ease IN (1, 2) LIMIT 1" in src and "hooks.slow(_taken(card), _usual(col, day)) or hooks.near_leech(card.lapses, *_leech(col, card))" in src
-          and '"kind": "asked"' in src and '"act": "Tip"' in src)
+          and '"kind": "asked"' in src and '"act": _t("Tip")' in src)
 
 
 def test_languages_v3100():
@@ -1254,6 +1254,156 @@ def test_languages_v3100():
           "speak()" in srcs.glue_src() and 'if "lang" in changed:' in srcs.glue_src() and "open(" in srcs.due_src("words.py") and '"w"' not in srcs.due_src("words.py"))
 
 
+def test_languages_squads_round():
+    """3.10.0, the Squads round: a squad's table, bingo's words, the fridge, the scrapbook, the room's lobby, the Cheer
+    window and a cheer's banner say theirs in another language (from lang/de.json, or the round's part until it's merged)."""
+    import json
+    from due_crew import bingo, scrapbook, words
+    cat = dict(words.catalog("de"))
+    part = os.path.join(REPO, "lang_parts", "squads.json")
+    if os.path.exists(part):
+        with open(part, encoding="utf-8") as fh:
+            cat.update({k: v[2] for k, v in json.load(fh).items()})
+    view = {"state": "ok", "squads": [{"id": "s1", "name": "orca"}], "current": "s1", "name": "orca", "open": False, "founder_me": True,
+            "day": "2026-09-27", "yesterday": "2026-09-26", "people": 2, "reviews": 80,
+            "rows": [{"user_id": "me", "name": "Sammy", "you": True, "day": "2026-09-27", "reviews": 50, "time_ms": 600000, "retention": 90.0, "streak": 3, "week": 5},
+                     {"user_id": "n", "name": "Nia", "day": "2026-09-26", "reviews": 30, "time_ms": 60000, "retention": 80.0, "streak": 1, "week": 2}]}
+    item = {"from": "dre", "name": "Dre", "at": "2026-10-29", "a": "purple", "n": "", "d": {"k": "draw", "s": [[0, 10, 10, 50, 50]]}}
+    english = board._squads_html(view, {})
+    try:
+        words.use("de")
+        words._state["cat"] = cat
+        sq = board._squads_html(view, {})
+        check("a squad's table in German: its heads, its line, its foot; none of their English left",
+              all(w in sq for w in (">Wiederholungen", "2 in orca &middot; gesperrt", "1 lernen heute", "&middot; gestern<", ">Einladung kopieren<",
+                                    ">Verlassen<", "5/7 Tage<", "+ Gruppe gründen / beitreten"))
+              and not any(w in sq for w in ("locked", "studying today", ">Leave<", "7 days", "Create / join")), sq[-600:])
+        check("the squad's page is the same but for its words", len(re.findall(r"<tr", sq)) == len(re.findall(r"<tr", english))
+              and re.findall(r"duecrew:[a-z0-9:]+", sq) == re.findall(r"duecrew:[a-z0-9:]+", english))
+        week = bingo.week_labels("2026-09-23")
+        facts = bingo.facts(week, "2026-09-23", {}, {}, {})
+        check("bingo's progress, the board's days and the scrapbook's lines in German, each phrase whole",
+              bingo.progress({"type": "days", "params": {"days": 3}}, facts) == (False, "0 von 3 Tagen")
+              and bingo.progress({"type": "nope"}, facts)[1] == "Aktualisiere Due Crew, um dieses zu spielen"
+              and board._short_day("2026-10-14") == "14. Okt" and board._week_span("2026-W40") == "Woche vom 28. Sep"
+              and scrapbook.month_line([], 3) == ("", "3 Tage", " dabei gewesen.") and scrapbook.month_said("May") == "Mai"
+              and scrapbook.year_line(2026, 2, 1200, False) == ("2 Tage dabei gewesen, und ", "1,200 Wiederholungen", ".")
+              and board.and_more(["Dre", "Mo", "Ana", "Kai", "Lu"]) == "Dre, Mo, Ana und 2 weitere")
+        fr = board.fridge_html([item], {}, {"sev": True})
+        cw = board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["x"]})
+        said = json.loads(re.search(r"var V = (\{.*?\});\n", cw).group(1).replace("<\\/", "</"))["w"]
+        check("the fridge is drawn again for another language; the Cheer window is sent its words, and says them by their English",
+              'title="Abnehmen"' in fr
+              and said.get("Cancel") == "Abbrechen" and said.get("Cheer {name}") == "{name} anfeuern" and "say('Cancel')" in cw
+              and "klick, um eins zur" in board.flurry_js(["x"], "t", back=("dre", "x")))
+    finally:
+        words.use("en")
+    check("back in English the fridge is drawn again, and the Cheer window is sent no words",
+          'title="Take it down"' in board.fridge_html([item], {}, {"sev": True})
+          and '"w": {}' in board.cheer_overlay_js({"uid": "dre", "name": "Dre", "emojis": ["x"]}))
+
+
 def settings_model_change(parts):
     from due_crew import settings_model
     return settings_model.change(parts, {})
+
+
+def test_polaroid_tape_is_the_pips_colour():
+    """After 3.9.12 (SC: "the tape on the polaroids should match that user's pip color also"): a doodle drawn in one
+    colour by someone who has since changed theirs is taped in the colour their Pip wears now; the drawing keeps its ink."""
+    draw = {"k": "draw", "s": [[0, 10, 10, 50, 50]]}
+    people = {"dre": {"user_id": "dre", "name": "Dre", "look": [], "accent": "rose"}}
+    item = {"from": "dre", "name": "Dre", "at": "2026-10-29", "a": "purple", "n": "", "d": draw}
+    fr = board.fridge_html([item], people, {"sev": True})
+    rose, purple = board.accent_pair("rose"), board.accent_pair("purple")
+    rgb = lambda c: ",".join(str(int(c.lstrip("#")[i:i + 2], 16)) for i in (0, 2, 4))
+    check("the fridge: taped in the Pip's colour now, the drawing in the ink it came in",
+          f"--ft:rgba({rgb(rose[1])},.6)" in fr and f"--pa:{rose[0]}" in fr and f"--fa:{purple[0]}" in fr and f"rgba({rgb(purple[1])}" not in fr, fr[:300])
+    gone = board.fridge_html([item], {}, {"sev": True})
+    check("the fridge: someone no longer in my crew keeps the colour it came in", f"--ft:rgba({rgb(purple[1])},.6)" in gone)
+    check("the scrapbook's polaroid is taped in the same: its person's colour now, else the one it came in",
+          "background: var(--a)" in srcs.due_src("board/scrapbook.py") and "accent_pair(now or x.get(\"a\"))" in srcs.due_src("board/scrapbook.py"))
+
+
+def test_field_log_15_nov():
+    """The field log of 14 Nov: view:insights on 3.9.12 (5 times, 3 people) was the map's own `_map_know`, missing
+    from views.INSIGHTS, so every Insights with a map slipped; req:settings:404 was a new account's first pull."""
+    import re as _re
+    from due_crew import views
+    src = srcs.due_src("team_flow.py")
+    keys = set(_re.findall(r'out\["([a-z_]+)"\]', src[src.index("def _work_steps("):src.index("def _since_ms(")]))
+    keys |= set(_re.findall(r'out\["(_map_[a-z]+)"\]', src))
+    check("every key the Insights view is given is in its shape", keys and keys <= set(views.INSIGHTS), sorted(keys - set(views.INSIGHTS)))
+    check("a map's view fits: no slip", views.insights_wrong({"map": [], "map_by": "deck", "_map_know": {"x": 1}, "_map_missed": set(), "map_ways": []}) == [])
+    from due_crew.backend import api
+    check("a new account's first GET /settings 404 isn't counted as going wrong; anything else is",
+          ("GET", "/settings", 404) in api.EXPECTED and "not in EXPECTED" in open(api.__file__).read() and ("PUT", "/settings", 404) not in api.EXPECTED)
+
+
+def test_never_imports_itself_by_name():
+    """SC's crash, 15 Nov: the reviewer's "Due Crew: your tip…" did __import__("due_crew.cards"), but AnkiWeb installs
+    the add-on in a folder named 2035408484, so it raised ModuleNotFoundError. Every import of its own modules is
+    relative; no code names the package (an import, __import__ or import_module of "due_crew…")."""
+    import ast
+    bad = []
+    for root, _dirs, files in os.walk(os.path.join(REPO, "due_crew")):
+        for f in files:
+            if not f.endswith(".py"):
+                continue
+            path = os.path.join(root, f)
+            for n in ast.walk(ast.parse(open(path, encoding="utf-8").read())):
+                if isinstance(n, ast.ImportFrom) and n.level == 0 and (n.module or "").split(".")[0] == "due_crew":
+                    bad.append((path, n.lineno))
+                elif isinstance(n, ast.Import) and any(a.name.split(".")[0] == "due_crew" for a in n.names):
+                    bad.append((path, n.lineno))
+                elif (isinstance(n, ast.Call) and n.args and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str)
+                      and n.args[0].value.split(".")[0] == "due_crew"
+                      and getattr(n.func, "id", getattr(n.func, "attr", "")) in ("__import__", "import_module")):
+                    bad.append((path, n.lineno))
+    check("the add-on never imports itself by its folder's name (AnkiWeb's is 2035408484)", bad == [], bad)
+
+
+def test_scrapbook_scattered_and_fridge_stays_v3912():
+    """SC, 16 Nov: the scrapbook swept his Decks screen (a sign-out did, 3.9.10's rule) and Pin up lost each drawing's
+    place; "They shouldn't leave when a 13th arrives"; a month's keepsakes scattered on the page, not stacked."""
+    import re as _re
+    from due_crew import fridge as FR, scrapbook as S
+    from due_crew.board import scrapbook as BS
+    draw = {"k": "draw", "s": [[0, 10, 10, 50, 50]]}
+    items = [S.clean_one({"k": "pz", "from": "dre", "name": "Dre", "at": f"2026-11-{d:02d}", "n": f"n{d}", "d": draw}) for d in range(1, 9)]
+    lies = [BS._scatter(x) for x in items]
+    got = [_re.fullmatch(r"--r:(-?[\d.]+)deg;--dx:(-?\d+)px;--dy:(-?\d+)px;width:(\d+)%;justify-self:(start|center|end)", s) for s in lies]
+    check("scattered: each keepsake lies its own way (a tilt of three degrees at most, a nudge smaller than the gap), the same at every draw",
+          all(got) and all(abs(float(m.group(1))) <= 3 and abs(int(m.group(2))) <= 6 and abs(int(m.group(3))) <= 7 and 80 <= int(m.group(4)) <= 100 for m in got)
+          and len(set(lies)) > 4 and lies == [BS._scatter(x) for x in items], lies[:3])
+    page = BS._columns(items, {}, False, [])
+    check("scattered: drawn askew in its column, straight under the pointer, still with Reduce motion",
+          page.count('<div class="sb-s" style="--r:') == 8 and "#due-crew .sb-s:hover, #due-crew .sb-s:focus-within { transform: none; z-index: 2; }" in BS.SCRAP_CSS
+          and "prefers-reduced-motion: reduce" in BS.SCRAP_CSS)
+    check("the fridge: only I take one down (its ceiling is the file's, not the screen's); a kept polaroid remembers where it hung",
+          FR.KEEP == 100 and S.clean_one(S.from_fridge({"from": "dre", "name": "Dre", "at": "2026-11-01", "d": draw, "p": ["l", -30, 200]}))["p"] == ["l", -30, 200]
+          and "p" not in S.clean_one(S.from_fridge({"from": "dre", "name": "Dre", "at": "2026-11-01", "d": draw, "p": [1, 2]}))
+          and "_make_way(w, uid)" in srcs.due_src("closet_flow.py") and 'w["fridge"] = []\n    if uid:' not in srcs.due_src("closet_flow.py"))
+
+
+def test_field_log_choices_v3100():
+    """SC, 16 Nov, after the field log: a computer off the network counts once a day a route; an invite that matches
+    nobody says what to do next."""
+    from due_crew import errs
+    from due_crew.backend import api
+    t = errs.Tally()
+    was = dict(errs._now)
+    try:
+        errs._now.update(on=True, tally=t, after=None)
+        for _ in range(5):
+            errs.count("req:sync:offline")
+            errs.count("req:sync:timeout")
+        errs.count("req:board:offline")
+        day = t.days[errs.today()]
+        check("offline: once a day a route, however often it tried; anything else as often as it happened",
+              day.get("req:sync:offline") == 1 and day.get("req:board:offline") == 1 and day.get("req:sync:timeout") == 5, day)
+    finally:
+        errs._now.clear()
+        errs._now.update(was)
+    check("an invite that matches nobody: what to do next", "Ask them for a new one, or for their code." in api.NO_INVITE
+          and open(api.__file__, encoding="utf-8").read().count("NO_INVITE") == 3)

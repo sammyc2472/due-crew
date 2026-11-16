@@ -24,6 +24,8 @@ they chose to show."""
 import re
 import urllib.parse
 
+from .words import later as _later
+
 TEXT_MAX = 120
 URL_MAX = 400
 RESULTS_MAX = 8
@@ -37,15 +39,15 @@ _HOSTS = {
 _CTRL = re.compile(r"[\x00-\x1f\x7f]")
 _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
-APPS = (("apple", "Apple Music"), ("spotify", "Spotify"), ("youtube", "YouTube Music"), ("other", "Another app"))
+APPS = (("apple", "Apple Music"), ("spotify", "Spotify"), ("youtube", "YouTube Music"), ("other", _later("Another app")))  # said with t()
 MOTIONS = ("gentle", "lively", "still")
 
 # Apple's own badge, as its marketing tools serve it (never redrawn or altered)
 BADGE_URL = "https://tools.applemediaservices.com/api/badges/listen-on-apple-music/badge/en-us?size=250x83"
 BADGE_H = 30  # px: Apple's smallest on a screen
 # the credit Apple asks for, saying what it gave (Sam): a song's card, and the search sheet
-CREDIT = "Song and cover courtesy of Apple Music"
-CREDIT_SEARCH = "Song search courtesy of Apple Music"
+CREDIT = _later("Song and cover courtesy of Apple Music")  # said with t() where it's drawn
+CREDIT_SEARCH = _later("Song search courtesy of Apple Music")
 SEARCH_URL = "https://itunes.apple.com/search"
 
 

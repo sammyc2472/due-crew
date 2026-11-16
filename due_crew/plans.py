@@ -23,6 +23,7 @@ import html
 import json
 import re
 
+from . import words as _words
 from .backend.shapes import normalize_code
 
 PLAN_CODE_LEN = 8
@@ -33,7 +34,24 @@ _SEP = "::"
 
 def plan_title(plan):
     """"Step 1 · Dre's plan"."""
-    return f'{plan.get("name") or "Plan"} · {plan.get("ownerName") or "?"}’s plan'
+    return _words.t("{name} · {owner}’s plan", name=plan.get("name") or _words.t("Plan"), owner=plan.get("ownerName") or "?")
+
+
+def tn(one, many, n, **names):
+    """words.tn for a count said with its thousands marked ("1,204 cards"), as the plans' lines write them."""
+    return _words.t(one if n == 1 else many, n=f"{n:,}", **names)
+
+
+def _bold(text):
+    """A name inside a phrase that `_segments` then gives back bold."""
+    return "\x01" + str(text) + "\x02"
+
+
+def _segments(said):
+    """[(text, bold)] from a phrase said whole, its `_bold` names bold: the phrase is one in every
+    language, and the board still gets its segments."""
+    parts = re.split("\x01(.*?)\x02", said, flags=re.S)
+    return [(x, bool(i % 2)) for i, x in enumerate(parts) if x]
 
 
 def fmt_day(iso):
@@ -43,6 +61,29 @@ def fmt_day(iso):
     except ValueError:
         return str(iso)
     return f"{d:%a} {d.day} {d:%b}"
+
+
+_WEEKDAYS = (_words.later("Monday"), _words.later("Tuesday"), _words.later("Wednesday"), _words.later("Thursday"),
+             _words.later("Friday"), _words.later("Saturday"), _words.later("Sunday"))
+
+
+def day_said(iso):
+    """fmt_day in the language in use, for what a person reads ("lun 5 oct"). fmt_day itself stays
+    English: the plan's text writes it too, and that is read back."""
+    try:
+        d = datetime.date.fromisoformat(str(iso))
+    except ValueError:
+        return str(iso)
+    return _words.t("{dow} {day} {month}", dow=_words.weekday(d.weekday()), day=d.day, month=_words.month(d.month))
+
+
+def weekday_or_day_said(iso, today):
+    """weekday_or_day in the language in use."""
+    try:
+        d, t = datetime.date.fromisoformat(str(iso)), datetime.date.fromisoformat(str(today))
+    except ValueError:
+        return str(iso)
+    return _words.t(_WEEKDAYS[d.weekday()]) if 0 <= abs((t - d).days) < 7 else day_said(iso)
 
 
 def opens_ahead(units, applied, today, own=False, paused=False, sched=False):
@@ -66,7 +107,7 @@ def opens_words(day, plan, today):
     B): the day it opens, then the plan, "Thu 5 Nov · Heme 2"; the year too
     when it isn't this one."""
     year = str(day)[:4]
-    return f"{fmt_day(day)}{'' if year == str(today)[:4] else ' ' + year} · {plan}"
+    return f"{day_said(day)}{'' if year == str(today)[:4] else ' ' + year} · {plan}"
 
 
 def weekday_or_day(iso, today):
@@ -731,7 +772,7 @@ def due_now(doc, applied, today, sig):
 
 
 def _cards(n):
-    return f"{n:,} card{'s' if n != 1 else ''}"
+    return tn("{n} card", "{n} cards", n)
 
 
 def _missing(idx, u, of, n, swap=None, doc=None):
@@ -762,22 +803,23 @@ def match_rows(idx, doc, swap=None, shown=5):
         if u.get("tags") or u.get("decks"):
             n = len(idx.match(dict(u, cards=[], nids=[], cids=[], notes=[], idr=[]), swap, doc))
             of = u.get("n")  # the author's count, when the builder saved one
-            text = (f"{n:,} of {n + _missing(idx, u, of, n, swap, doc):,}" if isinstance(of, int) and of else _cards(n)) \
-                if n else "not in your copy"
+            text = (_words.t("{n} of {of}", n=f"{n:,}", of=f"{n + _missing(idx, u, of, n, swap, doc):,}")
+                    if isinstance(of, int) and of else _cards(n)) if n else _words.t("not in your copy")
             rows.append((name, text, not n))
         if u.get("nids") or u.get("cids") or u.get("notes"):
             found = len(idx.id_cards(u))
-            label = f"{name} · by ID" if (u.get("tags") or u.get("decks") or u.get("cards")) else name
-            rows.append((label, _cards(found) if found else "not in your copy", not found))
+            label = _words.t("{name} · by ID", name=name) if (u.get("tags") or u.get("decks") or u.get("cards")) else name
+            rows.append((label, _cards(found) if found else _words.t("not in your copy"), not found))
         if u.get("cards"):
             found, total = idx.single_found(u), len(u["cards"])
-            label = f"{name} · single cards" if (u.get("tags") or u.get("decks")) else name
-            rows.append((label, f"{found:,} of {total:,}" if found else "not in your copy", not found))
+            label = _words.t("{name} · single cards", name=name) if (u.get("tags") or u.get("decks")) else name
+            rows.append((label, _words.t("{n} of {of}", n=f"{found:,}", of=f"{total:,}") if found else _words.t("not in your copy"),
+                         not found))
     if rest:
         cids = set()
         for u in rest:
             cids |= idx.match(u, swap, doc)
-        rows.append((f"… {len(rest)} more set{'s' if len(rest) != 1 else ''}", _cards(len(cids)), False))
+        rows.append((_words.tn("… {n} more set", "… {n} more sets", len(rest)), _cards(len(cids)), False))
     return rows
 
 
@@ -960,7 +1002,7 @@ def load_week(sets, reviews, today, pace, days=LOAD_DAYS, back=None):
     order = []
     for x in inside:
         if x["pid"] not in [o["pid"] for o in order]:
-            order.append({"pid": x["pid"], "name": str(x.get("plan") or "Plan")})
+            order.append({"pid": x["pid"], "name": str(x.get("plan") or _words.t("Plan"))})
     held = next((x for x in sets if back and (x["pid"], x["uid"]) == tuple(back) and int(x.get("moved") or 0)), None)
     if len(order) < 2 and not held:
         return None
@@ -990,19 +1032,19 @@ def load_week(sets, reviews, today, pace, days=LOAD_DAYS, back=None):
             to = [by_day[d] for d in span if hd["day"] < d < cap and mins(by_day[d]["new"], by_day[d]["rev"]) + add <= line]
             if to:
                 gap = (datetime.date.fromisoformat(to[0]["day"]) - datetime.date.fromisoformat(hd["day"])).days
-                move = {"pid": x["pid"], "uid": x["uid"], "name": str(x.get("name") or "this set"), "to": to[0]["day"],
+                move = {"pid": x["pid"], "uid": x["uid"], "name": str(x.get("name") or _words.t("this set")), "to": to[0]["day"],
                         "n": int(x.get("moved") or 0) + gap}
                 break
         hint = {"day": hd["day"], "new": hd["new"], "plans": sum(1 for n in hd["parts"] if n), "rev": hd["rev"], "move": move}
     return {"plans": order, "days": out, "top": max([x["min"] for x in out] + [1]), "hint": hint,
             "known": bool(pace.get("known")),
-            "back": {"pid": held["pid"], "uid": held["uid"], "name": str(held.get("name") or "It"), "day": held["day"]} if held else None}
+            "back": {"pid": held["pid"], "uid": held["uid"], "name": str(held.get("name") or _words.t("It")), "day": held["day"]} if held else None}
 
 
 def load_time(minutes):
     """A day's minutes as the load view says them: "45 min", "1 h 10"."""
     m = max(0, int(round(minutes)))
-    return f"{m} min" if m < 60 else f"{m // 60} h {m % 60:02d}"
+    return _words.t("{n} min", n=m) if m < 60 else _words.t("{h} h {m}", h=m // 60, m=f"{m % 60:02d}")
 
 
 def waiting_new(doc, prog, today):
@@ -1060,7 +1102,7 @@ def quiz(doc, today, prog=None, days=QUIZ_DAYS):
               and str(u.get("opens") or "9999") <= today]
         n = sum(int((prog.get(u["id"]) or [0])[0] or 0) for u in us)
         if us and n:
-            return {"id": str(e["id"]), "name": str(e.get("name") or "the quiz"), "day": str(e["day"]),
+            return {"id": str(e["id"]), "name": str(e.get("name") or _words.t("the quiz")), "day": str(e["day"]),
                     "units": [u["id"] for u in us], "open": n}
     return None
 
@@ -1090,11 +1132,11 @@ def late_start(doc, today):
     shift = (datetime.date.fromisoformat(today) - datetime.date.fromisoformat(first)).days
     last = max(str(u.get("due") or u["opens"]) for u in us if u.get("opens"))
     ends = _later(last, shift)
-    evs = [(str(e.get("name") or "the exam"), str(e["day"])) for e in (doc or {}).get("events") or []
+    evs = [(str(e.get("name") or _words.t("the exam")), str(e["day"])) for e in (doc or {}).get("events") or []
            if isinstance(e, dict) and e.get("day")]
     end = (doc or {}).get("end")
     if end:
-        evs.append(("the plan's end", str(end)))
+        evs.append((_words.t("the plan's end"), str(end)))
     after = max((x for x in evs if x[1] < ends and x[1] >= last), key=lambda x: x[1], default=None)
     return {"passed": passed, "shift": shift, "ends": ends, "after": after}
 
@@ -1291,17 +1333,17 @@ def topic_items(us):
         for q in u.get("search") or []:
             if q in cut_q:
                 continue
-            put("Search", str(q)[:40] + ("…" if len(str(q)) > 40 else ""), {"search": [q]})
+            put(_words.t("Search"), str(q)[:40] + ("…" if len(str(q)) > 40 else ""), {"search": [q]})
         named = _pick_items(u)  # 3.8.1: "Herpes Viruses · 88 picked", when this copy has named them
         for g, x, src in named:
             put(g, x, src)
         notes = len(u.get("notes") or []) + len(u.get("nids") or [])
         if notes and not named:
-            put("Picked by ID", f"{notes:,} note{'s' if notes != 1 else ''}",
+            put(_words.t("Picked by ID"), tn("{n} note", "{n} notes", notes),
                 {k: list(u[k]) for k in ("notes", "nids", "idr") if u.get(k)})
         singles = len(u.get("cids") or []) + len(u.get("cards") or [])
         if singles and not named:
-            put("Picked", f"{singles:,} single card{'s' if singles != 1 else ''}",
+            put(_words.t("Picked"), tn("{n} single card", "{n} single cards", singles),
                 {k: list(u[k]) for k in ("cards", "cids") if u.get(k)})
     return items
 
@@ -1463,9 +1505,9 @@ def _pick_items(u):
             segs = str(p).split(_SEP)
             ri = _resource_at(segs)
             out.append((_word(segs[ri]) if 0 <= ri < len(segs) - 1 else "",
-                        f"{_word(segs[-1])} · {int(n):,} picked", dict(src, _in=[str(p)])))
+                        _words.t("{name} · {n} picked", name=_word(segs[-1]), n=f"{int(n):,}"), dict(src, _in=[str(p)])))
         elif int(n) > 0:
-            out.append(("", f"{int(n):,} more picked", dict(src, _out=named)))
+            out.append(("", _words.t("{n} more picked", n=f"{int(n):,}"), dict(src, _out=named)))
     return out
 
 
@@ -1513,7 +1555,7 @@ def card_remarks(plans, guid, ord_):
         for r in ((p or {}).get("doc") or {}).get("remarks") or []:
             card = r.get("card") if isinstance(r, dict) else None
             if card and str(card[0]) == str(guid) and int(card[1]) == int(ord_) and r.get("text"):
-                out.append((str(p.get("name") or "Plan"), str(r["text"])))
+                out.append((str(p.get("name") or _words.t("Plan")), str(r["text"])))
     return out
 
 
@@ -1598,17 +1640,16 @@ def ahead_behind(doc, prog, today):
     if nxt:
         o, _s, t = prog.get(nxt["id"], [0, 0, 0])
         if t and o >= t:
-            out.append(("ahead", [("You opened ", False), (nxt.get("name") or "?", True),
-                                  (f" early. Nothing to do on {weekday_or_day(nxt['opens'], today)}.", False)]))
+            out.append(("ahead", _segments(_words.t("You opened {name} early. Nothing to do on {day}.", name=_bold(nxt.get("name") or "?"),
+                                                    day=weekday_or_day_said(nxt["opens"], today)))))
     late = [u for u in units(doc) if u.get("due") and u["due"] < today]
     late.sort(key=lambda u: u["due"], reverse=True)
     n = 0
     for u in late:
         _o, s, t = prog.get(u["id"], [0, 0, 0])
         if t and s < t:
-            out.append(("behind", [(u.get("name") or "?", True),
-                                   (f" was due {weekday_or_day(u['due'], today)}. "
-                                    f"{t - s:,} card{'s' if t - s != 1 else ''} not seen yet.", False)]))
+            out.append(("behind", _segments(tn("{name} was due {day}. {n} card not seen yet.", "{name} was due {day}. {n} cards not seen yet.",
+                                               t - s, name=_bold(u.get("name") or "?"), day=weekday_or_day_said(u["due"], today)))))
             n += 1
             if n == 2:
                 break
@@ -1644,48 +1685,55 @@ def change_note(owner, old, doc):
     changed = [new[u][0] for u in new if u in old and len(old[u]) > 2 and old[u][2] != new[u][2]
                and old[u][1] == new[u][1]]
     # 3.8.1: a date whose only change is its name, by its day: "updated Fri 16 Oct"
-    changed += [fmt_day(new[u][1]) for u in new if u in old and old[u][0] != new[u][0] and old[u][1] == new[u][1]
+    changed += [day_said(new[u][1]) for u in new if u in old and old[u][0] != new[u][0] and old[u][1] == new[u][1]
                 and (len(old[u]) < 3 or old[u][2] == new[u][2])]
     # 3.8.1: the plan's tags, when the last snapshot had them: "renamed 10 tags"
     tag_words = []
     if isinstance(tags_then, dict):
-        for verb, n in (("renamed", sum(1 for k in tags_now if k in tags_then and tags_then[k] != tags_now[k])),
-                        ("added", sum(1 for k in tags_now if k not in tags_then)),
-                        ("took off", sum(1 for k in tags_then if k not in tags_now))):
-            if n:
-                tag_words.append([(f"{verb} {n:,} tag{'s' if n != 1 else ''}", False)])
+        renamed = sum(1 for k in tags_now if k in tags_then and tags_then[k] != tags_now[k])
+        new_tags = sum(1 for k in tags_now if k not in tags_then)
+        off = sum(1 for k in tags_then if k not in tags_now)
+        if renamed:
+            tag_words.append(tn("renamed {n} tag", "renamed {n} tags", renamed))
+        if new_tags:
+            tag_words.append(tn("added {n} tag", "added {n} tags", new_tags))
+        if off:
+            tag_words.append(tn("took off {n} tag", "took off {n} tags", off))
     if not (moved or added or gone or changed or tag_words):
         return None
     clauses = []
+    name = lambda it: _bold((it[0] if isinstance(it, tuple) else it) or "?")
 
-    def names(items, verb, tail=None):
+    def names(items, kind):
+        # each clause a phrase whole: one set, two, or a count
+        one, two, many = _CHANGE[kind]
         if len(items) > 2:
-            return [(f"{verb} {len(items)} sets", False)]
-        segs = [(verb + " ", False)]
-        for i, it in enumerate(items):
-            if i:
-                segs.append((" and ", False))
-            name = it[0] if isinstance(it, tuple) else it
-            segs.append((name or "?", True))
-            if tail:
-                segs.append((tail(it), False))
-        return segs
-    if moved:
-        clauses.append(names(moved, "moved", lambda it: f" to {fmt_day(it[1])}"))
+            return _words.t(many, n=len(items))
+        if len(items) == 2:
+            return _words.t(two, name=name(items[0]), other=name(items[1]))
+        return _words.t(one, name=name(items[0]))
+    if len(moved) > 2:
+        clauses.append(_words.t("moved {n} sets", n=len(moved)))
+    elif len(moved) == 2:
+        clauses.append(_words.t("moved {name} to {day} and {other} to {day_b}", name=name(moved[0]), day=day_said(moved[0][1]),
+                                other=name(moved[1]), day_b=day_said(moved[1][1])))
+    elif moved:
+        clauses.append(_words.t("moved {name} to {day}", name=name(moved[0]), day=day_said(moved[0][1])))
     if added:
         clauses.append(names(added, "added"))
     if gone:
-        clauses.append(names(gone, "took out"))
+        clauses.append(names(gone, "gone"))
     if changed:
-        clauses.append(names(changed, "updated"))
+        clauses.append(names(changed, "changed"))
     clauses += tag_words
-    segs = [(f"{owner or '?'} ", False)]
-    for i, c in enumerate(clauses):
-        if i:
-            segs.append((" and " if i == len(clauses) - 1 else ", ", False))
-        segs += c
-    segs.append((".", False))
-    return segs
+    what = clauses[0] if len(clauses) == 1 else ", ".join(clauses[:-1]) + _words.t(" and ") + clauses[-1]
+    return _segments(_words.t("{who} {what}.", who=owner or "?", what=what))
+
+
+# a change note's clauses, each whole: one set, two, more than two
+_CHANGE = {"added": (_words.later("added {name}"), _words.later("added {name} and {other}"), _words.later("added {n} sets")),
+           "gone": (_words.later("took out {name}"), _words.later("took out {name} and {other}"), _words.later("took out {n} sets")),
+           "changed": (_words.later("updated {name}"), _words.later("updated {name} and {other}"), _words.later("updated {n} sets"))}
 
 
 # ---- 3.8.0: at my own pace ----
@@ -1772,12 +1820,12 @@ def plan_at(doc, today):
         return ""
     past = [u for u in us if str(u.get("opens") or "") <= today]
     if not past:
-        return f"The plan's dates start {fmt_day(us[0]['opens'])}."
+        return _words.t("The plan's dates start {day}.", day=day_said(us[0]["opens"]))
     last = past[-1]
     end = str(last.get("due") or last.get("opens") or "")
     if len(past) == len(us) and end < today:
-        return f"The plan's dates ended {fmt_day(end)}."
-    return f"The plan's dates are at {last.get('name') or '?'} today."
+        return _words.t("The plan's dates ended {day}.", day=day_said(end))
+    return _words.t("The plan's dates are at {name} today.", name=last.get("name") or "?")
 
 
 def recent_opens(opened_days, today, days=PACE_DAYS):
@@ -1794,18 +1842,19 @@ def finish_check(doc, left, recent, today, days=PACE_DAYS):
     evs = sorted((e for e in doc.get("events") or [] if isinstance(e, dict) and str(e.get("day") or "") >= today),
                  key=lambda e: e["day"])
     if evs:
-        day, name = evs[-1]["day"], str(evs[-1].get("name") or "the exam")
+        day, name = evs[-1]["day"], str(evs[-1].get("name") or _words.t("the exam"))
     elif doc.get("end") and str(doc["end"]) >= today:
-        day, name = doc["end"], "the plan's end"
+        day, name = doc["end"], _words.t("the plan's end")
     else:
         return None
     need = -(-left * days // recent)  # days, rounded up
     done = datetime.date.fromisoformat(today) + datetime.timedelta(days=need)
     late = (done - datetime.date.fromisoformat(day)).days
-    when = fmt_day(done.isoformat())
+    when = day_said(done.isoformat())
     if late > 0:
-        return f"At that pace you open the last set on {when}, {late} day{'s' if late != 1 else ''} after {name}."
-    return f"At that pace you open the last set on {when}, in time for {name}."
+        return _words.tn("At that pace you open the last set on {day}, {n} day after {name}.",
+                         "At that pace you open the last set on {day}, {n} days after {name}.", late, day=when, name=name)
+    return _words.t("At that pace you open the last set on {day}, in time for {name}.", day=when, name=name)
 
 
 # ---- plans, end to end: You › Plans' path, Behind, the empty tab ----
@@ -1869,10 +1918,10 @@ def path_end(doc):
     evs = sorted((e for e in (doc or {}).get("events") or [] if isinstance(e, dict) and _iso(e.get("day"))),
                  key=lambda e: str(e["day"]))
     if evs:
-        return {"name": str(evs[-1].get("name") or "Exam"), "day": str(evs[-1]["day"]), "event": True}
+        return {"name": str(evs[-1].get("name") or _words.t("Exam")), "day": str(evs[-1]["day"]), "event": True}
     exam = (doc or {}).get("exam")
     if isinstance(exam, dict) and _iso(exam.get("date")):
-        return {"name": "Exam", "day": str(exam["date"]), "event": True}  # 3.2's schedule's exam
+        return {"name": _words.t("Exam"), "day": str(exam["date"]), "event": True}  # 3.2's schedule's exam
     days = [str(u.get("due") or u.get("opens") or "") for u in units(doc)] + [str((doc or {}).get("end") or "")]
     days = [d for d in days if _iso(d)]
     return {"name": "", "day": max(days), "event": False} if days else None
@@ -1959,29 +2008,43 @@ def behind_sheet(name, b, p, waiting, shift=0):
     are). Raw words: the sheet draws them as text."""
     n_late, left = int(b["more"]) + 1, int(b["left"])
     days = int(b["days"])
-    who = (f"{b['name']} has" if n_late == 1 else f"{b['name']} and {n_late - 1} more have")
     now = next((x for x in (p or {}).get("lessons") or [] if x["today"] and x["state"] != "skip" and x["total"]), None)
-    text = f"{who} {left:,} left" + (
-        f"; today {now['name']} {'opened' if now['opened'] else 'opens'} {now['total']:,}." if now else ".")
+    said = {"name": b["name"], "n": f"{left:,}"}
+    if now:
+        said.update(set=now["name"], total=f"{now['total']:,}")
+    if n_late == 1:
+        text = (_words.t("{name} has {n} left.", **said) if not now
+                else _words.t("{name} has {n} left; today {set} opened {total}.", **said) if now["opened"]
+                else _words.t("{name} has {n} left; today {set} opens {total}.", **said))
+    else:
+        said["more"] = n_late - 1
+        text = (_words.t("{name} and {more} more have {n} left.", **said) if not now
+                else _words.t("{name} and {more} more have {n} left; today {set} opened {total}.", **said) if now["opened"]
+                else _words.t("{name} and {more} more have {n} left; today {set} opens {total}.", **said))
     ways = []
     slide = min(days, 365 - int(shift or 0))
     if slide > 0:
-        word = "a day" if slide == 1 else f"{slide} days"
+        word = _words.tn("Slide a day", "Slide {n} days", slide)
         live = [x["day"] for x in (p or {}).get("lessons") or [] if x["state"] != "skip" and x["day"]]
         ends = _later(max(live), slide) if live else ""
         end = (p or {}).get("end") or {}
-        after = f", after {end['name']}" if end.get("event") and ends and ends > end["day"] else ""
-        ways.append({"key": "slide", "days": slide, "label": f"Slide {word}", "yes": f"Slide {word}",
-                     "note": f"Everything still to come, {word} later." + (f" Ends {fmt_day(ends)}{after}." if ends else "")})
+        note = _words.tn("Everything still to come, a day later.", "Everything still to come, {n} days later.", slide)
+        if ends and end.get("event") and ends > end["day"]:
+            note += " " + _words.t("Ends {day}, after {name}.", day=day_said(ends), name=end["name"])
+        elif ends:
+            note += " " + _words.t("Ends {day}.", day=day_said(ends))
+        ways.append({"key": "slide", "days": slide, "label": word, "yes": word, "note": note})
     waiting = int(waiting or 0)
     if waiting:
         d = FIT_DAYS[2]
         extra = fit_extra(waiting, d)
-        ways.append({"key": "fit", "days": d, "extra": extra, "waiting": waiting, "yes": "Fit it in…", "label": "Fit it in…",
-                     "note": f"Over the days you pick: about {extra:,} more new card{'s' if extra != 1 else ''} a day for three days."})
-    ways.append({"key": "skip", "uids": list(b["uids"]), "label": "Skip what's left", "yes": "Skip it" if n_late == 1 else "Skip them",
-                 "note": f"The {left:,} left stay open in your deck, no longer behind."})
-    return {"title": f"{'A day' if days == 1 else f'{days} days'} behind on {name}", "text": text, "ways": ways}
+        ways.append({"key": "fit", "days": d, "extra": extra, "waiting": waiting, "yes": _words.t("Fit it in…"), "label": _words.t("Fit it in…"),
+                     "note": tn("Over the days you pick: about {n} more new card a day for three days.",
+                                "Over the days you pick: about {n} more new cards a day for three days.", extra)})
+    ways.append({"key": "skip", "uids": list(b["uids"]), "label": _words.t("Skip what's left"),
+                 "yes": _words.t("Skip it") if n_late == 1 else _words.t("Skip them"),
+                 "note": _words.t("The {n} left stay open in your deck, no longer behind.", n=f"{left:,}")})
+    return {"title": _words.tn("A day behind on {name}", "{n} days behind on {name}", days, name=name), "text": text, "ways": ways}
 
 
 def fit_extra(waiting, days):
@@ -2058,8 +2121,8 @@ def exam_offer(plans, my_exam, today, asked=None, came=None):
             return None  # my own exam ahead wins
         if asked.get(pid) == day:
             continue
-        return {"pid": pid, "name": str(p.get("name") or p.get("title") or "Your plan"), "day": day,
-                "ename": str(e.get("name") or "the exam"), "was": mine if moved else ""}
+        return {"pid": pid, "name": str(p.get("name") or p.get("title") or _words.t("Your plan")), "day": day,
+                "ename": str(e.get("name") or _words.t("the exam")), "was": mine if moved else ""}
     return None
 
 
@@ -2121,11 +2184,11 @@ def joy_finished(p):
 def joy_words(num, cards=True):
     """"19 sets · 2,046 cards · 6 weeks": a finished plan in a line (cards:
     with its card count; a share follows Privacy's Reviews switch)."""
-    bits = [f"{num['sets']:,} set{'s' if num['sets'] != 1 else ''}"]
+    bits = [tn("{n} set", "{n} sets", num["sets"])]
     if cards:
-        bits.append(f"{num['cards']:,} card{'s' if num['cards'] != 1 else ''}")
+        bits.append(tn("{n} card", "{n} cards", num["cards"]))
     if num.get("weeks"):
-        bits.append(f"{num['weeks']:,} week{'s' if num['weeks'] != 1 else ''}")
+        bits.append(tn("{n} week", "{n} weeks", num["weeks"]))
     return " · ".join(bits)
 
 
@@ -2274,12 +2337,15 @@ def joy_text(key, name, num=None, line=None, cards=True):
     "The last set of Path Book: 19 · Skin, today. ...". cards: with the
     card count (Privacy's Reviews switch)."""
     if key == "fin":
-        return f"Finished {name}: {joy_words(num or {'sets': 0, 'cards': 0}, cards).replace(' · ', ', ')}. duecrew.com"
+        return _words.t("Finished {name}: {what}. duecrew.com", name=name,
+                        what=joy_words(num or {"sets": 0, "cards": 0}, cards).replace(" · ", ", "))
     line = line or {}
     if key == "last":
-        return f"The last set of {name}: {line.get('name') or ''}, today. duecrew.com"
-    head = "Halfway through" if key == "half" else "Three-quarters through"
-    return f"{head} {name}: {int(line.get('n') or 0):,} of {int(line.get('of') or 0):,} sets. duecrew.com"
+        return _words.t("The last set of {name}: {set}, today. duecrew.com", name=name, set=line.get("name") or "")
+    n, of = f"{int(line.get('n') or 0):,}", f"{int(line.get('of') or 0):,}"
+    if key == "half":
+        return _words.t("Halfway through {name}: {n} of {of} sets. duecrew.com", name=name, n=n, of=of)
+    return _words.t("Three-quarters through {name}: {n} of {of} sets. duecrew.com", name=name, n=n, of=of)
 
 
 # ---- 3.8.1: a follower's day (plans, round three) ----
@@ -2304,7 +2370,8 @@ def for_words(doc, u):
     ev = event_of(doc, u)
     if not ev:
         return ""
-    return f"{'after' if reinforces(doc, u) else 'for'} {ev.get('name') or '?'}"
+    name = ev.get("name") or "?"
+    return _words.t("after {name}", name=name) if reinforces(doc, u) else _words.t("for {name}", name=name)
 
 
 def away_days(us, applied, today, studied, since=""):

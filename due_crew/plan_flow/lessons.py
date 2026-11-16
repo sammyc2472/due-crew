@@ -8,6 +8,7 @@ from aqt.utils import tooltip
 
 from .. import app
 from .. import plans as P
+from ..words import t as _t
 from .. import schedule as S
 from ..app import _state
 from ..app import cfg
@@ -477,7 +478,7 @@ def raise_limit(pid):
         return
     col, did = mw.col, int(st["deck_id"])
     if _paused(col, did):
-        tooltip("New cards are stopped in this deck. Turn them back on in Insights first.")
+        tooltip(_t("New cards are stopped in this deck. Turn them back on in Insights first."))
         return
     was = new_limit(col, did)
     pos = None
@@ -492,7 +493,7 @@ def raise_limit(pid):
         col.decks.save(deck)
     except Exception:
         oops()
-        tooltip("Couldn't change it. Deck Options › New cards/day.")
+        tooltip(_t("Couldn't change it. Deck Options › New cards/day."))
         return
     if pos is not None:
         try:
@@ -500,8 +501,9 @@ def raise_limit(pid):
         except Exception:
             pass
     _after_change()
-    was_s = f" (was {was:,})" if was is not None else ""
-    tooltip(f"New cards a day in {html.escape(col.decks.get(did)['name'])}: {want:,}{was_s}.")
+    deck = html.escape(col.decks.get(did)["name"])
+    tooltip(_t("New cards a day in {deck}: {n} (was {was}).", deck=deck, n=f"{want:,}", was=f"{was:,}") if was is not None
+            else _t("New cards a day in {deck}: {n}.", deck=deck, n=f"{want:,}"))
     refresh_progress()
     app.swap(cfg())
 
@@ -628,7 +630,7 @@ def browse_opened(pid, uid):
     except Exception:
         oops()
         return
-    _browse(cids, empty="None of its new cards are open now.")
+    _browse(cids, empty=_t("None of its new cards are open now."))
 
 
 def _unsynced():

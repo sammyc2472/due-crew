@@ -239,7 +239,21 @@ def fridge(uid=None):
     from . import fridge as fr
     from .wrap import _wrap_data
     w = _wrap_data()
+    if uid and w.get("fridge") and not w.get("fridge_uid"):
+        w["fridge_uid"] = uid  # whose they are, said the first time they're drawn for someone (older files had no owner)
+        _save()
     return fr.clean(w.get("fridge")) if _ours(w, uid) else []
+
+
+def _make_way(w, uid):
+    """Another account's drawings on this computer go to that account's scrapbook, each with its spot, when a
+    different one needs the fridge (3.9.12: it was emptied, and they were gone)."""
+    from . import fridge as fr
+    owner = w.get("fridge_uid")
+    if owner and uid and owner != uid:
+        for x in fr.clean(w.get("fridge")):
+            _scrap(lambda sf, x=x: sf.polaroid(x, owner))
+        w["fridge"] = []
 
 
 def keep_doodles(cheers, entries, uid=None):
@@ -251,8 +265,7 @@ def keep_doodles(cheers, entries, uid=None):
     if not any(ch.get("doodle") for ch in cheers or []):
         return
     w = _wrap_data()
-    if not _ours(w, uid):
-        w["fridge"] = []
+    _make_way(w, uid)
     if uid:
         w["fridge_uid"] = uid
     accents = {e.get("user_id"): e.get("accent") for e in entries or [] if not e.get("you")}
@@ -271,17 +284,17 @@ def keep_doodles(cheers, entries, uid=None):
 
 
 def clear_fridge():
-    """Signed out: the drawings were that account's, and go with it."""
+    """Signed out: the drawings are that account's, so they're off the screen (fridge() shows them to their owner
+    alone) and wait where they hung for it to sign in again. 3.9.12 (SC: "does the scrapbook automatically take
+    things off the decks screen? because it did that for me"): 3.9.10 moved them all into the scrapbook here, their
+    places lost, and a sign-in that ran out did it to people who never chose to sign out. A different account
+    signing in sends them to their owner's scrapbook (_make_way). One with no owner on file can't be kept for
+    anyone: it goes, as before."""
     from .wrap import _wrap_data
     w = _wrap_data()
     _GONE.clear()
-    if "fridge" in w or "fridge_uid" in w:
-        from . import fridge as fr
-        owner = w.get("fridge_uid")
-        for x in fr.clean(w.get("fridge")) if owner else []:
-            _scrap(lambda sf, x=x: sf.polaroid(x, owner))  # 3.9.10: off the screen with the account, kept in its scrapbook
+    if w.get("fridge") and not w.get("fridge_uid"):
         w.pop("fridge", None)
-        w.pop("fridge_uid", None)
         _save()
 
 
@@ -305,8 +318,7 @@ def pin_up(item, uid=None):
     from . import fridge as fr
     from .wrap import _wrap_data
     w = _wrap_data()
-    if not _ours(w, uid):
-        w["fridge"] = []
+    _make_way(w, uid)
     if uid:
         w["fridge_uid"] = uid
     before = fr.clean(w.get("fridge"))

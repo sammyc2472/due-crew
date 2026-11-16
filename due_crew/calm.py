@@ -9,15 +9,17 @@ everyone who had the board before; Settings › Board › Calm board),
 `calm_open` (the parts let out, never held again) and `calm_news` (let out
 by themselves and not opened yet: the board's one line)."""
 
+from .words import later as _later, t as _t
+
 PARTS = ("decks", "squads", "plans", "insights", "party")  # board.HIDEABLE_TABS' keys
 INSIGHTS_DAYS = 14
 
-# part: (the line's bold words, the rest, its button)
+# part: (the line's bold words, the rest, its button); hint() says them in the language in use
 WORDS = {
-    "decks": ("Decks is ready:", "the decks you and your crew share.", "Open"),
-    "squads": ("You're in a squad.", "Its week is on Squads.", "Open"),
-    "plans": ("You have a plan.", "Its days are on Plans.", "Open"),
-    "insights": ("Insights is ready:", "two weeks of reviews to read.", "Open"),
+    "decks": (_later("Decks is ready:"), _later("the decks you and your crew share."), _later("Open")),
+    "squads": (_later("You're in a squad."), _later("Its week is on Squads."), _later("Open")),
+    "plans": (_later("You have a plan."), _later("Its days are on Plans."), _later("Open")),
+    "insights": (_later("Insights is ready:"), _later("two weeks of reviews to read."), _later("Open")),
 }
 
 
@@ -79,7 +81,7 @@ def hint(cfg):
         return None
     for p in cfg.get("calm_news") or []:
         if p in WORDS and p not in held(cfg):
-            return (p,) + WORDS[p]
+            return (p,) + tuple(_t(w) for w in WORDS[p])
     return None
 
 

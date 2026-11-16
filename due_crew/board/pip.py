@@ -7,6 +7,8 @@ import html as _html
 
 from .. import closet as _closet
 from .. import sev as _sev
+from .. import words as _words
+from ..words import t as _t, tn as _tn
 
 from .base import DEFAULT_ACCENT, _by_theme, _pycmd, accent_pair, palette
 
@@ -55,6 +57,11 @@ HW_CSS = """
 """
 
 
+def _low(name):
+    """A thing's name inside a sentence: lower case, but in German, whose nouns keep their capital."""
+    return name if _words.lang() == "de" else name.lower()
+
+
 def halloween_html(hw, cfg):
     """3.8.22, Halloween week (24 to 31 Oct; Sam's pick, round three): a line
     under the board's head with this week's days, the five things in
@@ -67,30 +74,33 @@ def halloween_html(hw, cfg):
         return ""
     e = _html.escape
     days = int(hw.get("days") or 0)
-    said = "a thing a day for five days" if not days else f'{days} day{"" if days == 1 else "s"} so far'
+    said = _t("a thing a day for five days") if not days else _tn("{n} day so far", "{n} days so far", days)
+
+    def thing(k, n):
+        name = e(_t(_closet.BY[k]["name"]))
+        return _t("{name}: a day of Halloween week", name=name) if n == 1 else _t("{name}: {n} days of Halloween week", name=name, n=n)
     things = "".join(
-        f'<span class="hwk {"on" if got else "off"}" title="{e(_closet.BY[k]["name"])}: '
-        f'{"a day" if n == 1 else str(n) + " days"} of Halloween week">'
-        f'{_sev.slot(_sev.svg("idle", rest=True, look=[k], label=_closet.BY[k]["name"]), HW_PIP)}</span>'
+        f'<span class="hwk {"on" if got else "off"}" title="{thing(k, n)}">'
+        f'{_sev.slot(_sev.svg("idle", rest=True, look=[k], label=_t(_closet.BY[k]["name"])), HW_PIP)}</span>'
         for k, n, got in hw.get("things") or [] if k in _closet.BY)
     nxt = hw.get("next")
     if nxt:
-        name = e(_closet.BY[nxt[0]]["name"].lower())
+        name = e(_low(_t(_closet.BY[nxt[0]]["name"])))
         more = int(nxt[1])
-        when = ((f"tomorrow: the {name}" if hw.get("today") else f"study today for the {name}") if more == 1
-                else f"the {name} in {more} more days")
+        when = ((_t("tomorrow: the {name}", name=name) if hw.get("today") else _t("study today for the {name}", name=name)) if more == 1
+                else _t("the {name} in {n} more days", name=name, n=more))
     elif all(got for _k, _n, got in hw.get("things") or []):
-        when = "all five: Pip&rsquo;s ready"
+        when = _t("all five: Pip&rsquo;s ready")
     else:
-        when = "the rest next year"
+        when = _t("the rest next year")
     n = int(hw.get("spooky") or 0)
-    spooky = f'<span class="hws">A spooky crew: all {n} of you dressed up.</span>' if n else ""
+    spooky = f'<span class="hws">{_t("A spooky crew: all {n} of you dressed up.", n=n)}</span>' if n else ""
     ago = hw.get("bats")
     bats = "".join(HW_BAT.format(d=d) for d in (0, .5, 1.1)) if ago is not None else ""
     return (f'<div class="dc-hw" style="--ago:{float(ago or 0):.2f}s">{bats}{HW_WEB if n else ""}'
-            f'<a class="hwl" href="#" title="Pip&rsquo;s closet" onclick="{_pycmd("closet")}">Halloween week</a>'
+            f'<a class="hwl" href="#" title="{_t("Pip&rsquo;s closet")}" onclick="{_pycmd("closet")}">{_t("Halloween week")}</a>'
             f'<span class="hwd">{said}</span><span class="hwt">{things}</span><span class="hwn">{when}</span>{spooky}'
-            f'<a class="wx" href="#" title="Hide until next year" onclick="{_pycmd("closethw")}">&times;</a></div>')
+            f'<a class="wx" href="#" title="{_t("Hide until next year")}" onclick="{_pycmd("closethw")}">&times;</a></div>')
 
 
 def row_sev(row, cfg, size=None, nth=None):
@@ -104,11 +114,11 @@ def row_sev(row, cfg, size=None, nth=None):
         return None
     light, dark = accent_pair(cfg.get("accent") if row.get("you") else row.get("accent"))
     look = my_look(cfg) if row.get("you") else row.get("look")
-    label = "Your Pip" if row.get("you") else _html.escape(f'{row.get("name") or "?"}’s Pip', quote=True)
+    label = _t("Your Pip") if row.get("you") else _html.escape(_t("{name}’s Pip", name=row.get("name") or "?"), quote=True)
     fig = _sev.slot(_sev.svg("idle", rest=True, look=look, label=label), size or _sev.ROW_SIZE)  # the site's rows too (sev.site_kit)
     style = f'--rs-l:{light};--rs-d:{dark}' + (f';{_sev.blink_css(nth)}' if nth is not None else "")
     if row.get("you"):
-        return (f'<a class="dc-rsev" href="#" title="Pip&rsquo;s closet" style="{style}" '
+        return (f'<a class="dc-rsev" href="#" title="{_t("Pip&rsquo;s closet")}" style="{style}" '
                 f'onclick="{_pycmd("closet")}">{fig}</a>')
     return f'<span class="dc-rsev" style="{style}">{fig}</span>'
 
@@ -156,7 +166,7 @@ def card_sev(row, cfg, size=44):
         return None
     light, dark = accent_pair(cfg.get("accent") if row.get("you") else row.get("accent"))
     look = my_look(cfg) if row.get("you") else row.get("look")
-    label = "Your Pip" if row.get("you") else _html.escape(f'{row.get("name") or "?"}’s Pip', quote=True)
+    label = _t("Your Pip") if row.get("you") else _html.escape(_t("{name}’s Pip", name=row.get("name") or "?"), quote=True)
 
     def colours(theme, a):
         p = palette(theme, cfg.get("accent", DEFAULT_ACCENT))

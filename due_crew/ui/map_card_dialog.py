@@ -15,6 +15,7 @@ from aqt.qt import (
 
 from . import attach_alive, copy_text, note, _night, title
 from .. import mapcard as M
+from ..words import month as _month, t as _t, weekday as _weekday
 
 
 def _font(px, weight=400):
@@ -184,49 +185,49 @@ class MapCardDialog(QDialog):
     def __init__(self, parent, deck, day, tiles, by="fsrs", prev=None, since="", tooltip=None, part=False):
         super().__init__(parent)
         attach_alive(self)
-        self.setWindowTitle(f"What I know · {deck}")
+        self.setWindowTitle(_t("What I know · {deck}", deck=deck))
         self._args = (deck, day, tiles, by)
         self._prev, self._since = prev, since
         self._tip = tooltip or (lambda msg: None)
         row = QHBoxLayout(self)
         self.preview = QLabel()
         self.preview.setFixedSize(380, 380)
-        self.preview.setAccessibleName("The card")
+        self.preview.setAccessibleName(_t("The card"))
         row.addWidget(self.preview)
         side = QVBoxLayout()
-        self.pct = QCheckBox("Percentages")
+        self.pct = QCheckBox(_t("Percentages"))
         self.pct.setChecked(True)
-        self.pct.setToolTip("Off: the names and shades only")
-        self.change = QCheckBox("This week's change")
+        self.pct.setToolTip(_t("Off: the names and shades only"))
+        self.change = QCheckBox(_t("This week's change"))
         self.change.setEnabled(prev is not None)
         when = ""
         if prev is not None and since:
             d = datetime.date.fromisoformat(since)
-            when = f"Since {d:%a} {d.day} {d:%b}"
-        self.change_note = QLabel(when or ("For the whole deck's map, not its parts" if part
-                                           else "From next week: it needs last week's map"))
+            when = _t("Since {day}", day=f"{_weekday(d.weekday())} {d.day} {_month(d.month)}")
+        self.change_note = QLabel(when or (_t("For the whole deck's map, not its parts") if part
+                                           else _t("From next week: it needs last week's map")))
         note(self.change_note).setContentsMargins(24, 0, 0, 0)  # under its box's words
-        self.light = QRadioButton("Light")
-        self.dark = QRadioButton("Dark")
+        self.light = QRadioButton(_t("Light"))
+        self.dark = QRadioButton(_t("Dark"))
         (self.dark if _night() else self.light).setChecked(True)
         look = QHBoxLayout()
-        look.addWidget(QLabel("Look"))
+        look.addWidget(QLabel(_t("Look")))
         look.addWidget(self.light)
         look.addWidget(self.dark)
         look.addStretch()
         for w in (self.pct, self.change, self.light, self.dark):
             w.toggled.connect(self._draw)
-        self.copy = QPushButton("Copy picture")
+        self.copy = QPushButton(_t("Copy picture"))
         self.copy.setDefault(True)
-        self.save = QPushButton("Save…")
-        self.as_text = QPushButton("Copy as text")
+        self.save = QPushButton(_t("Save…"))
+        self.as_text = QPushButton(_t("Copy as text"))
         self.copy.clicked.connect(self._copy)
         self.save.clicked.connect(self._save)
         self.as_text.clicked.connect(self._copy_text)
         buttons = QHBoxLayout()
         for b in (self.copy, self.save, self.as_text):
             buttons.addWidget(b)
-        small = note(QLabel("Made here, from your own Anki. Nothing is sent."))
+        small = note(QLabel(_t("Made here, from your own Anki. Nothing is sent.")))
         side.addWidget(title(self.windowTitle()))  # the window says what it is (ui.heading)
         self.setWindowTitle("Due Crew")
         side.addSpacing(4)
@@ -270,19 +271,19 @@ class MapCardDialog(QDialog):
 
     def _copy(self):
         QApplication.clipboard().setImage(self.image())
-        self._tip("Copied. Paste it where your crew is.")
+        self._tip(_t("Copied. Paste it where your crew is."))
 
     def _copy_text(self):
         copy_text(self.text())
-        self._tip("Copied as text.")
+        self._tip(_t("Copied as text."))
 
     def _save(self):
-        deck, day, _t, _b = self._args
+        deck, day, _tiles, _b = self._args
         name = f"due-crew-what-i-know-{day}.png"
-        path, _f = QFileDialog.getSaveFileName(self, "Save the picture", os.path.join(os.path.expanduser("~"), name),
+        path, _f = QFileDialog.getSaveFileName(self, _t("Save the picture"), os.path.join(os.path.expanduser("~"), name),
                                                "PNG (*.png)")
         if path:
             if not path.lower().endswith(".png"):
                 path += ".png"
             if self.image().save(path, "PNG"):
-                self._tip("Saved.")
+                self._tip(_t("Saved."))

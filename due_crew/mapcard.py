@@ -12,6 +12,7 @@ board's amber for under 70%."""
 import datetime
 
 from .team import map_shade
+from .words import month as _month, t as _t
 
 SIZE = 1080      # the card is square, 1080 x 1080, as the site's
 PAD = 66         # its margin
@@ -94,7 +95,7 @@ def squarify(sizes, x, y, w, h):
 
 def _date(day):
     d = datetime.date.fromisoformat(str(day))
-    return f"{d.day} {d:%b}"
+    return _t("{day} {month}", day=d.day, month=_month(d.month))
 
 
 def card(deck, day, tiles, by="fsrs", pct=True, prev=None, since=""):
@@ -120,16 +121,17 @@ def card(deck, day, tiles, by="fsrs", pct=True, prev=None, since=""):
     started = sum(int(t.get("started") or 0) for t in ts if t.get("know") is not None)
     now = (sum(int(t["know"]) * int(t.get("started") or 0) for t in ts if t.get("know") is not None) / started
            if started else None)
-    said = "I’d remember now" if by == "fsrs" else "right in their reviews these 4 weeks"
     foot = ""
     if pct and now is not None:
-        foot = f"{round(now)}% {said} · {cards:,} cards"
+        foot = (_t("{pct}% I’d remember now · {n} cards", pct=round(now), n=f"{cards:,}") if by == "fsrs"
+                else _t("{pct}% right in their reviews these 4 weeks · {n} cards", pct=round(now), n=f"{cards:,}"))
         changed = [x for x in out if x["d"] is not None]
         if prev is not None and changed and since:
             up = round(sum(x["d"] for x in changed) / len(changed))
-            foot = f"{round(now)}% now · {'up' if up >= 0 else 'down'} {abs(up)} since {_date(since)}"
-    eyebrow = f"What I know · {_date(day)}"
-    return {"eyebrow": eyebrow.upper(), "title": str(deck or "My deck"), "tiles": out, "foot": foot,
+            foot = (_t("{pct}% now · up {n} since {day}", pct=round(now), n=abs(up), day=_date(since)) if up >= 0
+                    else _t("{pct}% now · down {n} since {day}", pct=round(now), n=abs(up), day=_date(since)))
+    eyebrow = _t("What I know · {day}", day=_date(day))
+    return {"eyebrow": eyebrow.upper(), "title": str(deck or _t("My deck")), "tiles": out, "foot": foot,
             "key": not pct, "pct": bool(pct)}
 
 
@@ -149,11 +151,11 @@ def text(deck, day, tiles, by="fsrs", pct=True, prev=None, since=""):
     """The same, to paste: a square and a line a subject, biggest first."""
     from .share import FOOTER
     c = card(deck, day, tiles, by, pct, prev, since)
-    lines = [f"What I know · {c['title']} · {_date(day)}"]
+    lines = [_t("What I know · {deck} · {day}", deck=c["title"], day=_date(day))]
     for t in c["tiles"]:
         bit = f"{square(t['k'])} {t['name']}"
         if pct:
-            bit += (" too soon" if t.get("soon") else " new") if t["k"] is None else f" {t['k']}%"
+            bit += (" " + _t("too soon") if t.get("soon") else " " + _t("new")) if t["k"] is None else f" {t['k']}%"
             if t["d"]:
                 bit += f" {'↑' if t['d'] > 0 else '↓'}{abs(t['d'])}"
         lines.append(bit)
