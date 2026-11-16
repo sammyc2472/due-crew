@@ -802,6 +802,8 @@ def on_answer(card, opened=False):
         pips = pips_by_uid(only=chip_people(info, tips, names, asks))
         from . import hooks as _hooks
         view = chip_view(info, tips, names, asks, mine, pips, hidden=lambda u: _hooks.hidden(guid, u))
+        if view and view.get("kind") == "knows" and not app.cfg().get("knows_show", True):
+            view = None  # 3.10.1: who knows it is off in Settings (a tip or a question someone left still shows)
         if view is None or view.get("kind") == "knows":
             view = remark_view(client().session.get("plans"), guid, card.ord) or view  # 3.8.1
         view = _with_hook(view, card, guid)  # 3.9.11: my own hook, or the way to add one
@@ -893,7 +895,8 @@ def _with_hook(view, card, guid):
         offer = not hook and (bool(col.db.scalar(
             "SELECT 1 FROM revlog WHERE cid = ? AND id >= ? AND ease IN (1, 2) LIMIT 1", int(card.id), (int(col.sched.day_cutoff) - 86400) * 1000))
             or hooks.slow(_taken(card), _usual(col, day)) or hooks.near_leech(card.lapses, *_leech(col, card)))
-        got, asked = hooks.view(hook, stuck, offer, has_turned, has_turned and hooks.may_ask(guid, day))
+        offers = bool(app.cfg().get("tip_offer", True))  # 3.10.1: off in Settings, nothing asks; my own tip still shows
+        got, asked = hooks.view(hook, stuck, offer and offers, has_turned, offers and has_turned and hooks.may_ask(guid, day))
         if asked:
             hooks.note_asked(guid, day)
         if got is None or (view is not None and got.get("kind") != "hook"):

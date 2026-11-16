@@ -35,6 +35,7 @@ ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak"
                 "sev_look", "sev_closet",  # 3.8.2: Pip's closet: what it has on, what it's earned
                 "wrapped_seen",  # 3.9.0: the year whose Wrapped line was put away, on every computer
                 "two_buttons",  # 3.9.1: Again and Good alone, a person's way of reviewing
+                "tip_offer", "knows_show",  # 3.10.1: whether the answer side offers a tip, and shows who knows the card
                 "exam_last", "exam_since",  # 3.9.2: my last exam, kept once it's passed; what the next one covers
                 "song",  # 3.9.6: my song of the moment (songs.clean): my mutual friends see it on their board
                 "magic_search", "magic_seen",  # 3.9.7: Magic search on or off; its first-time card seen

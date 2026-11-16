@@ -42,6 +42,24 @@ describe("feedback (3.6.5, P6)", () => {
     expect((await admin("GET", "/admin/feedback?state=all")).body.feedback).toHaveLength(1);
   });
 
+  it("3.10.1: a copy is mailed to FEEDBACK_TO with the sender's name, never their address; unset, nothing is sent; a mail that fails still keeps it", async () => {
+    const maya = await person("maya", "Maya");
+    const sent: any[] = [];
+    const EMAIL = { send: async (m: any) => { sent.push(m); } };
+    const to = { ...env, EMAIL, FEEDBACK_TO: "sam@duecrew.com" };
+    expect((await api("POST", "/feedback", { token: maya.token, env: to, body: { text: "Bingo counted wrong\nfor me", ver: "add-on 3.10.1 · Anki 25.02 · mac" } })).status).toBe(201);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to: "sam@duecrew.com", subject: "Due Crew feedback from Maya" });
+    expect(sent[0].text).toContain("Bingo counted wrong\nfor me");
+    expect(sent[0].text).toContain("add-on 3.10.1");
+    expect(JSON.stringify(sent[0])).not.toContain("maya@example.com");
+    expect((await api("POST", "/feedback", { token: maya.token, env: { ...env, EMAIL, FEEDBACK_TO: "" }, body: { text: "no copy" } })).status).toBe(201);
+    expect(sent).toHaveLength(1);
+    const broken = { ...env, EMAIL: { send: async () => { throw new Error("down"); } }, FEEDBACK_TO: "sam@duecrew.com" };
+    expect((await api("POST", "/feedback", { token: maya.token, env: broken, body: { text: "mail is down" } })).status).toBe(201);
+    expect((await db().prepare("SELECT COUNT(*) AS n FROM feedback").first<any>()).n).toBe(3);
+  });
+
   it("reply: mailed from Due Crew to the sender with what they wrote quoted, an answer to Sam's mailbox; marked replied and done", async () => {
     const sam = await person("sam", "Sam");
     const maya = await person("maya", "Maya");
