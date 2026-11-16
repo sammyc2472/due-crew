@@ -219,11 +219,6 @@ class Tally:
             if kept:
                 self.days[day] = kept
 
-    def has(self, code, day):
-        """Whether `code` has counted on `day` already."""
-        with self.lock:
-            return clean_code(code) in (self.days.get(day) or {})
-
     def add(self, code, day, n=1):
         """One more of `code` on `day` (n more); True when it counted. Past
         CODES_MAX - 1 codes a day, a new one counts as MORE."""
