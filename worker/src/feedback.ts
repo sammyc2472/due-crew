@@ -1,7 +1,7 @@
 /** 3.6.5, P6: Send feedback. Signed in only; the text, who sent it, and
  *  (if they ticked it) their versions or the page they were on, for the
- *  admin's Feedback panel. The admin replies by mail from Due Crew and
- *  never sees the address. Kept a year (housekeeping), and deleted with
+ *  admin's Feedback panel, and (3.10.1) a copy by mail to FEEDBACK_TO.
+ *  The admin replies by mail from Due Crew and never sees the address. Kept a year (housekeeping), and deleted with
  *  the account. Never logged. */
 
 import type { Session } from "./auth";
@@ -31,6 +31,17 @@ export async function send(req: Request, s: Session, env: Env): Promise<Response
   const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM feedback WHERE uid = ? AND at > ?").bind(s.uid, now - 86400).first<{ n: number }>();
   if ((n?.n ?? 0) >= FEEDBACK_A_DAY) throw new HttpError(429, "too_many");
   await env.DB.prepare("INSERT INTO feedback (id, uid, at, text, ver) VALUES (?, ?, ?, ?, ?)").bind(ulid(), s.uid, now, text, ver).run();
+  // 3.10.1 (SC: "so I don't miss it by not checking the website"): a copy to FEEDBACK_TO, Sam's mailbox, with the
+  // sender's name and never their address (the reply still goes from the admin's page). A mail that fails doesn't
+  // fail the feedback: it's kept, and the sender isn't asked to send it twice. Unset: kept only.
+  if (env.FEEDBACK_TO) {
+    try {
+      const who = await env.DB.prepare("SELECT name FROM users WHERE uid = ?").bind(s.uid).first<{ name: string | null }>();
+      const name = V.oneLine(who?.name || "?", 60) || "?";
+      await sendMail(env, env.FEEDBACK_TO, `Due Crew feedback from ${name}`,
+        `${text}\n\n— ${name}${ver ? `\n${ver}` : ""}\n\nReply from the admin page (Feedback): it mails them, and never shows their address.\n`);
+    } catch { console.log("due crew: a feedback's mail didn't go; it's on the admin page"); }
+  }
   return json({ ok: true }, 201);
 }
 

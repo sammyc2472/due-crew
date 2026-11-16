@@ -261,6 +261,13 @@ def _settings_study(cfg, fsrs=None, reach=None, stops=()):
             + _st_row(_t("Two buttons"), _st_switch("two_buttons", g("two_buttons", False), _t("Two buttons")),
                       _t("Again and Good. Hard and Easy hide; 2, 3 and 4 count as Good. Phones keep four.")
                       + (" " + _t("Works best with FSRS on.") if fsrs is False else ""))
+            # 3.10.1 (SC: "people want the ability to turn off the add a tip pip pop-up ... and ... X friend knows this"):
+            # the two things that come up by themselves on a card's answer, each its own switch; what someone left
+            # for me (a tip, a question, a plan's note) always shows
+            + _st_row(_t("Offer to add a tip"), _st_switch("tip_offer", g("tip_offer", True), _t("Offer to add a tip")),
+                      _t("Your Pip, on a card you missed or found hard. Off, it&rsquo;s still under More while reviewing."))
+            + _st_row(_t("Friends who know a card"), _st_switch("knows_show", g("knows_show", True), _t("Friends who know a card")),
+                      _t("Their Pips, when you miss a card a friend has down. Tips and questions still come up."))
             # 3.9.12 (SC's pick A): Anki's deck list as what there is to do, where Anki buries siblings
             + _st_row(_t("Deck counts leave out buried siblings"),
                       _st_switch("deck_counts", g("deck_counts", True), _t("Deck counts leave out buried siblings")),
@@ -378,6 +385,8 @@ FIND_WORDS = {
     "set:sev_break:": "breathe stretch rest",
     # 3.9.1
     "set:two_buttons:": "hard easy again good pass fail answer buttons keys review",
+    "set:tip_offer:": "tip tips hook pip popup pop-up prompt offer add review card corner",
+    "set:knows_show:": "knows friend friends ask pip popup pop-up review card corner crew",
     # 3.9.6: study soundtrack (song of the moment in code)
     "dance": "music song songs soundtrack dj party floor dancing pip motion animation corner",
     "songapp": "music app listen spotify apple youtube song",

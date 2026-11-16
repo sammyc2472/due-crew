@@ -1407,3 +1407,19 @@ def test_field_log_choices_v3100():
         errs._now.update(was)
     check("an invite that matches nobody: what to do next", "Ask them for a new one, or for their code." in api.NO_INVITE
           and open(api.__file__, encoding="utf-8").read().count("NO_INVITE") == 3)
+
+
+def test_answer_side_offers_can_be_turned_off_v3101():
+    """3.10.1 (SC: "people want the ability to turn off the add a tip pip pop-up ... and ... X friend knows this ask
+    them"): two switches in Settings › Study › Reviewing, on by default, a person's (they follow the account)."""
+    from due_crew import account, settings_model as SM
+    study = board._settings_study({})
+    check("two rows under Reviewing, each a switch, on unless turned off, found by Find a setting",
+          "set:tip_offer:0" in study and "set:knows_show:0" in study and "Offer to add a tip" in study and "Friends who know a card" in study
+          and "set:tip_offer:1" in board._settings_study({"tip_offer": False})
+          and SM.change(["set", "tip_offer", "0"], {}) == {"tip_offer": False} and SM.change(["set", "knows_show", "1"], {}) == {"knows_show": True}
+          and {"tip_offer", "knows_show"} <= set(account.ACCOUNT_KEYS) and '"set:tip_offer:"' in srcs.due_src("board/settings.py"))
+    src = srcs.due_src("cards.py")
+    check("off: who knows it isn't shown (a tip or a question someone left still is), and nothing offers a tip or asks what made it click",
+          'view.get("kind") == "knows" and not app.cfg().get("knows_show", True)' in src
+          and 'hooks.view(hook, stuck, offer and offers, has_turned, offers and has_turned and hooks.may_ask(guid, day))' in src)

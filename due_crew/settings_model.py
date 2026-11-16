@@ -13,6 +13,7 @@ SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "share_revie
             "share_streak", "share_heatmap",
             "due_show", "due_suggest", "due_leeches",  # Due
             "fifteen", "sev",  # 3.8.1: ▶ Fifteen? and the nudge; Pip
+            "tip_offer", "knows_show",  # 3.10.1: the answer side's two offers (cards.on_answer), a person's way of reviewing
             "two_buttons",  # 3.9.1: Again and Good alone (not the board's look: Reset board leaves it)
             "deck_counts",  # 3.9.12: Anki's deck list without the siblings it will bury (this computer's)
             "magic_search",  # 3.9.7: Magic search in the You box's head, and its key
