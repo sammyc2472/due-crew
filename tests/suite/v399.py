@@ -1361,3 +1361,26 @@ def test_never_imports_itself_by_name():
                       and getattr(n.func, "id", getattr(n.func, "attr", "")) in ("__import__", "import_module")):
                     bad.append((path, n.lineno))
     check("the add-on never imports itself by its folder's name (AnkiWeb's is 2035408484)", bad == [], bad)
+
+
+def test_scrapbook_scattered_and_fridge_stays_v3912():
+    """SC, 16 Nov: the scrapbook swept his Decks screen (a sign-out did, 3.9.10's rule) and Pin up lost each drawing's
+    place; "They shouldn't leave when a 13th arrives"; a month's keepsakes scattered on the page, not stacked."""
+    import re as _re
+    from due_crew import fridge as FR, scrapbook as S
+    from due_crew.board import scrapbook as BS
+    draw = {"k": "draw", "s": [[0, 10, 10, 50, 50]]}
+    items = [S.clean_one({"k": "pz", "from": "dre", "name": "Dre", "at": f"2026-11-{d:02d}", "n": f"n{d}", "d": draw}) for d in range(1, 9)]
+    lies = [BS._scatter(x) for x in items]
+    got = [_re.fullmatch(r"--r:(-?[\d.]+)deg;--dx:(-?\d+)px;--dy:(-?\d+)px;width:(\d+)%;justify-self:(start|center|end)", s) for s in lies]
+    check("scattered: each keepsake lies its own way (a tilt of three degrees at most, a nudge smaller than the gap), the same at every draw",
+          all(got) and all(abs(float(m.group(1))) <= 3 and abs(int(m.group(2))) <= 6 and abs(int(m.group(3))) <= 7 and 80 <= int(m.group(4)) <= 100 for m in got)
+          and len(set(lies)) > 4 and lies == [BS._scatter(x) for x in items], lies[:3])
+    page = BS._columns(items, {}, False, [])
+    check("scattered: drawn askew in its column, straight under the pointer, still with Reduce motion",
+          page.count('<div class="sb-s" style="--r:') == 8 and "#due-crew .sb-s:hover, #due-crew .sb-s:focus-within { transform: none; z-index: 2; }" in BS.SCRAP_CSS
+          and "prefers-reduced-motion: reduce" in BS.SCRAP_CSS)
+    check("the fridge: only I take one down (its ceiling is the file's, not the screen's); a kept polaroid remembers where it hung",
+          FR.KEEP == 100 and S.clean_one(S.from_fridge({"from": "dre", "name": "Dre", "at": "2026-11-01", "d": draw, "p": ["l", -30, 200]}))["p"] == ["l", -30, 200]
+          and "p" not in S.clean_one(S.from_fridge({"from": "dre", "name": "Dre", "at": "2026-11-01", "d": draw, "p": [1, 2]}))
+          and "_make_way(w, uid)" in srcs.due_src("closet_flow.py") and 'w["fridge"] = []\n    if uid:' not in srcs.due_src("closet_flow.py"))

@@ -50,6 +50,11 @@ SCRAP_CSS = """
     #due-crew .sb-pin { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 18px; margin-top: 20px; }
     #due-crew .sb-col { display: grid; gap: 22px; align-content: start; min-width: 0; }
     #due-crew .sb-k { margin: 0; position: relative; display: block; min-width: 0; }
+    /* scattered on the page (_scatter): each lies a little askew, and straightens under the pointer */
+    #due-crew .sb-s { position: relative; min-width: 0; transform: translate(var(--dx, 0), var(--dy, 0)) rotate(var(--r, 0deg)); transition: transform .15s ease-out; }
+    #due-crew .sb-s:hover, #due-crew .sb-s:focus-within { transform: none; z-index: 2; }
+    #due-crew .sb-col:nth-child(2) { padding-top: 16px; } #due-crew .sb-col:nth-child(3) { padding-top: 6px; }
+    @media (prefers-reduced-motion: reduce) { #due-crew .sb-s { transition: none; } }
     #due-crew .sb-k .sv-slot { --sv-a: var(--a); flex: none; }
     #due-crew .sb-k:not(:hover) .sv, #due-crew .sb-k:not(:hover) .sv * { animation: none !important; }
     #due-crew .sb-acts { position: absolute; right: 6px; top: 6px; display: flex; gap: 4px; opacity: 0; }
@@ -165,12 +170,24 @@ def _keepsake(x, people, pip, my_look):
             f'<b class="h">{e(x["head"])}</b>{f"""<div class="u">{e(x["sub"])}</div>""" if x.get("sub") else ""}</div>{_acts(x)}</figure>')
 
 
+def _scatter(x):
+    """3.9.12 (SC: a month's drawings "spread around that month", scattered like a real scrapbook's page): how one
+    keepsake lies, from its own key so it lies the same at every draw: a tilt, a nudge, how wide, which side of its
+    column. Never over another's words: the nudge is smaller than the gap between them."""
+    h = int(_scrap.key(x), 16)
+    tilt = ((h % 61) - 30) / 10.0                    # -3.0 to 3.0 degrees
+    dx, dy = (h >> 6) % 13 - 6, (h >> 10) % 15 - 7     # px
+    wide = {"pz": 80 + (h >> 14) % 15, "cheer": 100}.get(x["k"], 88 + (h >> 14) % 11)  # % of the column
+    side = ("start", "center", "end")[(h >> 18) % 3]
+    return f"--r:{tilt:.1f}deg;--dx:{dx}px;--dy:{dy}px;width:{wide}%;justify-self:{side}"
+
+
 def _columns(items, people, pip, my_look):
     """The keepsakes in columns, each next one in the shortest so far (CSS columns would cut a polaroid's tape off)."""
     cols, tall = [[] for _ in range(SCRAP_COLS)], [0] * SCRAP_COLS
     for x in items:
         i = tall.index(min(tall))
-        cols[i].append(_keepsake(x, people, pip, my_look))
+        cols[i].append(f'<div class="sb-s" style="{_scatter(x)}">{_keepsake(x, people, pip, my_look)}</div>')
         tall[i] += _WEIGHT.get(x["k"], 3)
     return "".join(f'<div class="sb-col">{"".join(c)}</div>' for c in cols if c)
 

@@ -86,6 +86,10 @@ def clean_one(x):
         if not d:
             return None
         out["d"], out["a"] = d, str(x.get("a") or "")[:16]
+        from .fridge import _place
+        spot = _place(x.get("p"))  # 3.9.12: where it hung on the Decks screen, for Pin up to put it back there
+        if spot:
+            out["p"] = spot
     elif k == "tip":
         out["part"] = _text(x.get("part"), PART_MAX)
     elif k == "cheer":
@@ -117,13 +121,16 @@ def drop(items, k):
 def from_fridge(item):
     """A polaroid off the fridge (fridge.clean's shape) as a keepsake."""
     return {"k": "pz", "from": item.get("from"), "name": item.get("name"), "at": item.get("at"),
-            "a": item.get("a"), "n": item.get("n"), "d": item.get("d")}
+            "a": item.get("a"), "n": item.get("n"), "d": item.get("d"), "p": item.get("p")}
 
 
 def to_fridge(item):
     """A kept polaroid as the fridge holds one (Pin up)."""
-    return {"from": item.get("from"), "name": item.get("name"), "at": item.get("at"),
-            "a": item.get("a"), "n": item.get("n"), "d": item.get("d")}
+    out = {"from": item.get("from"), "name": item.get("name"), "at": item.get("at"),
+           "a": item.get("a"), "n": item.get("n"), "d": item.get("d")}
+    if item.get("p"):
+        out["p"] = item["p"]  # back where it hung (SC: "puts things back where they should go")
+    return out
 
 
 def years(items, this_year):
