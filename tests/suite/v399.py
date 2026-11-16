@@ -1064,7 +1064,7 @@ def test_a_quiet_draw_of_the_same_board_is_skipped_v3912():
 
 def test_deck_counts_without_buried_siblings_v3912():
     """3.9.12 (SC's pick A): Anki's deck list as what there is to do: the smaller of Anki's count and the notes
-    due where a deck buries siblings, a deck and the decks under it; behind a switch, off by default."""
+    due where a deck buries siblings, a deck and the decks under it; behind a switch, on unless turned off (3.10.0)."""
     import due_crew as dc
     from due_crew import deck_counts as DC, settings_model as SM
     names = {1: "T", 2: "T::Kid", 3: "Plain", 4: "Tx"}
@@ -1094,8 +1094,8 @@ def test_deck_counts_without_buried_siblings_v3912():
           and '<span class="zero-count" title="Anki counts 2. 2 are siblings' in DC.rewrite(row(2, 0, 0, 2), {2: (0, 0)}))
     check("the list: a page that isn't shaped as expected is left alone", DC.rewrite("<table>no rows</table>", got) == "<table>no rows</table>"
           and DC.rewrite(None, got) is None)
-    check("the switch: Settings › Study, off by default, this computer's", SM.change(["set", "deck_counts", "1"], {}) == {"deck_counts": True}
-          and SM.BOARD_DEFAULTS["deck_counts"] is False and "Deck counts leave out buried siblings" in board._settings_study({})
+    check("the switch: Settings › Study, on unless turned off (3.10.0, SC: \"start it on\"), this computer's", SM.change(["set", "deck_counts", "1"], {}) == {"deck_counts": True}
+          and SM.BOARD_DEFAULTS["deck_counts"] is True and "Deck counts leave out buried siblings" in board._settings_study({})
           and "deck_counts" not in __import__("due_crew.account", fromlist=["x"]).ACCOUNT_KEYS)
     # the glue: nothing read with the switch off; on, one query and the page's rows rewritten
     asked = []
@@ -1104,14 +1104,14 @@ def test_deck_counts_without_buried_siblings_v3912():
                                     config_dict_for_deck_id=lambda did: {"new": {"bury": bury[did][0]}, "rev": {"bury": bury[did][1]}}),
         db=types.SimpleNamespace(all=lambda q, *a: asked.append((q, a)) or rows), sched=types.SimpleNamespace(today=100))
     saved = (dc.cfg, dc.mw.col)
-    box = {"cfg": {}}
+    box = {"cfg": {"deck_counts": False}}
     try:
         dc.cfg = lambda: box["cfg"]
         dc.mw.col = col
         content = types.SimpleNamespace(tree=tree, stats="")
         dc._deck_counts(content)
         check("off: Anki's list as it was, nothing read", content.tree == tree and asked == [])
-        box["cfg"] = {"deck_counts": True}
+        box["cfg"] = {}  # nothing set: on
         dc._deck_counts(content)
         check("on: one query (today's day), the list rewritten", len(asked) == 1 and asked[0][1] == (100,) and content.tree == out)
         col.db.all = lambda q, *a: 1 / 0
@@ -1384,3 +1384,26 @@ def test_scrapbook_scattered_and_fridge_stays_v3912():
           FR.KEEP == 100 and S.clean_one(S.from_fridge({"from": "dre", "name": "Dre", "at": "2026-11-01", "d": draw, "p": ["l", -30, 200]}))["p"] == ["l", -30, 200]
           and "p" not in S.clean_one(S.from_fridge({"from": "dre", "name": "Dre", "at": "2026-11-01", "d": draw, "p": [1, 2]}))
           and "_make_way(w, uid)" in srcs.due_src("closet_flow.py") and 'w["fridge"] = []\n    if uid:' not in srcs.due_src("closet_flow.py"))
+
+
+def test_field_log_choices_v3100():
+    """SC, 16 Nov, after the field log: a computer off the network counts once a day a route; an invite that matches
+    nobody says what to do next."""
+    from due_crew import errs
+    from due_crew.backend import api
+    t = errs.Tally()
+    was = dict(errs._now)
+    try:
+        errs._now.update(on=True, tally=t, after=None)
+        for _ in range(5):
+            errs.count("req:sync:offline")
+            errs.count("req:sync:timeout")
+        errs.count("req:board:offline")
+        day = t.days[errs.today()]
+        check("offline: once a day a route, however often it tried; anything else as often as it happened",
+              day.get("req:sync:offline") == 1 and day.get("req:board:offline") == 1 and day.get("req:sync:timeout") == 5, day)
+    finally:
+        errs._now.clear()
+        errs._now.update(was)
+    check("an invite that matches nobody: what to do next", "Ask them for a new one, or for their code." in api.NO_INVITE
+          and open(api.__file__, encoding="utf-8").read().count("NO_INVITE") == 3)

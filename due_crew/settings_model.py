@@ -35,7 +35,7 @@ BOARD_DEFAULTS = {"show_leaderboard": True, "show_stale": True, "sync_notificati
                   "fifteen": True, "sev": True, "sev_break": "breathe",
                   "dance_floor": True, "dance": "gentle", "dance_folded": False,
                   "calm": False, "calm_news": [],
-                  "deck_counts": False}  # 3.9.6: the dance floor
+                  "deck_counts": True}  # 3.9.6: the dance floor
 
 
 # 3.9.12 (SC agreed): switches that left Settings. Each is put back to what it was by default, once,

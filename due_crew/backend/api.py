@@ -93,6 +93,11 @@ def _with_kept_docs(plans, kept):
 # 404 is every new account's first pull, before its first save): not counted for Sam
 EXPECTED = {("GET", "/settings", 404)}
 
+
+# said when an invite matches nobody: old, used up, or mistyped (the field log, 14 Nov: one person tried one eight
+# times; SC: "clarify this message"): what to do next, not only what went wrong
+NO_INVITE = "That invite doesn't work any more. Ask them for a new one, or for their code."
+
 class Saved:
     """put_settings's answer: true when it saved. `rev`, the server's rev now
     (None from a Worker before 3.8.1); `conflict`, the doc someone saved
@@ -874,14 +879,14 @@ class ApiClient:
         (its first use), or I've added them and they add back (after)."""
         code = invite_code_from(code)
         if not code:
-            return None, "That invite doesn't match anyone."
+            return None, NO_INVITE
         status, data = self._call("POST", f"/invites/{code}/redeem")
         if status == 200:
             # used or old, it adds (knocked), and they add back
             return {"user_id": str(data["uid"]), "name": str(data.get("name") or "?"),
                     "mutual": bool(data.get("mutual")), "knocked": bool(data.get("knocked"))}, None
         return None, {"own_code": "That's your own invite.",
-                      "no_match": "That invite doesn't match anyone."}.get(data.get("error"), "Couldn't add. Try again.")
+                      "no_match": NO_INVITE}.get(data.get("error"), "Couldn't add. Try again.")
 
     def add_back(self, uid):
         """Add someone by uid (Add back, a knock's Add). {uid, name, emoji,

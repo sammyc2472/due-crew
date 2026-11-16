@@ -263,7 +263,7 @@ def _settings_study(cfg, fsrs=None, reach=None, stops=()):
                       + (" " + _t("Works best with FSRS on.") if fsrs is False else ""))
             # 3.9.12 (SC's pick A): Anki's deck list as what there is to do, where Anki buries siblings
             + _st_row(_t("Deck counts leave out buried siblings"),
-                      _st_switch("deck_counts", g("deck_counts", False), _t("Deck counts leave out buried siblings")),
+                      _st_switch("deck_counts", g("deck_counts", True), _t("Deck counts leave out buried siblings")),
                       _t("Anki&rsquo;s deck list counts every card of a note, then buries the siblings as you study. On, it shows what you&rsquo;ll do."))
             + f'</div><div class="st-h">{_t("Fifteen and rooms")}</div><div class="st-box">'
             + _st_row(_t("Fifteen? in the top bar"), _st_switch("fifteen", g("fifteen", True), _t("Fifteen? in the top bar")),

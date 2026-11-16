@@ -72,7 +72,7 @@ def _deck_counts(content):
     query a draw, on the main thread (the Decks screen's own draw); whatever goes wrong, Anki's list is as it was."""
     try:
         from .. import deck_counts
-        if not cfg().get(deck_counts.SWITCH) or mw.col is None or not getattr(content, "tree", ""):
+        if not cfg().get(deck_counts.SWITCH, True) or mw.col is None or not getattr(content, "tree", ""):
             return
         col = mw.col
         names = {int(d.id): d.name for d in col.decks.all_names_and_ids()}
@@ -90,7 +90,7 @@ def _deck_counts(content):
 
 
 def _on_render(deck_browser, content):
-    _deck_counts(content)  # 3.9.12: Anki's own list without the siblings it will bury (Settings › Study; off by default)
+    _deck_counts(content)  # 3.9.12: Anki's own list without the siblings it will bury (Settings › Study; on unless turned off: SC, 16 Nov, "start it on")
     app.on_decks_render()
     content.stats += board.key_js()  # 3.9.1: the page's own scripts add the board's key to what they send
     try:
