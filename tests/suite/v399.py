@@ -1449,7 +1449,7 @@ def test_a_plans_deck_is_shared_v3102():
     check("the glue: at a follow (no note: the window said so), at the morning for a plan already running, and at a stop",
           'plan_share_flow.sync(new=plan["id"])' in src and "plan_share_flow.sync()  # 3.10.2" in src and "plan_share_flow.stopped(was)" in src
           and "if pid != new" in src and "no=stop, no_label=_t(\"Stop sharing\")" in src)
-    check("said before Follow, in the window", "This deck is shared with your crew while you’re on the plan" in srcs.due_src("ui/follow_dialog.py"))
+    check("said before Follow, in the window", "Your crew sees this deck while you’re on the plan" in srcs.due_src("ui/follow_dialog.py"))
     from due_crew import views
     check("the map's picture leaves its week-ago map on the Insights view: in its shape (it slipped)",
           views.insights_wrong({"map_prev": {"x": 1}, "map_since": "2026-11-10"}) == [] and views.insights_wrong({"map_prev": None, "map_since": ""}) == [])

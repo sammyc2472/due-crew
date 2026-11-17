@@ -143,7 +143,7 @@ class FollowDialog(QDialog):
 
         self.title = role(QLabel(""), "head")
         self.title.setStyleSheet("font-size: 14px;")
-        self.title.setContentsMargins(0, 6, 0, 0)  # a style sheet's margin sets a label's words in, too
+        self.title.setContentsMargins(0, 2, 0, 0)  # a style sheet's margin sets a label's words in, too
         root.addWidget(self.title)
         drow = QHBoxLayout()
         self.deck_label = QLabel(_t("Run it on"))
@@ -157,8 +157,7 @@ class FollowDialog(QDialog):
         drow.addWidget(self.best_hint)
         root.addLayout(drow)
         # 3.10.2 (SC): a plan's deck is shared with my crew, said here before Follow
-        self.share_note = note(QLabel(_t("This deck is shared with your crew while you’re on the plan: they see your progress on it "
-                                         "and which cards you know, and you see theirs. Crew › Decks turns it off.")))
+        self.share_note = note(QLabel(_t("Your crew sees this deck while you’re on the plan: your progress and the cards you know. Crew › Decks turns it off.")))
         self.share_note.setWordWrap(True)
         root.addWidget(self.share_note)
         # 3.8.1: no deck here named like the plan's, and its authors say where to get it
