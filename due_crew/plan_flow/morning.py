@@ -267,6 +267,8 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
     replaces another)."""
     if not mw.col or not client().signed_in:
         return None
+    from .. import plan_share_flow
+    plan_share_flow.sync()  # 3.10.2: a plan already running shares its deck too, once, with a line at the board's foot
     try:
         c = _pcfg()
         state = _state_cfg(c)

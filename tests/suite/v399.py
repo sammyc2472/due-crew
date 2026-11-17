@@ -1332,7 +1332,7 @@ def test_field_log_15_nov():
     from due_crew import views
     src = srcs.due_src("team_flow.py")
     keys = set(_re.findall(r'out\["([a-z_]+)"\]', src[src.index("def _work_steps("):src.index("def _since_ms(")]))
-    keys |= set(_re.findall(r'out\["(_map_[a-z]+)"\]', src))
+    keys |= set(_re.findall(r'out\["(_?map_[a-z]+)"\]', src))  # and what the map's picture leaves on the view (map_prev, map_since: 17 Nov)
     check("every key the Insights view is given is in its shape", keys and keys <= set(views.INSIGHTS), sorted(keys - set(views.INSIGHTS)))
     check("a map's view fits: no slip", views.insights_wrong({"map": [], "map_by": "deck", "_map_know": {"x": 1}, "_map_missed": set(), "map_ways": []}) == [])
     from due_crew.backend import api
@@ -1423,3 +1423,33 @@ def test_answer_side_offers_can_be_turned_off_v3101():
     check("off: who knows it isn't shown (a tip or a question someone left still is), and nothing offers a tip or asks what made it click",
           'view.get("kind") == "knows" and not app.cfg().get("knows_show", True)' in src
           and 'hooks.view(hook, stuck, offer and offers, has_turned, offers and has_turned and hooks.may_ask(guid, day))' in src)
+
+
+def test_a_plans_deck_is_shared_v3102():
+    """3.10.2 (SC, 17 Nov): who knows a card, friends' tips and Crew › Decks read the decks I share, and a plan on a
+    deck didn't count, so almost nobody had any. A plan's deck is shared with my crew, said before Follow and once
+    at the board's foot for a plan already running; unticking it in Crew › Decks is the way off; stopping asks."""
+    from due_crew import plan_share as PS
+    states = {"a": {"deck_id": 11}, "b": {"deck_id": 12}, "c": {"deck_id": 13, "share": PS.ON}, "d": {"deck_id": 99}, "e": {}, "f": {"deck_id": 11}}
+    add, mark = PS.due(states, [12], lambda d: d != 99)
+    check("each plan looked at once: its deck shared, one I share already marked mine, a deck that's gone or a plan with none left alone",
+          add == [("a", 11)] and sorted(mark) == [("b", PS.MINE), ("f", PS.MINE)], (add, mark))
+    states["a"]["share"] = PS.ON
+    check("never added twice: unticking it in Crew › Decks stays off", PS.due(states, [], lambda d: True)[0] == [("b", 12), ("d", 99), ("f", 11)]
+          and PS.due({"a": {"deck_id": 11, "share": PS.ON}}, [], lambda d: True) == ([], []))
+    check("stopping asks only when this shared it and it's still shared; Stop sharing takes that deck alone off",
+          PS.asks({"deck_id": 11, "share": PS.ON}, [11, 12]) and not PS.asks({"deck_id": 11, "share": PS.MINE}, [11])
+          and not PS.asks({"deck_id": 11, "share": PS.ON}, [12]) and not PS.asks({}, [11]) and PS.without([11, 12], 11) == [12])
+    note = board._share_line({"plan_share_note": ["Big <Step> 1"]})
+    two = board._share_line({"plan_share_note": ["A", "B"]})
+    check("said once at the board's foot, the deck's name escaped, with the way off and Got it; nothing when there's nothing to say",
+          "<b>Big &lt;Step&gt; 1</b> is shared with your crew" in note and "duecrew:sharesee" in note and "duecrew:sharetold" in note
+          and "<b>A and B</b> are shared" in two and board._share_line({}) == "")
+    src = srcs.flow_src() + srcs.due_src("plan_share_flow.py")
+    check("the glue: at a follow (no note: the window said so), at the morning for a plan already running, and at a stop",
+          'plan_share_flow.sync(new=plan["id"])' in src and "plan_share_flow.sync()  # 3.10.2" in src and "plan_share_flow.stopped(was)" in src
+          and "if pid != new" in src and "no=stop, no_label=_t(\"Stop sharing\")" in src)
+    check("said before Follow, in the window", "This deck is shared with your crew while you’re on the plan" in srcs.due_src("ui/follow_dialog.py"))
+    from due_crew import views
+    check("the map's picture leaves its week-ago map on the Insights view: in its shape (it slipped)",
+          views.insights_wrong({"map_prev": {"x": 1}, "map_since": "2026-11-10"}) == [] and views.insights_wrong({"map_prev": None, "map_since": ""}) == [])

@@ -98,6 +98,8 @@ def on_followed(plan, deck_id, swap, late, hold=False, lesson=None):
             _after_change()
     c["plans"] = state
     _psave(c)
+    from .. import plan_share_flow
+    plan_share_flow.sync(new=plan["id"])  # 3.10.2: its deck is shared with my crew (the Follow window said so)
 
     pid = plan["id"]
     saved = kind not in ("skip", "begin") or not rest  # what needs a request has it yet?
