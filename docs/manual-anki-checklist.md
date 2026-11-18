@@ -1037,6 +1037,5 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 ## Beside Onigiri (3.10.2; Anki 25.09+, Onigiri installed)
 
 - [ ] Open Anki: Due and the crew board show under Onigiri's dashboard, full width; tabs, a row's card, Pip's closet and Settings open and close as on Anki's own screen.
-- [ ] Onigiri › Settings › layout: place Due Crew in the grid: it takes the whole row there, the widgets under it move down, and it's no longer underneath. Take it out: it's back underneath.
 - [ ] Onigiri's sidebar settings: show "Due Crew" (new entries start archived): clicking it brings the board into view.
 - [ ] Disable Onigiri, restart: the board is on Anki's Decks screen as before.

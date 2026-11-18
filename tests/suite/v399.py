@@ -1461,12 +1461,22 @@ def test_beside_a_dashboard_v3102():
     its grid where placed, the whole row either way."""
     from due_crew import onigiri
     js = onigiri.under_js('<div id="due-crew">x</div><script>window.a = "</script>";</script>')
-    check("under a dashboard: into #dc-oni, the page's main column, scripts run; nothing where the page holds the board",
-          "host.id = 'dc-oni'" in js and "document.getElementById('dc-here')" in js and ".main-content" in js
+    check("under a dashboard: into #dc-oni, the page's main column, scripts run",
+          "host.id = 'dc-oni'" in js and ".main-content" in js
           and "createElement('script')" in js and "</script>" not in js and "<\\/script>" in js)
-    check("in its grid: the whole row, as many rows as the board is tall, the widgets under it moved down",
-          "gridColumn = '1 / -1'" in onigiri.GRID_JS and "ResizeObserver" in onigiri.GRID_JS
-          and ".external-widget-container" in onigiri.GRID_JS and 'id="dc-here"' in onigiri.HERE)
+
+    class _Mw:
+        onigiri_present = True
+
+    class _Cell:
+        stats = ""
+
+    class _Page(_Cell):
+        tree = ""
+    check("its grid asking for a cell's worth is told apart from a page's own draw; the hook draws nothing there",
+          onigiri.asked(_Mw(), _Cell()) and not onigiri.asked(_Mw(), _Page()) and not onigiri.asked(object(), _Cell())
+          and not hasattr(onigiri, "GRID_JS")
+          and "if onigiri.asked(mw, content):\n        return" in srcs.due_src("glue/render.py"))
     check("its sidebar's entry: never raises where there's no such add-on", onigiri.sidebar("duecrew:onishow|k") is False)
     src = srcs.due_src("glue/render.py")
     check("the Decks screen drawn without asking us gets the same draw under it; one that asked doesn't get two",

@@ -92,10 +92,11 @@ def _deck_counts(content):
 
 def _on_render(deck_browser, content):
     _deck_counts(content)  # 3.9.12: Anki's own list without the siblings it will bury (Settings › Study; on unless turned off: SC, 16 Nov, "start it on")
-    _state["hook_drew"] = True  # 3.10.2: the page asked for the board (a dashboard in the Decks screen's place may not)
+    if onigiri.asked(mw, content):
+        return  # 3.10.2: a dashboard's grid asking for a cell's worth: the board goes under it, whole (_under)
+    _state["hook_drew"] = True  # 3.10.2: the page asked for the board (a dashboard in the Decks screen's place doesn't)
     app.on_decks_render()
     content.stats += board.key_js()  # 3.9.1: the page's own scripts add the board's key to what they send
-    content.stats += onigiri.HERE + onigiri.GRID_JS  # 3.10.2: in such a dashboard's grid, the whole row
     try:
         c = cfg()
         if _state.get("settings_tab"):
