@@ -1453,3 +1453,26 @@ def test_a_plans_deck_is_shared_v3102():
     from due_crew import views
     check("the map's picture leaves its week-ago map on the Insights view: in its shape (it slipped)",
           views.insights_wrong({"map_prev": {"x": 1}, "map_since": "2026-11-10"}) == [] and views.insights_wrong({"map_prev": None, "map_since": ""}) == [])
+
+
+def test_beside_a_dashboard_v3102():
+    """3.10.2 (SC, 18 Nov 2026: people run Due Crew with Onigiri and the board was missing): a dashboard in
+    the Decks screen's place asks our hook only for what a person put in its grid. Under it by default, in
+    its grid where placed, the whole row either way."""
+    from due_crew import onigiri
+    js = onigiri.under_js('<div id="due-crew">x</div><script>window.a = "</script>";</script>')
+    check("under a dashboard: into #dc-oni, the page's main column, scripts run; nothing where the page holds the board",
+          "host.id = 'dc-oni'" in js and "document.getElementById('dc-here')" in js and ".main-content" in js
+          and "createElement('script')" in js and "</script>" not in js and "<\\/script>" in js)
+    check("in its grid: the whole row, as many rows as the board is tall, the widgets under it moved down",
+          "gridColumn = '1 / -1'" in onigiri.GRID_JS and "ResizeObserver" in onigiri.GRID_JS
+          and ".external-widget-container" in onigiri.GRID_JS and 'id="dc-here"' in onigiri.HERE)
+    check("its sidebar's entry: never raises where there's no such add-on", onigiri.sidebar("duecrew:onishow|k") is False)
+    src = srcs.due_src("glue/render.py")
+    check("the Decks screen drawn without asking us gets the same draw under it; one that asked doesn't get two",
+          '_state["hook_drew"] = True' in src and 'if _state.pop("hook_drew", False) or mw.state != "deckBrowser" or not getattr(mw, onigiri.PRESENT, False)' in src
+          and "onigiri.under_js(c.stats)" in src and src.index("_under(deck_browser)") < src.index("keep, fridge = _board_js(drawn=True)", src.index("def _on_did_render")))
+    check("the sidebar's command has its handler, and carries the board's key",
+          '"onishow": (0, None' in srcs.due_src("glue/table.py")
+          and 'onigiri.sidebar("duecrew:onishow|" + board.BOARD_KEY)' in srcs.due_src("glue/profile.py"))
+    check("it is never imported by the folder's name but its own", 'ADDON = "1011095603"' in srcs.due_src("onigiri.py"))
