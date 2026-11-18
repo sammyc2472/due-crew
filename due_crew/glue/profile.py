@@ -11,6 +11,7 @@ from aqt.utils import tooltip
 from .. import account
 from .. import app
 from .. import board
+from .. import onigiri
 from .. import due_flow
 from .. import errs
 from .. import errs_flow
@@ -54,6 +55,7 @@ def _on_profile_open():
         _run.menu_done = True
         _tools_menu()
         mw.addonManager.setConfigAction(__name__, open_settings)
+        onigiri.sidebar("duecrew:onishow|" + board.BOARD_KEY)  # 3.10.2: a dashboard's sidebar, where there is one
     _reset_runtime()          # profile switch: nothing carries over
     with _lock:
         _run.fetching = False     # the last profile's refresh can't commit here

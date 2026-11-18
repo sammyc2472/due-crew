@@ -6,7 +6,7 @@ A part of the board (due_crew/board/, 3.9.8): see its __init__."""
 import html as _html
 import time
 
-from ..words import t as _t
+from ..words import t as _t, tn as _tn
 from ..logo import board_mark
 from .. import sev as _sev
 
@@ -165,6 +165,21 @@ def _use_line(cfg):
     return (f'<div class="dc-calm"><span>{_t(errs_flow.NOTE)}</span><span class="sp"></span>'
             f'<a href="#" onclick="{_pycmd("usesee")}">{_t("Privacy")}</a>'
             f'<a href="#" onclick="{_pycmd("usetold")}">{_t("Got it")}</a></div>')
+
+
+def _share_line(cfg):
+    """3.10.2: a plan already running just shared its deck with my crew (plan_share.py), said once in a line at
+    the board's foot: the way to take it off, and Got it. Deck names are mine: escaped."""
+    names = [str(n) for n in cfg.get("plan_share_note") or [] if n]
+    if not names:
+        return ""
+    deck = _html.escape(_t(" and ").join(names[:3]))
+    said = _tn("New: {deck} is shared with your crew, because you’re on a plan there. They see your progress on it and which cards you know; you see theirs.",
+               "New: {deck} are shared with your crew, because you’re on plans there. They see your progress on them and which cards you know; you see theirs.",
+               len(names), deck=f"<b>{deck}</b>")
+    return (f'<div class="dc-calm"><span>{said}</span><span class="sp"></span>'
+            f'<a href="#" onclick="{_pycmd("sharesee")}">{_t("Decks")}</a>'
+            f'<a href="#" onclick="{_pycmd("sharetold")}">{_t("Got it")}</a></div>')
 
 
 def _live_line(cfg):
@@ -339,7 +354,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     ago, _tone = _ago_secs(max(0.0, time.time() - fetched_at)) if fetched_at else (_t("just now"), "")
     failed = (f'<span class="warn" title="{_t("The last sync didn’t reach Due Crew. Your numbers are safe; Refresh tries again.")}">'
               f'{_t("Couldn’t sync")}</span> &middot; ') if sync_error else ""
-    foot = (_calm_line(cfg) + _use_line(cfg) + _live_line(cfg) + f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
+    foot = (_calm_line(cfg) + _share_line(cfg) + _use_line(cfg) + _live_line(cfg) + f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
             f'<span class="fr">{failed}<span class="upd">{_t("Updated {when}", when=ago)}</span>'
             f'<a class="ic" href="#" title="{_t("Refresh")}" aria-label="{_t("Refresh")}" onclick="{_pycmd("refresh")}">{_IC_REFRESH}</a>'
             f'<a class="ic" href="#" title="{_t("Settings")}" aria-label="{_t("Settings")}" onclick="{_pycmd("settings")}">{_IC_GEAR}</a></span></div>')

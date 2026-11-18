@@ -14,6 +14,7 @@ from .. import errs
 from .. import errs_flow
 from .. import gamenight_flow
 from .. import magic_flow
+from .. import onigiri
 from .. import plan_flow
 from .. import rooms
 from .. import sheets
@@ -91,6 +92,9 @@ def _deck_counts(content):
 
 def _on_render(deck_browser, content):
     _deck_counts(content)  # 3.9.12: Anki's own list without the siblings it will bury (Settings › Study; on unless turned off: SC, 16 Nov, "start it on")
+    if onigiri.asked(mw, content):
+        return  # 3.10.2: a dashboard's grid asking for a cell's worth: the board goes under it, whole (_under)
+    _state["hook_drew"] = True  # 3.10.2: the page asked for the board (a dashboard in the Decks screen's place doesn't)
     app.on_decks_render()
     content.stats += board.key_js()  # 3.9.1: the page's own scripts add the board's key to what they send
     try:
@@ -365,7 +369,28 @@ def _board_js(drawn=False):
     return board.keep_me_in_view_js(scripts=whole), board.fridge_js(scripts=whole)
 
 
+class _Under:
+    """What a draw is put on when the Decks screen was drawn without asking us (3.10.2)."""
+    stats = ""
+    tree = ""
+
+
+def _under(deck_browser):
+    """3.10.2 (onigiri.py): a dashboard in the Decks screen's place drew it without the board: the same
+    draw, under what it drew. Anki's own screen, and a dashboard that asked, set hook_drew first."""
+    if _state.pop("hook_drew", False) or mw.state != "deckBrowser" or not getattr(mw, onigiri.PRESENT, False):
+        return
+    try:
+        c = _Under()
+        _on_render(deck_browser, c)
+        _state.pop("hook_drew", None)
+        mw.web.eval(onigiri.under_js(c.stats))
+    except Exception:
+        oops()
+
+
 def _on_did_render(deck_browser):
+    _under(deck_browser)
     keep, fridge = _board_js(drawn=True)
     mw.web.eval("window.dcBK=%s;" % board._json.dumps(board.BOARD_KEY)  # 3.9.1: as the page's own script set it
                 + keep + _arrive_js() + fridge)  # 3.9.1: the doodles placed around the board, and draggable (3.9.6: and the dance floor)

@@ -1033,3 +1033,9 @@ The riskiest of 3.9.1, the parts only a live Anki can show, in order:
 ### 3.9.8: room sounds gone
 
 - [ ] Start a fifteen: the chip has no speaker; Settings › Board › Fifteen and Pip has no Room sounds; Find a setting: "rain" finds nothing. Coming from 3.9.7 with a sound picked: no sound plays, ever.
+
+## Beside Onigiri (3.10.2; Anki 25.09+, Onigiri installed)
+
+- [ ] Open Anki: Due and the crew board show under Onigiri's dashboard, full width; tabs, a row's card, Pip's closet and Settings open and close as on Anki's own screen.
+- [ ] Onigiri's sidebar settings: show "Due Crew" (new entries start archived): clicking it brings the board into view.
+- [ ] Disable Onigiri, restart: the board is on Anki's Decks screen as before.

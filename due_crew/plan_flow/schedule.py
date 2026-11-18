@@ -276,10 +276,13 @@ def _stop(pid, untag):
                 oops()
         if untag:
             _drop_plan_tags(state.get(pid), p.get("name"))
+        was = dict(state.get(pid) or {})
         state.pop(pid, None)
         pc["plans"] = state
         _psave(pc)
         _state.get("plan_progress", {}).pop(pid, None)
         app.swap(cfg())
+        from .. import plan_share_flow
+        plan_share_flow.stopped(was)  # 3.10.2: its deck was shared because of it: keep sharing?
 
     _bg(lambda: cl.unfollow_plan(pid), done)

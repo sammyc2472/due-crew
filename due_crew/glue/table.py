@@ -9,6 +9,8 @@ from .. import errs_flow
 from .. import gamenight_flow
 from .. import magic_flow
 from .. import plan_flow
+from .. import onigiri
+from .. import plan_share_flow
 from .. import sheets
 from .. import together
 from ..app import _state
@@ -62,6 +64,9 @@ _FAMILIES = (
 BOARD_CMDS = {
     "usetold": (0, None, lambda c, p: (errs_flow.told(), _swap(cfg()))),  # 3.9.9: the foot's note on what's counted, Got it
     "usesee": (0, None, lambda c, p: (errs_flow.told(), open_settings("privacy"))),  # and its way to the switch
+    "onishow": (0, None, lambda c, p: app.board_eval(onigiri.SHOW_JS)),  # 3.10.2: Due Crew in a dashboard's sidebar: the board into view
+    "sharetold": (0, None, lambda c, p: (plan_share_flow.told(), _swap(cfg()))),  # 3.10.2: a plan's deck was shared, Got it
+    "sharesee": (0, None, lambda c, p: (plan_share_flow.told(), _swap(cfg()), open_decks())),  # and where to untick it
     "calmall": (0, None, _calm_cmd), "calmx": (0, None, _calm_cmd),  # 3.9.9: the calm board (calm.py)
     "calmopen": (1, lambda p: p[2] in ("decks", "squads", "plans", "insights"), _calm_cmd),
     "party": (0, None, lambda c, p: gamenight_flow.on_message(p)),  # 3.9.5's last round: You › Pip Party

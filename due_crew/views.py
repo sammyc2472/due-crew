@@ -88,6 +88,8 @@ PLAN_CARD = {
 INSIGHTS = {
     "_map_know": dict,     # what each tile's cards are known as (team_flow._map): the map's level, never drawn
     "_map_missed": (set, frozenset, list, tuple),
+    "map_prev": dict,      # the map a week ago, for the map's picture (team_flow's map card), kept on the view once it's made
+    "map_since": str,      # and its day
     "ahead": dict,
     "aim": dict,
     "bank": bool,

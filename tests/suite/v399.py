@@ -1332,7 +1332,7 @@ def test_field_log_15_nov():
     from due_crew import views
     src = srcs.due_src("team_flow.py")
     keys = set(_re.findall(r'out\["([a-z_]+)"\]', src[src.index("def _work_steps("):src.index("def _since_ms(")]))
-    keys |= set(_re.findall(r'out\["(_map_[a-z]+)"\]', src))
+    keys |= set(_re.findall(r'out\["(_?map_[a-z]+)"\]', src))  # and what the map's picture leaves on the view (map_prev, map_since: 17 Nov)
     check("every key the Insights view is given is in its shape", keys and keys <= set(views.INSIGHTS), sorted(keys - set(views.INSIGHTS)))
     check("a map's view fits: no slip", views.insights_wrong({"map": [], "map_by": "deck", "_map_know": {"x": 1}, "_map_missed": set(), "map_ways": []}) == [])
     from due_crew.backend import api
@@ -1423,3 +1423,66 @@ def test_answer_side_offers_can_be_turned_off_v3101():
     check("off: who knows it isn't shown (a tip or a question someone left still is), and nothing offers a tip or asks what made it click",
           'view.get("kind") == "knows" and not app.cfg().get("knows_show", True)' in src
           and 'hooks.view(hook, stuck, offer and offers, has_turned, offers and has_turned and hooks.may_ask(guid, day))' in src)
+
+
+def test_a_plans_deck_is_shared_v3102():
+    """3.10.2 (SC, 17 Nov): who knows a card, friends' tips and Crew › Decks read the decks I share, and a plan on a
+    deck didn't count, so almost nobody had any. A plan's deck is shared with my crew, said before Follow and once
+    at the board's foot for a plan already running; unticking it in Crew › Decks is the way off; stopping asks."""
+    from due_crew import plan_share as PS
+    states = {"a": {"deck_id": 11}, "b": {"deck_id": 12}, "c": {"deck_id": 13, "share": PS.ON}, "d": {"deck_id": 99}, "e": {}, "f": {"deck_id": 11}}
+    add, mark = PS.due(states, [12], lambda d: d != 99)
+    check("each plan looked at once: its deck shared, one I share already marked mine, a deck that's gone or a plan with none left alone",
+          add == [("a", 11)] and sorted(mark) == [("b", PS.MINE), ("f", PS.MINE)], (add, mark))
+    states["a"]["share"] = PS.ON
+    check("never added twice: unticking it in Crew › Decks stays off", PS.due(states, [], lambda d: True)[0] == [("b", 12), ("d", 99), ("f", 11)]
+          and PS.due({"a": {"deck_id": 11, "share": PS.ON}}, [], lambda d: True) == ([], []))
+    check("stopping asks only when this shared it and it's still shared; Stop sharing takes that deck alone off",
+          PS.asks({"deck_id": 11, "share": PS.ON}, [11, 12]) and not PS.asks({"deck_id": 11, "share": PS.MINE}, [11])
+          and not PS.asks({"deck_id": 11, "share": PS.ON}, [12]) and not PS.asks({}, [11]) and PS.without([11, 12], 11) == [12])
+    note = board._share_line({"plan_share_note": ["Big <Step> 1"]})
+    two = board._share_line({"plan_share_note": ["A", "B"]})
+    check("said once at the board's foot, the deck's name escaped, with the way off and Got it; nothing when there's nothing to say",
+          "<b>Big &lt;Step&gt; 1</b> is shared with your crew" in note and "duecrew:sharesee" in note and "duecrew:sharetold" in note
+          and "<b>A and B</b> are shared" in two and board._share_line({}) == "")
+    src = srcs.flow_src() + srcs.due_src("plan_share_flow.py")
+    check("the glue: at a follow (no note: the window said so), at the morning for a plan already running, and at a stop",
+          'plan_share_flow.sync(new=plan["id"])' in src and "plan_share_flow.sync()  # 3.10.2" in src and "plan_share_flow.stopped(was)" in src
+          and "if pid != new" in src and "no=stop, no_label=_t(\"Stop sharing\")" in src)
+    check("said before Follow, in the window", "Your crew sees this deck while you’re on the plan" in srcs.due_src("ui/follow_dialog.py"))
+    from due_crew import views
+    check("the map's picture leaves its week-ago map on the Insights view: in its shape (it slipped)",
+          views.insights_wrong({"map_prev": {"x": 1}, "map_since": "2026-11-10"}) == [] and views.insights_wrong({"map_prev": None, "map_since": ""}) == [])
+
+
+def test_beside_a_dashboard_v3102():
+    """3.10.2 (SC, 18 Nov 2026: people run Due Crew with Onigiri and the board was missing): a dashboard in
+    the Decks screen's place asks our hook only for what a person put in its grid. Under it by default, in
+    its grid where placed, the whole row either way."""
+    from due_crew import onigiri
+    js = onigiri.under_js('<div id="due-crew">x</div><script>window.a = "</script>";</script>')
+    check("under a dashboard: into #dc-oni, the page's main column, scripts run",
+          "host.id = 'dc-oni'" in js and ".main-content" in js
+          and "createElement('script')" in js and "</script>" not in js and "<\\/script>" in js)
+
+    class _Mw:
+        onigiri_present = True
+
+    class _Cell:
+        stats = ""
+
+    class _Page(_Cell):
+        tree = ""
+    check("its grid asking for a cell's worth is told apart from a page's own draw; the hook draws nothing there",
+          onigiri.asked(_Mw(), _Cell()) and not onigiri.asked(_Mw(), _Page()) and not onigiri.asked(object(), _Cell())
+          and not hasattr(onigiri, "GRID_JS")
+          and "if onigiri.asked(mw, content):\n        return" in srcs.due_src("glue/render.py"))
+    check("its sidebar's entry: never raises where there's no such add-on", onigiri.sidebar("duecrew:onishow|k") is False)
+    src = srcs.due_src("glue/render.py")
+    check("the Decks screen drawn without asking us gets the same draw under it; one that asked doesn't get two",
+          '_state["hook_drew"] = True' in src and 'if _state.pop("hook_drew", False) or mw.state != "deckBrowser" or not getattr(mw, onigiri.PRESENT, False)' in src
+          and "onigiri.under_js(c.stats)" in src and src.index("_under(deck_browser)") < src.index("keep, fridge = _board_js(drawn=True)", src.index("def _on_did_render")))
+    check("the sidebar's command has its handler, and carries the board's key",
+          '"onishow": (0, None' in srcs.due_src("glue/table.py")
+          and 'onigiri.sidebar("duecrew:onishow|" + board.BOARD_KEY)' in srcs.due_src("glue/profile.py"))
+    check("it is never imported by the folder's name but its own", 'ADDON = "1011095603"' in srcs.due_src("onigiri.py"))
