@@ -1486,3 +1486,32 @@ def test_beside_a_dashboard_v3102():
           '"onishow": (0, None' in srcs.due_src("glue/table.py")
           and 'onigiri.sidebar("duecrew:onishow|" + board.BOARD_KEY)' in srcs.due_src("glue/profile.py"))
     check("it is never imported by the folder's name but its own", 'ADDON = "1011095603"' in srcs.due_src("onigiri.py"))
+
+
+def test_the_fifteens_sound_v3103():
+    """3.10.3 (KV, 19 Nov 2026: "could we please get the white noise back? ... one button for a timer &
+    focusing noise"; SC: "an option on the drop down caret on Fifteen"): Fire and Brown noise, picked from
+    the arrow beside Fifteen?, played by the top bar's page while a session runs."""
+    from due_crew import focus_sound as fs
+    conf = json.load(open(os.path.join(REPO, "due_crew", "config.json")))
+    check("off unless picked; this computer's; a pick that isn't one of ours is off",
+          conf.get(fs.KEY) == "off" and fs.pick({}) == "off" and fs.pick({fs.KEY: "fire"}) == "fire"
+          and fs.pick({fs.KEY: "waves"}) == "off" and fs.KINDS == ("off", "fire", "brown"))
+    from due_crew import account
+    check("never the account's: each computer its own", fs.KEY not in account.ACCOUNT_KEYS)
+    a = datetime.datetime(2026, 11, 22, 18, 0, tzinfo=datetime.timezone.utc)
+    st = fs.state((a, a + datetime.timedelta(minutes=15)), "fire", fs.files("2035408484", ["fire"]))
+    check("the player is told the pick, the session's span and where the recording is",
+          st["kind"] == "fire" and st["until"] - st["from"] == 15 * 60 * 1000
+          and st["files"] == {"fire": "/_addons/2035408484/sounds/fire.ogg"} and fs.state(None, "fire") is None)
+    on, off, stop = fs.js(st), fs.js(dict(st, kind="off")), fs.js(None)
+    check("the sounds themselves go only once one is picked; in no session it's told to stop",
+          "window.dcSounds" in on and "dcRoomSound" in on and "AudioBufferSourceNode" not in off and "dcRoomSound" in off
+          and stop == "window.dcRoomSound && window.dcRoomSound.set(null);")
+    src = srcs.due_src("rooms.py")
+    check("picked from Fifteen?'s arrow, heard at once, and every redraw of the bars tells the player",
+          "for kind in focus_sound.KINDS:" in src and "act.setCheckable(True)" in src and "set_sound(k)" in src
+          and "t, m, b = [_sound_js(top, room)], [], []" in src
+          and 'setWebExports(__name__.split(".")[0], r"sounds/[^/]+\\.ogg")' in srcs.due_src("glue/joined.py"))
+    check("the recording's credit and licence are said", "inchadney" in open(os.path.join(REPO, "due_crew", "sounds", "CREDITS.md")).read()
+          and "sounds/fire.ogg" in open(os.path.join(REPO, "LICENSE")).read())

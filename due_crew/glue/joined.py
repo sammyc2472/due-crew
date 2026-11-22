@@ -1,6 +1,7 @@
 """The glue: Anki's hooks, joined last, in the order they were."""
 
 from aqt import gui_hooks
+from aqt import mw
 
 from .. import account
 from .. import ahead_flow
@@ -19,6 +20,9 @@ from .render import _on_did_render, _on_render, _rerender
 from .commands import _on_js, _swap
 from .refresh import refresh_board
 
+
+# 3.10.3: the Fifteen's recording, for the top bar's page (rooms._sound_files)
+mw.addonManager.setWebExports(__name__.split(".")[0], r"sounds/[^/]+\.ogg")
 
 gui_hooks.deck_browser_will_render_content.append(_on_render)
 

@@ -3354,15 +3354,14 @@ def test_room_sounds_gone_v398():
     fif = rm.make_fifteen("me", datetime.datetime(2026, 10, 17, 18, 0, tzinfo=datetime.timezone.utc))
     chip = rm.widget_js("chip", rm.widget_data(fif, [], ("#2e7d32", "#7cc47f")))
     glue = srcs.glue_src() + open(os.path.join(root, "rooms.py")).read()
-    check("room sounds are gone: no files, no keys, no switch, no speaker, no player, no command",
-          not os.path.exists(os.path.join(root, "sounds")) and not os.path.exists(os.path.join(root, "sounds.js"))
+    check("room sounds stay gone but for the Fifteen's (3.10.3): no rain or waves, no old keys, no switch, no speaker on the chip, no command",
+          sorted(os.listdir(os.path.join(root, "sounds"))) == ["CREDITS.md", "fire.ogg"]
           and not {"room_sound", "room_sound_vol"} & set(conf) and "room_sounds" not in sm.BOARD_DEFAULTS
           and "room_sounds" not in sm.SWITCHES and "set:room_sounds:" not in board.FIND_WORDS
           and not any(hasattr(rm, n) for n in ("sound_pick", "sound_state", "sound_js", "sound_cmd", "sounds_on", "SOUNDS"))
           and "Room sound" not in chip and "roomsound" not in chip and "dcSounds" not in chip
-          and "roomsound" not in glue and "setWebExports" not in glue and "dcRoomSound" not in glue
-          and 'aria-label="Room sounds"' not in board._settings_board({})
-          and "sounds/" not in open(os.path.join(REPO, "LICENSE")).read())
+          and "roomsound" not in glue
+          and 'aria-label="Room sounds"' not in board._settings_board({}))
     from due_crew import rooms as R
     check("room sounds are gone: an old chip's click is just not ours (not a card page's command, no room handler takes it)",
           "roomsound" not in rm.CARD_PAGE_CMDS and R.on_message("roomsound", ["duecrew", "roomsound", "rain", "50"]) is False
