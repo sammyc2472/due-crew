@@ -1486,3 +1486,71 @@ def test_beside_a_dashboard_v3102():
           '"onishow": (0, None' in srcs.due_src("glue/table.py")
           and 'onigiri.sidebar("duecrew:onishow|" + board.BOARD_KEY)' in srcs.due_src("glue/profile.py"))
     check("it is never imported by the folder's name but its own", 'ADDON = "1011095603"' in srcs.due_src("onigiri.py"))
+
+
+def test_the_fifteens_sound_v3103():
+    """3.10.3 (KV, 19 Nov 2026: "could we please get the white noise back? ... one button for a timer &
+    focusing noise"; SC: "an option on the drop down caret on Fifteen"): Fire and Brown noise, picked from
+    the arrow beside Fifteen?, played by the top bar's page while a session runs."""
+    from due_crew import focus_sound as fs
+    conf = json.load(open(os.path.join(REPO, "due_crew", "config.json")))
+    check("off unless picked; this computer's; a pick that isn't one of ours is off",
+          conf.get(fs.KEY) == "off" and fs.pick({}) == "off" and fs.pick({fs.KEY: "fire"}) == "fire"
+          and fs.pick({fs.KEY: "waves"}) == "off" and fs.KINDS == ("off", "fire", "brown"))
+    from due_crew import account
+    check("never the account's: each computer its own", fs.KEY not in account.ACCOUNT_KEYS)
+    a = datetime.datetime(2026, 11, 22, 18, 0, tzinfo=datetime.timezone.utc)
+    st = fs.state((a, a + datetime.timedelta(minutes=15)), "fire", fs.files("2035408484", ["fire"]))
+    check("the player is told the pick, the session's span and where the recording is",
+          st["kind"] == "fire" and st["until"] - st["from"] == 15 * 60 * 1000
+          and st["files"] == {"fire": "/_addons/2035408484/sounds/fire.ogg"} and fs.state(None, "fire") is None)
+    on, off, stop = fs.js(st), fs.js(dict(st, kind="off")), fs.js(None)
+    check("the sounds themselves go only once one is picked; in no session it's told to stop",
+          "window.dcSounds" in on and "dcRoomSound" in on and "AudioBufferSourceNode" not in off and "dcRoomSound" in off
+          and stop == "window.dcRoomSound && window.dcRoomSound.set(null);")
+    src = srcs.due_src("rooms.py")
+    check("picked from Fifteen?'s arrow, heard at once, and every redraw of the bars tells the player",
+          "for kind in focus_sound.KINDS:" in src and "act.setCheckable(True)" in src and "set_sound(k)" in src
+          and "t, m, b = [_sound_js(top, room)], [], []" in src
+          and 'setWebExports(__name__.split(".")[0], r"sounds/[^/]+\\.ogg")' in srcs.due_src("glue/joined.py"))
+    check("the recording's credit and licence are said", "inchadney" in open(os.path.join(REPO, "due_crew", "sounds", "CREDITS.md")).read()
+          and "sounds/fire.ogg" in open(os.path.join(REPO, "LICENSE")).read())
+
+
+def test_typing_and_tools_menu_v3103():
+    """3.10.3 (Lorry, 23 Nov 2026, Anki 26.09 on a Mac): typing in a box of ours set off Anki's letter keys
+    (b: Browse), and Tools › Pip's closet opened it out of sight under a long deck list."""
+    from due_crew import keys
+
+    class _Key:
+        def __init__(self, t): self.t = t
+        def toString(self): return self.t
+
+    class _Sc:
+        def __init__(self, t, on=True): self.t, self.on, self.log = t, on, []
+        def key(self): return _Key(self.t)
+        def isEnabled(self): return self.on
+        def setEnabled(self, v): self.on = v; self.log.append(v)
+
+    class _Mw:
+        def __init__(self, scs): self.scs = scs
+        def findChildren(self, _): return self.scs
+    b, ctrl, f5, off = _Sc("B"), _Sc("Ctrl+B"), _Sc("F5"), _Sc("T", on=False)
+    m = _Mw([b, ctrl, f5, off])
+    keys.typing(True, m)
+    held = (b.on, ctrl.on, f5.on, off.on)
+    keys.typing(True, m)  # a second box gains the caret before the first says it lost it
+    keys.typing(False, m)
+    check("while a box of ours is typed in, Anki's bare letter keys are off; the rest, and ones already off, are left",
+          held == (False, True, True, False) and (b.on, ctrl.on, f5.on, off.on) == (True, True, True, False) and not off.log)
+    check("the page says so from any text box, with the board's key; never from a tick or a button",
+          "focusin" in keys.WATCH_JS and "focusout" in keys.WATCH_JS and "'duecrew:typing:' + on + '|' + window.dcBK" in keys.WATCH_JS
+          and "checkbox|radio|button" in keys.WATCH_JS)
+    check("its command has a handler, the page gets the watcher at each draw, and a screen left mid-typing gives the keys back",
+          '"typing": (1, lambda p: p[2] in ("0", "1")' in srcs.due_src("glue/table.py")
+          and 'content.stats += "<script>" + keys.WATCH_JS + "</script>"' in srcs.due_src("glue/render.py") and "</script>" not in keys.WATCH_JS
+          and "gui_hooks.state_will_change.append(lambda new, old: keys.typing(False))" in srcs.due_src("glue/joined.py"))
+    src = srcs.due_src("glue/profile.py")
+    check("Tools › Settings, Pip's closet and Scrapbook bring what they open into view",
+          'SHOWN = ("Settings…", "Pip’s closet…", "Scrapbook…")' in src and "if label in SHOWN:\n            fn = _then_show(fn)" in src
+          and "app.board_eval(onigiri.SHOW_JS)" in src)

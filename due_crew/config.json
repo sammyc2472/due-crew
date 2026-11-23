@@ -27,6 +27,7 @@
   "muted": [],
   "hidden_tabs": [],
   "fifteen": true,
+  "fifteen_sound": "off",
   "sev": true,
   "sev_break": "breathe"
 }

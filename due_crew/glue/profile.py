@@ -119,6 +119,19 @@ STUDY_KEY, ASK_KEY = "Ctrl+Shift+S", ("Meta+Shift+Q" if sys.platform == "darwin"
 MAGIC_KEY = "Ctrl+F"  # 3.9.7: Magic search; 3.9.10: ⌘F on a Mac (was ⌘⇧F); Settings › Study takes it away
 
 
+SHOWN = ("Settings…", "Pip’s closet…", "Scrapbook…")  # the Tools entries that open in the board's place
+
+
+def _then_show(fn):
+    """3.10.3 (Lorry, 23 Nov: Tools › Pip's closet "doesn't really navigate there", under a deck list longer
+    than the window): what opens in the board's place from the Tools menu is brought into view."""
+    def go():
+        fn()
+        from aqt.qt import QTimer
+        QTimer.singleShot(700, lambda: app.board_eval(onigiri.SHOW_JS))
+    return go
+
+
 def _tools_menu():
     """Tools › Due Crew (3.1: a submenu, for plans). 3.8.0: Study what's
     next on top (Ctrl+Shift+S), Settings… opens the board's, and Show on
@@ -147,6 +160,8 @@ def _tools_menu():
             menu.addMenu(planner.plans_menu(menu))
             continue
         label, fn = item
+        if label in SHOWN:
+            fn = _then_show(fn)  # 3.10.3: what opens in the board's place is brought into view
         action = QAction(_t(label), mw)
         action.triggered.connect(lambda _=False, fn=fn: fn())
         menu.addAction(action)

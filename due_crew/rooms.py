@@ -26,7 +26,7 @@ import time
 from aqt import mw
 from aqt.utils import tooltip
 
-from . import app, board, room_model, sev
+from . import app, board, focus_sound, room_model, sev
 from .app import _state, cfg, client, save_cfg
 from .errs import oops
 from .words import later as _later, t as _t
@@ -294,7 +294,7 @@ def refresh_widgets():
     room = my_room() if signed else None
     # each page's widgets go as one piece (_draw), the bottom bar's with what
     # keeps Anki's answer buttons in its middle
-    t, m, b = [], [], []
+    t, m, b = [_sound_js(top, room)], [], []  # 3.10.3: the Fifteen's sound plays (or stops) in the top bar
     if room is None:
         off = room_model.widget_js("off")
         t.append(off), m.append(off), b.append(off)
@@ -319,6 +319,57 @@ def refresh_widgets():
                 _card_still_out(where)
         else:
             _state["room_card"] = None  # it moved (a review began or ended): the card went with the page
+
+
+def _allow_sound(web):
+    """The top bar's page may play sound without a click on it, so a pick comes back by itself after the
+    bar redraws (Anki's webviews, like browsers, wait for a click otherwise)."""
+    try:
+        web.setPlaybackRequiresGesture(False)
+    except Exception:
+        try:
+            from aqt.qt import QWebEngineSettings
+            web.settings().setAttribute(QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False)
+        except Exception:
+            pass
+
+
+_SOUND_FILES = {}
+
+
+def _sound_files():
+    """Where the top bar's page finds the recording, if this install has it. Looked for once a run."""
+    if "files" not in _SOUND_FILES:
+        try:
+            import os
+            folder = os.path.join(os.path.dirname(__file__), "sounds")
+            have = [k for k in focus_sound.RECORDED if os.path.isfile(os.path.join(folder, k + ".ogg"))]
+            _SOUND_FILES["files"] = focus_sound.files(mw.addonManager.addonFromModule(__name__), have) if have else {}
+        except Exception:
+            return {}
+    return dict(_SOUND_FILES["files"])
+
+
+def _sound_js(top, room):
+    """3.10.3 (focus_sound.py): what tells the top bar's player my pick and the session, or to stop."""
+    if room is None:
+        return focus_sound.js(None)
+    kind = focus_sound.pick(cfg())
+    if kind != "off" and top is not None:
+        _allow_sound(top)
+    end = room_model.live_until(room) if room_model.is_fifteen(room) else room_model.room_end(room)
+    return focus_sound.js(focus_sound.state((room_model._parse(room["start"]), end), kind, _sound_files()))
+
+
+def set_sound(kind):
+    """The arrow beside Fifteen?: this computer's pick, kept, and heard at once if a session is on."""
+    if kind not in focus_sound.KINDS:
+        return
+    c = cfg()
+    if c.get(focus_sound.KEY) != kind:
+        c[focus_sound.KEY] = kind
+        save_cfg(c)
+    refresh_widgets()
 
 
 def _where():
@@ -564,6 +615,13 @@ def start_menu():
     menu = QMenu(mw)
     for label, key in START_WAYS:
         menu.addAction(_t(label)).triggered.connect(lambda _=False, k=key: run[k]())
+    menu.addSeparator()  # 3.10.3: the sound a fifteen (or a room) plays, this computer's
+    now = focus_sound.pick(cfg())
+    for kind in focus_sound.KINDS:
+        act = menu.addAction(_t(focus_sound.LABELS[kind]))
+        act.setCheckable(True)
+        act.setChecked(kind == now)
+        act.triggered.connect(lambda _=False, k=kind: set_sound(k))
     menu.exec(QCursor.pos())
 
 
