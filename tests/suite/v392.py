@@ -17,7 +17,7 @@ from .board import _day, _patched_due_crew
 
 
 def test_leeches_tag_only_v392():
-    """3.9.2 (Sam's pick): since Anki 23.10 a preset's leech action is Tag
+    """3.9.2: since Anki 23.10 a preset's leech action is Tag
     Only: Anki tags a leech and keeps showing it, none suspended. Insights'
     line counts them ("N leeches still in your reviews · See them") and the
     view lists them after the rest: a tagged card at its deck's leech count
@@ -73,7 +73,7 @@ def test_leeches_tag_only_v392():
               and "due today" in html and "back tomorrow" in html
               and "insleech:10:out" not in html and "insleech:10:fresh" not in html and "Bring it back" not in html, html)
         line = board._insights_html(10, {"leeches": 0, "near": 0, "kept": 4})
-        check("board: Insights' line: N leeches still in your reviews · See them (Sam's words)",
+        check("board: Insights' line: N leeches still in your reviews · See them",
               "<b>4</b> leeches still in your reviews &middot; <a" in line and "duecrew:insleeches:10" in line, line)
         line = board._insights_html(10, {"leeches": 1, "near": 2, "kept": 1})
         check("board: with the others, said once",
@@ -120,7 +120,7 @@ def test_leeches_tag_only_v392():
 
 
 def test_qol_pass_v392():
-    """3.9.2's last QoL pass (Sam: "last check for little things"): one card
+    """3.9.2's last QoL pass: one card
     or one time said so; a day named with its month where the line's other
     days are; the scope's links apart from each other; a stop no longer among
     the choices keeps its own name and never compares a number with itself;
@@ -219,7 +219,7 @@ def test_cheer_window_runs_v392():
 
 
 def test_one_overlay_v398():
-    """3.9.8 (the tidy-ups, Sam's yes): the board's seven windows share one
+    """3.9.8 (the tidy-ups, the maintainer's yes): the board's seven windows share one
     overlay (board.POP_JS, window.dcPop): the Cheer window, the song search,
     a sheet, Magic search's how-to, a crewmate's card, a squadmate's and the
     good-luck card. Each keeps its own card and look; the shade, its role and
@@ -314,7 +314,7 @@ def test_exam_dates_audit_v392():
 
 
 def test_scope_map_and_words_392():
-    """3.9.2 (Sam's picks C1-A, C2-A, F1-A): my exam covers the cards I
+    """3.9.2: my exam covers the cards I
     started since my last exam (in the last 10 weeks; an exam is kept once
     it's passed) or since a day I pick, else the whole deck, said in its
     box with Change; the map by when I started them, a week a tile named
@@ -353,7 +353,7 @@ def test_scope_map_and_words_392():
           T.way_of("Big::#Systems::03_Microbiology") == "big::#systems" and T.way_of("Cardio::Drugs") == T.TAGS_WAY
           and T.way_of("Big::^Systems::Cardio") == "big::^systems")
     check("week names: in the map's own topics ('Microbiology · Clinical Bacteriology'), never the deck a card came from "
-          "(Sam: 'isn't helpful ... should be organized by topic')",
+          "",
           T.batch_name(list(range(30)), tg, wd, "big::#systems") == "Microbiology · Clinical Bacteriology"
           and "Bugs" not in T.batch_name(list(range(30)), tg, wd, "big::#systems"))
     check("week names: no one topic holds a third: its two biggest, by name; a week the map's topics don't reach: no name",
@@ -393,7 +393,7 @@ def test_scope_map_and_words_392():
                               {"key": "b", "name": "Renal", "n": 20, "started": 20, "know": 80}], "right",
                          ways=[{"key": "s", "name": "Systems", "on": True},
                                {"key": "~start", "name": "When you started them", "on": False, "one": True}])
-    check("map by start, picked, but all I've started is from one week: it says so (Sam's pick), by topic",
+    check("map by start, picked, but all I've started is from one week: it says so, by topic",
           "Everything you&rsquo;ve started is from one week, so this is by topic." in one, one)
     # ---- the scope, pure ----
     check("scope: since the day after my last exam, in the last 10 weeks; older, or none, the whole deck",
@@ -463,7 +463,7 @@ def test_scope_map_and_words_392():
              else ["Big::#Notes::Biochemistry_Notes::Molecular"] for c in range(80)}
     lt = T.started_tiles({c: 30 if c < 40 else 2 for c in range(80)}, longw, {c: 0.9 for c in range(80)}, set(range(80)),
                          "2026-10-18")[-1]["name"]
-    check("map by start: a long name ends on a whole word, with an ellipsis (Sam's 'Reproductive Physiolo')",
+    check("map by start: a long name ends on a whole word, with an ellipsis",
           lt.endswith("…") and len(lt) <= T.NAME_MAX and not lt[:-1].endswith((" ", ",", "·"))
           and T.clip("Before 24 Aug · Biochemistry Notes · Molecular, Cellular, and Biochemical Basis") ==
           "Before 24 Aug · Biochemistry Notes · Molecular, Cellular…" and T.clip("short") == "short", lt)
@@ -493,7 +493,7 @@ def test_scope_map_and_words_392():
           'class="tmb"' not in whole and "sw bar" not in whole and "started" not in whole.split('class="ikey"')[1].split("</span></div>")[0], whole)
     head = board._insights_html(10, {"target": 90, "right": {"now": [86, 100], "before": [0, 0], "days": []},
                                      "aim": {"day": "2026-10-20", "in": 2}, "hero": [1, 2, 3]})
-    check("words: right beside what Anki aims for; no date ahead, no Study (3.9.5, Sam's FSRS rule)",
+    check("words: right beside what Anki aims for; no date ahead, no Study",
           "right &middot; Anki aims for 90%" in head and "Study 3 early" not in head and "insbrowse:10:h" in head, head)
     dh = board._insights_html(10, {"target": 90, "right": {"now": [86, 100], "before": [0, 0], "days": []},
                                    "aim": {"day": "2026-10-20", "in": 2, "name": "Your exam", "kind": "exam"}, "hero": [1, 2, 3]})
@@ -543,14 +543,14 @@ def test_scope_map_and_words_392():
         _state["insights"] = {}
         v = TF.insights(10, None, _day(5))
         sw = next(w for w in v["map_ways"] if w["key"] == T.START_WAY)
-        check("glue: picked, but everything started in one week: not on, and it says so (Sam's pick)",
+        check("glue: picked, but everything started in one week: not on, and it says so",
               sw.get("one") is True and not sw["on"], sw)
     finally:
         F._today, F._pcfg, F._psave, mw.col, TF.cfg, _state["insights"] = saved
 
 
 def test_offline_stays_off_stderr_v392():
-    """3.9.2 (Sam's report): a settings pull that got no answer printed its
+    """3.9.2: a settings pull that got no answer printed its
     traceback, and Anki shows anything on stderr in its error window. A
     background job's TransportError is one line on stdout; a real bug still
     prints its traceback. And no handler that prints a traceback around a
@@ -605,7 +605,7 @@ def test_offline_stays_off_stderr_v392():
             for h in t.handlers:
                 names = {getattr(e, "id", "") for e in (h.type.elts if isinstance(h.type, ast.Tuple) else [h.type])} if h.type else {"Exception"}
                 seen_te = seen_te or "TransportError" in names
-                # 3.9.9: oops() prints it as print_exc() did (and counts it for Sam)
+                # 3.9.9: oops() prints it as print_exc() did (and counts it for the maintainer)
                 prints = any(isinstance(c, ast.Call) and (getattr(c.func, "attr", "") == "print_exc"
                                                           or getattr(c.func, "id", "") == "oops") for c in ast.walk(h))
                 if asks and prints and "Exception" in names and not seen_te:
@@ -615,8 +615,7 @@ def test_offline_stays_off_stderr_v392():
 
 
 def test_one_leech_is_it_v393():
-    """3.9.3 (Sam, of Due's line "Recovered 1 leech as new cards · See them":
-    "for a singular recovered card, should be 'see it'"): one card is "it",
+    """3.9.3: one card is "it",
     wherever the board names one leech: Due's morning note, the toast when
     Recover leeches is switched on, and Insights' leech line."""
     from due_crew import due_flow as F
@@ -639,9 +638,7 @@ def test_one_leech_is_it_v393():
 
 
 def test_todays_bars_v393():
-    """3.9.3 (Sam: "a similar progress bar for reviews as appears with the new
-    cards... perhaps all of them should fill as cards are pushed to at least
-    tomorrow"; the Today's Bars mock, his yes to its picks): one rule for
+    """3.9.3: one rule for
     every bar on Today, through for today (answered, next due tomorrow or
     later), with what's answered and back later today in a lighter part;
     Reviews gets its bar; a plan's date ticks when its bar is full; a New
@@ -770,11 +767,9 @@ def test_todays_bars_v393():
 
 
 def test_today_v395():
-    """3.9.5 (Five mocks, reviewed; Sam: "give it a shot building all of
-    it"): today's misses under a done Reviews row, where they were (each
-    part opens Browse: a line, not a deck, Sam's FSRS rule). Next up and
-    the deck-ran-out line went before it shipped (Sam's picks on the 3.9.5
-    review page): the suggestion is new leeches, as before."""
+    """3.9.5 (Five mocks, reviewed; ): today's misses under a done Reviews row, where they were (each
+    part opens Browse: a line, not a deck, the maintainer's FSRS rule). Next up and
+    the deck-ran-out line went before it shipped: the suggestion is new leeches, as before."""
     from due_crew import due as D, due_flow as F
     from due_crew.app import _state
     import due_crew as dc
@@ -834,16 +829,16 @@ def test_today_v395():
     v = D.view(T, [], [], {}, reviews=rv)
     v.update(misses={"n": 23, "reviews": 214, "cids": []})
     mid = D.view(T, [], [], {}, reviews=dict(rv, through=100, left=114, done=100))
-    check("today board: 3.9.5 (Sam: \"i don't love telling someone how much time they have left\"): no minutes left",
+    check("today board: 3.9.5: no minutes left",
           "du-min" not in board._due_html(dict(mid, mins=68)) and " left</span>" not in board._due_html(mid))
     h = board._due_html(dict(v, done=False))
     rh = h[h.index("<b>Reviews</b>"):]
-    check("today board: under a done Reviews row, today's misses; no Study (Sam's FSRS rule: a line, not a deck)",
+    check("today board: under a done Reviews row, today's misses; no Study",
           "214 reviews, <b>23 missed</b>" in rh and "again" not in rh[:rh.index("du-rc") + 400] and "Super decks" not in h, rh[:1200])
     check("today board: not a word while the reviews aren't done",
           "du-rc" not in board._due_html(dict(mid, misses=None)))
-    # ---- Sam's picks: no Next up, no deck-ran-out line ----
-    check("today board (Sam's picks): no Next up and no deck-ran-out line",
+    # ---- the maintainer's picks: no Next up, no deck-ran-out line ----
+    check("today board: no Next up and no deck-ran-out line",
           "Next up" not in board._due_html(v) and "du-clr" not in board._due_html(v) and "cleared" not in board._due_html(v))
     from due_crew import team_flow as TF
     conf = {"due_suggest": True, "exam_date": ""}
@@ -887,7 +882,7 @@ def test_today_v395():
 
 
 def test_click_test_v395():
-    """3.9.5, Sam's first click-test: Insights' exam date and its scope are
+    """3.9.5, the maintainer's first click-test: Insights' exam date and its scope are
     picked in a Qt calendar (the page's own date picker went down with a
     redraw: "removing an exam date and then clicking add exam date makes
     anki quit"); an exam date comes off the day after it ("when an exam
@@ -956,7 +951,7 @@ def test_click_test_v395():
 
 def test_super_decks_gone_v395():
     """3.9.5: Super decks, built and click-tested, went before it shipped
-    (Sam: "i think let's get rid of super decks for now"). What stays:
+. What stays:
     a plan topic's Study and Browse on Today, and a deck made for a date
     goes the morning after it."""
     from due_crew import plan_flow as PF, settings_model, due_flow as F
@@ -1081,7 +1076,7 @@ def test_game_night_from_your_cards_v395():
     check("game night: a thin scope says which games it can't fill (three cards: no three wrong answers, no twins, no board)",
           G.fit(G.build(GAME_ROWS[:3], seed=1))[1] == ["imposter", "links", "trivia"])
     check("game night: the pack has its caps", all(len(pack[k]) <= n for k, n in G.CAPS.items()) and pack["n"] == len(GAME_ROWS))
-    # a small scope, and the cards around it (Sam's first night: a hand of six alike)
+    # a small scope, and the cards around it
     few, around = GAME_ROWS[:6], GAME_ROWS[6:]
     alone, nearby = G.build(few, seed=2), G.build(few, seed=2, near=around)
     asked = {G.item(r)["q"] for r in few if G.item(r)}
@@ -1210,7 +1205,7 @@ def test_pip_party_wrong_answers_of_its_sort_v395():
           == ["Graves disease", "Crohn's disease", "hyperthyroidism", "thyroid storm"])
 
 def test_game_night_questions_make_sense_v395():
-    """3.9.5, Sam: "don't want the questions to be dumb". Checked on a big
+    """3.9.5,  Checked on a big
     shared deck's export (35k cards, every card tagged by each resource that
     covers it), restated here with made-up tags: a card's topic is what its
     tags agree on, never "Extra", a chapter number, a question bank's id or
@@ -1268,7 +1263,7 @@ def test_game_night_questions_make_sense_v395():
         ("Cyclins act at the cell cycle's", "checkpoints (restriction points)"), ("Growth factors bind", "receptor tyrosine kinases")])]
     ras = [(n, *r[1:]) for n, r in enumerate(ras, 100)]
     wrong = G._Pool([x for x in (G.item(r) for r in ras) if x]).wrong(0, random.Random(2))
-    check("game night: never a wrong answer that is the right one in the plural (Sam's \"GAPs\" for \"GAP\")",
+    check("game night: never a wrong answer that is the right one in the plural ",
           not any("gtpase" in w.lower() for w in wrong) and G._unique(["GAP", "GAPs", "gaps"]) == ["GAP"], wrong)
     check("game night: a wrong answer takes the right one's case, so neither stands out (acronyms and Greek as they are)",
           G._cased("Mitral", "pulmonic") == "mitral" and G._cased("aortic", "Pulmonic") == "Aortic" and G._cased("ACE", "pulmonic") == "ACE"
@@ -1303,7 +1298,7 @@ def test_game_night_questions_make_sense_v395():
 
 def test_game_night_one_player_v395():
     """3.9.5, game night (site/public/table.js, on tonight's pack): each game
-    starts at its own min since the release (FEW = Infinity; 1 while Sam
+    starts at its own min since the release (FEW = Infinity; 1 while the maintainer
     tested it). Each game, one player through its most, still starts, and
     the stand-in players' answers move it on: alone, Rounds has no
     Attending, Imposter has nobody to vote for, and Links' clue giver picks
@@ -1385,8 +1380,8 @@ console.log(JSON.stringify({ ph: S.ph, ts: S.ts, pub: Trivia.pub(S), skip: Trivi
     phone = src[src.index("const Links = {"):]
     phone = phone[phone.index("  phone(x, seat, p) {"):]
     phone = phone[:phone.index("\n  },\n")]
-    check("game night: Links is picked on the TV; a phone has no board to tap (Sam: too small), the clue giver's the key alone, "
-          "in colours (Sam: \"colorful blocks\"), the words on the TV",
+    check("game night: Links is picked on the TV; a phone has no board to tap, the clue giver's the key alone, "
+          "in colours, the words on the TV",
           "tap:" not in phone and "Links.blocks(x, key)" in phone and "Links.grid(" not in phone and "p.answer({ t:" not in phone, phone[:200])
     check("game night: what each game needs from the pack is gamenight.NEEDS (the twin)",
           {k: list(v) for k, v in G.NEEDS.items()} == got["needs"], got["needs"])
@@ -1397,7 +1392,7 @@ console.log(JSON.stringify({ ph: S.ph, ts: S.ts, pub: Trivia.pub(S), skip: Trivi
 
 
 def test_trivia_a_block_of_fair_questions_v395():
-    """3.9.5, Sam's Trivia of two questions ("only saw two questions"), its
+    """3.9.5, a Trivia of two questions, its
     label the answer ("Signal Transducers" over "____ (class)") and a wrong
     answer of the wrong sort: Trivia needs a block's worth (ten) to be on
     the menu, and a scope with few questions of its own (long answers,
@@ -1474,10 +1469,8 @@ def test_pip_party_pack_for_the_vote_v395():
 
 
 def test_pip_party_said_out_loud_v395():
-    """3.9.5, Pip Party (Sam: "you have to imagine that people are sitting
-    next to each other"): what can be said out loud isn't typed. Imposter
-    (Sam: "the imposter doesn't have anything at all. the tv should
-    designate the order"): every phone has the topic but the imposter's;
+    """3.9.5, Pip Party: what can be said out loud isn't typed. Imposter
+: every phone has the topic but the imposter's;
     the TV sets the order round the room, once or twice, and its Vote ends
     the words; the caught imposter guesses among the topic, its twin and
     two more. Links' clue giver says the word and taps how many it's for:
@@ -1520,7 +1513,7 @@ console.log(JSON.stringify({ order, imp: S.imp, a: S.a, b: S.b, sec, pub, waits,
     check("Imposter: round the room from someone, each once, in the room's order",
           sorted(o) == [0, 1, 2] and all(o[k] == (o[0] + k) % 3 for k in range(3)), o)
     imp_ = got["imp"]
-    check("Imposter: every phone has the topic but the imposter's, which has nothing (Sam: \"doesn't have anything at all\")",
+    check("Imposter: every phone has the topic but the imposter's, which has nothing ",
           got["sec"][imp_] == {"imp": 1} and all(x == {"top": got["a"]} for i, x in enumerate(got["sec"]) if i != imp_), got["sec"])
     check("Imposter: every phone gets the order and how many times round, and no words; nothing a phone sends moves the words on",
           got["pub"] == ["laps", "order", "part", "ph"] and got["waits"] is None and got["bots"] == [None, None, None], got)
@@ -1528,7 +1521,7 @@ console.log(JSON.stringify({ order, imp: S.imp, a: S.a, b: S.b, sec, pub, waits,
           got["vote"] == "vote" and got["last"] == "last" and len(got["lastPub"]["opts"]) == 4
           and {got["a"], got["b"]} <= set(got["lastPub"]["opts"]) and "a" not in got["lastPub"]
           and got["end"] == "end" and got["endA"] == got["a"], got)
-    check("Imposter: once round when the TV says so (Sam: \"choose one or two rounds\"), kept for the next round", got["once"] == 1, got["once"])
+    check("Imposter: once round when the TV says so, kept for the next round", got["once"] == 1, got["once"])
     check("Links: the clue giver says the word and taps how many; the clue on the table is the number (a typed word goes nowhere)",
           got["links"] == {"ph": "guess", "clue": {"n": 3}, "left": 4, "pub": {"n": 3}} and got["wordOnly"] is None, got["links"])
     def block(start, end):
@@ -1552,8 +1545,7 @@ console.log(JSON.stringify({ order, imp: S.imp, a: S.a, b: S.b, sec, pub, waits,
 
 
 def test_pip_party_v395():
-    """3.9.5's last round (Sam: "build both right now"; game night is Pip
-    Party now, still gamenight in code). The pack's written cards: Rounds'
+    """3.9.5's last round. The pack's written cards: Rounds'
     black cards with a topic (about one in four, no answer of their own:
     the Attending's pick is the round, so alone there are none), Draw it's
     written prompts (about a quarter of the chains), Somewhere between's
@@ -1622,7 +1614,7 @@ console.log(JSON.stringify({ loneWritten: lone.order.filter((i) => D.blacks[i].w
     else:
         check("pip party: node runs the games (skipped: no node)", True)
 
-    # Sam: no game of anyone else's named, in the games, their glue or their pages
+    # the maintainer: no game of anyone else's named, in the games, their glue or their pages
     names = re.compile(r"(?i)cards against|\bcah\b|codenames|telestrations|wavelength|horsepaste|jackbox|spyfall|kahoot|pictionary"
                        r"|trivial pursuit|apples to apples|quiplash|scattergories|taboo|werewolf|among us|dixit|charades")
     files = [os.path.join(REPO, *f) for f in (("site", "public", "table.js"), ("site", "public", "table.html"), ("site", "public", "table.css"),
@@ -1774,7 +1766,7 @@ console.log(JSON.stringify({ loneWritten: lone.order.filter((i) => D.blacks[i].w
         check("pip party tab, drawn: the games' boxes (their pictures, First up on one), the map, Of their cards, the picks, Host the first game",
               out.count('class="pp-gm g-') == 3 and out.count(" on\"") >= 1 and "pp-art" in out and 'id="pp-map"' in out and "Of their cards" in out
               and "Your search" in out and "duecrew:party:host" in out and "Try it with bots" not in out and "Host " in out, out[:500])
-        check("pip party tab: Imposter's odd Pip isn't grey (Sam): rose, with its question mark", "#d0587f" in board._party_art("imposter") and "<i>?</i>" in board._party_art("imposter"))
+        check("pip party tab: Imposter's odd Pip isn't grey: rose, with its question mark", "#d0587f" in board._party_art("imposter") and "<i>?</i>" in board._party_art("imposter"))
         # the TV: open, its code on the tab; closed, back to the picks
         from due_crew.ui import game_night_tv as TV
         sigs = []
@@ -1832,11 +1824,10 @@ console.log(JSON.stringify({ loneWritten: lone.order.filter((i) => D.blacks[i].w
 
 
 def test_pip_party_only_from_its_tab_v395():
-    """3.9.5 round three (Sam: "I do not want parties to be prompted from
-    the today page. their only access should be from the pip party tab"):
+    """3.9.5 round three:
     no Party on Today (a plan's date, today's misses), on Insights' map or
     in Browse's right-click; Tools › Due Crew › Pip Party… opens the tab.
-    Sam: "find a place to mark pip party as beta": its tab, the one way in."""
+    : its tab, the one way in."""
     from due_crew import due as D, plan_flow as PF, gamenight_flow as GF
     T = "2026-10-07"
     base = {"pid": "p1", "uid": "u1", "plan": "MS2", "name": "Path 2", "opens": T, "seen": 18, "total": 42,
@@ -1854,7 +1845,7 @@ def test_pip_party_only_from_its_tab_v395():
           and "Path 2" in today and "insmapshare" in insights, today[-600:])
     folded = board.you_html({}, None, dict(you, tab="insights", folded=True))
     alone = board.you_html({}, None, dict(you, tab="party"))
-    check("pip party: out of Beta (3.9.10, Sam's): no tab says Beta, with Due's lists or alone; "
+    check("pip party: out of Beta: no tab says Beta, with Due's lists or alone; "
           "the folded line keeps the names",
           all(">Party</a>" in h and 'class="du-beta"' not in h for h in (today, insights, alone))
           and "&middot; Party" in folded and "du-beta" not in folded and board.BETA_TABS == () and board.PARTY_TAB == ("party", "Party"),
@@ -1880,8 +1871,7 @@ def test_pip_party_only_from_its_tab_v395():
           not hasattr(GF, "send") and not hasattr(GF, "from_insights") and hasattr(GF, "open_tab"))
 
 def test_pip_party_for_everyone_v395():
-    """3.9.5's release (Sam: "let's make it available to others now ... we'll
-    keep it as beta"): the tab and Tools › Due Crew › Pip Party… for anyone
+    """3.9.5's release: the tab and Tools › Due Crew › Pip Party… for anyone
     signed in, a table for anyone signed in (ten an hour, twenty a day), the
     table page anyone's, every game at its own min; its tab still says Beta."""
     from due_crew import gamenight_flow as GF
@@ -1905,7 +1895,7 @@ def test_pip_party_for_everyone_v395():
 
 
 def test_pip_party_can_be_hidden_v395():
-    """3.9.5 (Sam: "make pip party something someone can unshow"): Pip
+    """3.9.5: Pip
     Party is one of Settings › Board's tabs, hidden as the others are (this
     computer's hidden_tabs): no tab, nothing worked out for it, not on the
     folded line. Tools › Due Crew › Pip Party… brings it back, as a link to
@@ -1955,7 +1945,7 @@ def test_pip_party_can_be_hidden_v395():
 
 
 def test_pip_party_keeps_its_socket_v395():
-    """3.9.5 (Sam: "very frequent reloads on the website-end"): a table's
+    """3.9.5: a table's
     socket said nothing while the room did nothing (the lobby, between
     rounds), Cloudflare closes a quiet socket, and a phone that slept lost
     its own: each drop a "Reconnecting…", a seat blinking on the TV, and a
@@ -2022,7 +2012,7 @@ console.log(JSON.stringify(out));
 
 
 def test_pip_party_the_table_votes_v395():
-    """3.9.5 round three (Sam's v3, "At the party: the table votes"): Anki's
+    """3.9.5 round three: Anki's
     pack lists tonight's picks (or its subjects), each with its cards, and
     marks every question, word and pair with its own. In the lobby the
     phones vote, the host's taps on the TV win, nothing chosen is all of
@@ -2079,8 +2069,7 @@ console.log(JSON.stringify({ names, none: Vote.picked(names, null, [[], []]), vo
           "tonight();\n    const id = play()" in tv and "ORDER.includes(opt.first) ? opt.first" in tv and 'btn("Go with the votes", () => { T.mine = null;' in tv)
 
 def test_pip_party_find_v395():
-    """3.9.5 round three, Sam: "make sure the search works" and "as a
-    search hasn't worked to open things". The tab's own script (dcParty:
+    """3.9.5 round three,  The tab's own script (dcParty:
     Find's typing, As a search, the and-N-more tile) never ran: a tab switch
     draws by innerHTML, which runs no <script>; it rides with the board's
     scripts now. Find, tried on a big shared deck's export (35k cards, 808k
@@ -2135,8 +2124,7 @@ def test_pip_party_find_v395():
         GF.TAB.update(gen=None, corpus=None, levels={}, indexing=False, counts={}, fits={}, fitting=None)
 
 def test_pip_party_everyones_pip_v395():
-    """3.9.5 round three (Sam: "make sure the user pips are showing up where
-    they should"): a player is named with their Pip, in their seat's colour,
+    """3.9.5 round three: a player is named with their Pip, in their seat's colour,
     everywhere: the lobby's seats and its votes, Imposter's order, who's in
     and its tally, Imposter's vote on a phone, Links' teams (each their own
     Pip; the team is its box's colour); and a phone's own Pip is its seat's,
@@ -2172,8 +2160,7 @@ console.log(JSON.stringify({ order, dark: seatTone(1), wrap: seatTone(7) }));
           got.get("dark") == "#8fb0ff" and got.get("wrap") == "#8fb0ff", got)
 
 def test_pip_party_pictures_play_v395():
-    """3.9.5 round three (Sam: "add some animation to the trivia / imposter
-    / links pieces"): each game's picture is still till pointed at (the
+    """3.9.5 round three: each game's picture is still till pointed at (the
     tab's Pips are), then plays: Trivia's shapes pop in turn and Pip
     thinks, Imposter's two Pips bob and the odd one looks about with its ?
     wobbling, a wave crosses Links' board corner to corner. A box picked
@@ -2211,14 +2198,11 @@ def test_pip_party_pictures_play_v395():
         GF.TAB.update(saved[2])
 
 def test_browse_due_says_when_a_plan_opens_v395():
-    """3.9.5 (Sam: "I want to be able to see if a card will be unsuspended
-    by a plan in the due column"; his pick B, "no up next or your pace or
-    leech or anything. just the date it will open then the plan"): in
+    """3.9.5: in
     Browse, a suspended card a plan I follow opens on a day ahead says
     "Thu 5 Nov · Heme 2" in Due, the soonest plan's when two have it.
     Every other card keeps Anki's words: not suspended, a leech, not on a
-    plan, a date already opened or skipped, my own pace (Sam: "let's pause
-    on it"), a paused plan, a date that opens in slices; Notes mode too."""
+    plan, a date already opened or skipped, my own pace, a paused plan, a date that opens in slices; Notes mode too."""
     from due_crew import plan_flow as PF, plans as P
     T = "2026-10-30"
     units = [{"id": "u0", "opens": "2026-10-20"}, {"id": "u1", "opens": "2026-11-05"}, {"id": "u2", "opens": T},
@@ -2229,7 +2213,7 @@ def test_browse_due_says_when_a_plan_opens_v395():
     check("opens: none at my own pace, while paused, or on a schedule that opens in slices",
           P.opens_ahead(units, {}, T, own=True) == [] and P.opens_ahead(units, {}, T, paused=True) == []
           and P.opens_ahead(units, {}, T, sched=True) == [])
-    check("opens: the words are the day, then the plan (Sam's B); the year when it isn't this one",
+    check("opens: the words are the day, then the plan; the year when it isn't this one",
           P.opens_words("2026-11-05", "Heme 2", T) == "Thu 5 Nov · Heme 2" and P.opens_words("2027-01-05", "Heme 2", T) == "Tue 5 Jan 2027 · Heme 2")
     plans = [{"id": "p1", "name": "Heme 2", "doc": {"units": units}},
              {"id": "p2", "name": "MS2 block 3", "doc": {"units": [{"id": "v1", "opens": "2026-11-03"}]}},
@@ -2287,8 +2271,7 @@ def test_browse_due_says_when_a_plan_opens_v395():
           and "    opens_reset()  # 3.9.5" in flow[flow.index("def run(col, plan_list"):flow.index("def run(col, plan_list") + 2500])
 
 def test_pip_party_no_repeats_v396():
-    """3.9.6 (Sam: "imposter also gave my friends and I a repeat of a
-    previously done item like three rounds after we saw it before"): a
+    """3.9.6: a
     sitting remembers what it played, by name. Imposter plays a pair whose
     topics nobody's seen first, then a pair not played, and starts over only
     once all of them have been; Trivia's blocks and Links' boards draw what's
@@ -2335,8 +2318,7 @@ console.log(JSON.stringify({ imp, tri, lnk }));
           len(lnk) == 3 and not set(lnk[0]) & set(lnk[1]) and len(set(lnk[2]) - set(lnk[0]) - set(lnk[1])) == 10, lnk)
 
 def test_pip_party_tab_shows_first_v396():
-    """3.9.6 (Sam: "the transition from any other tab to pip party takes a
-    while, and clicks on bento sections also take a long time"): the tab
+    """3.9.6: the tab
     shows at once, saying it's reading your cards, and reads them just after
     (mw.progress.single_shot); its redraws replace Pip Party's part of the
     board alone, never the whole board, and the Find box keeps its focus."""
@@ -2378,9 +2360,7 @@ def test_pip_party_tab_shows_first_v396():
 
 
 def test_energy_and_security_review_v397():
-    """3.9.7 (Sam: Anki at an Energy Impact of 2,400: "could we be causing
-    this?", then "structurally simplify / make efficient / ensure security /
-    speed"): a resting pointer isn't pointing; Pip Party's picked picture plays
+    """3.9.7: a resting pointer isn't pointing; Pip Party's picked picture plays
     once; the dance floor's tick only while it dances; the board's stylesheet
     once a page; Magic search's window goes when closed; the room's cheer once
     a minute; no redirect followed with the session's token."""
@@ -2554,7 +2534,7 @@ def test_energy_and_security_review_v397():
 
 
 def test_good_luck_card_on_a_refresh_v399():
-    """3.9.9 (Sam: "not sure it did work for my last exam"): a crewmate's line
+    """3.9.9: a crewmate's line
     for my exam morning came with a refresh, was kept for the card, and the
     card waited for the Decks screen to be drawn anew: a refresh redraws the
     board in place (or, the board off, nothing), and only a draw showed it.
@@ -2633,7 +2613,7 @@ def test_good_luck_card_on_a_refresh_v399():
 
 
 def test_first_answers_quick_read_v399():
-    """3.9.9 (the slow card, Sam: "it's over 5-10 seconds"): each card's first
+    """3.9.9 (the slow card, ): each card's first
     answer was read with ease > 0 in the query, which visits every row of
     the deck's log (0.4 s on a 300,000-row log, once a day on the main
     thread, 1.5 s after the board draws: Reviews ahead's line, its track

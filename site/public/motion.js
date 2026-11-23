@@ -1,4 +1,4 @@
-/* Due Crew's motion (3.8.0, "Board in Motion": Sam picked all seventeen,
+/* Due Crew's motion (3.8.0, "Board in Motion": the maintainer picked all seventeen,
    then round two's eighteen). One file in two places, byte for byte:
    due_crew/motion.js (the add-on's board, around board.swap_js) and
    site/public/motion.js (duecrew.com, around the board's draw). The suite
@@ -404,7 +404,7 @@
       });
     },
     plan: function (el, was) {
-      // Sam: "switching plans should definitely slide": the pressed name moves over, the plan under it
+      // : the pressed name moves over, the plan under it
       // slides in from that side (a name to the left, from the left), the box grows or shrinks to it
       var x = was.x || {}, now = onIn(el), dir = x.on && now && now.i < x.on.i ? -1 : 1;
       slide(el, x.on);
@@ -743,7 +743,7 @@
     }
     g.insertBefore(ind, g.firstChild);
     // the pill takes the new pick's shape on its way, round at both ends while it travels
-    // (Sam: Crew to Squads "flicks from rectangular to fit the pill")
+    //
     var k0 = { left: from.x + "px", top: y0 + "px", width: from.w + "px", height: (from.pill ? from.h : 2) + "px", borderRadius: from.pill ? from.r : "1px" };
     var k1 = { left: to.x + "px", top: y1 + "px", width: to.w + "px", height: (to.pill ? to.h : 2) + "px", borderRadius: to.pill ? to.r : "1px" };
     var kf = [k0, k1];
@@ -1157,7 +1157,7 @@
       return;
     }
     // 8: the day you pick on a plan's week: its hairline glides there, its card slides in; round five
-    // (Sam: "animate in and out"): the first day picked unfolds its details, the same day again folds them away
+    //: the first day picked unfolds its details, the same day again folds them away
     var cell = t.closest(".pwk .pc[onclick]");
     if (cell && M.ok()) {
       var wk = cell.parentNode, old = wk.querySelector(".pc.sel");
@@ -1173,7 +1173,7 @@
           var ring = document.createElement("i");
           ring.setAttribute("aria-hidden", "true");
           // 3.9.9: the opened day is filled, the accent ring is today's alone: what glides is the opened day's own
-          // hairline, and the fill comes up under it as it lands (an accent ring glided there and vanished: Sam)
+          // hairline, and the fill comes up under it as it lands (an accent ring glided there and vanished: the maintainer)
           ring.style.cssText = "position:absolute;pointer-events:none;display:block;border:1px solid var(--dc-faded,#aaaaa2);border-radius:8px;box-sizing:border-box";
           var pos = getComputedStyle(wk).position;
           if (pos === "static") wk.style.position = "relative";

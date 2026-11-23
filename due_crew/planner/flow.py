@@ -521,7 +521,7 @@ def _save_drafts(data):
 
 def study_cards(idx, cids, name):
     """A Due Crew deck of these cards' new ones and the ones due today (a
-    date's Study; 3.9.5, Sam's FSRS rule: never reviews ahead of their
+    date's Study; 3.9.5, the maintainer's FSRS rule: never reviews ahead of their
     date), and Anki's Study screen on it. False when there are none."""
     cids = P.new_and_due(idx, cids)
     if not cids:
@@ -564,7 +564,7 @@ def top_decks(col):
 
 class StartOps:
     """A plan made and saved in one click (New plan's; the calendar window it
-    was written for went in 3.9.9: Sam, "don't think it works well enough")."""
+    was written for went in 3.9.9: )."""
 
     def today(self):
         import datetime

@@ -37,7 +37,7 @@ def _css(cfg):
     #due-crew.dc-frame.dc-split {{ background: transparent; padding: 0; border-radius: 0; }}
     #due-crew.dc-split > .du {{ background: var(--dc-bg); margin: 0 0 12px; }}
     #due-crew .dc-sheet {{ background: var(--dc-bg); border-radius: 12px; padding: 16px 18px 10px; }}
-    /* 3.9.9 (Sam): each of our cards sits on the page as Anki's deck list does: its shadow at rest, its
+    /* 3.9.9: each of our cards sits on the page as Anki's deck list does: its shadow at rest, its
        deeper one under the pointer (Anki's own values, deckbrowser.css's `.fancy table`) */
     #due-crew.dc-frame:not(.dc-split), #due-crew.dc-split > .du, #due-crew .dc-sheet {{ box-shadow: {CARD_SHADOW}; }}
     #due-crew.dc-frame:not(.dc-split):hover, #due-crew.dc-split > .du:hover, #due-crew .dc-sheet:hover {{ box-shadow: {CARD_SHADOW_HOVER}; }}
@@ -88,7 +88,7 @@ def _css(cfg):
     #due-crew td.nm {{ width: 100%; max-width: 0; overflow: hidden !important;
       text-overflow: ellipsis; }}
     #due-crew td.n {{ text-align: right; font-variant-numeric: tabular-nums; }}
-    /* 3.9.10, one grid (Sam: "The different friend tables all look very different fundamentally"): Crew's and a
+    /* 3.9.10, one grid: Crew's and a
        squad's four number columns are one width whatever is in them, so they sit in the same place on every tab */
     #due-crew table[class*="dc-s-"] tr > th:nth-child(n+2), #due-crew table[class*="dc-s-"] td.n {{ width: 62px; min-width: 62px;
       box-sizing: content-box; }}
@@ -103,9 +103,9 @@ def _css(cfg):
       background: var(--dc-well); vertical-align: middle; }}
     #due-crew .sq.on {{ background: var(--dc-accent); }}
     #due-crew .sq.away {{ background: var(--dc-well); box-shadow: inset 0 0 0 2px var(--dc-accent); opacity: 0.5; }}
-    /* 3.9.1 (Sam's pick, "Cheers, clearer"): a cheer is a pill after the name, in place of the faint 🎉
+    /* 3.9.1: a cheer is a pill after the name, in place of the faint 🎉
        column at the end; it shows only while the pointer's on the name (or a key's on it), never always
-       (Sam: "only show up when scrolling on a name, not persistent all the time") */
+ */
     #due-crew a.dc-cpill {{ display: none; margin-left: 6px; padding: 0 8px; border: 1px solid var(--dc-accent); border-radius: 99px;
       color: var(--dc-accent); font-size: 10.5px; font-weight: 700; line-height: 14px; text-decoration: none; white-space: nowrap;
       vertical-align: 1px; margin-top: -3px; margin-bottom: -3px; }}
@@ -131,7 +131,7 @@ def _css(cfg):
       text-decoration: none; color: var(--dc-muted); font-size: 11px; line-height: 1.25; opacity: .62; transition: opacity .15s; }}
     #due-crew .dc-bench a.bn:hover, #due-crew .dc-bench a.bn:focus-visible {{ opacity: 1; }}
     #due-crew .dc-bench .dc-rsev {{ display: block; line-height: 0; margin: 8px 0 7px; --sv-a: var(--rs-l); }}
-    #due-crew .dc-bench .sv-z {{ display: none; }}  /* asleep, quietly (SC: "without the zzz") */
+    #due-crew .dc-bench .sv-z {{ display: none; }}  /* asleep, quietly */
     #due-crew .dc-bench a.bn:hover .sv, #due-crew .dc-bench a.bn:focus-visible .sv {{ --sv-on: var(--sv-hover, infinite); }}
     #due-crew .dc-bench .bn:nth-child(3n+2) .sv-body {{ animation-delay: -1.1s; }} #due-crew .dc-bench .bn:nth-child(3n) .sv-body {{ animation-delay: -2.3s; }}  /* no two breathe together */
     #due-crew .dc-bench .bm {{ max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dc-ink); }}
@@ -290,7 +290,7 @@ def _css(cfg):
     #due-crew .dn b {{ font-weight: 400; overflow: hidden; text-overflow: ellipsis; min-width: 0; }}
     #due-crew .dgh {{ text-align: left; padding: 0 8px; }}
     /* 3.9.10: what a tab alone can add (a squad, a shared deck), on that tab under what it adds to, not in the foot
-       every tab has (Sam: "specific to those pages and not global functions, otherwise i worry they'd be missed") */
+       every tab has */
     #due-crew .dc-add {{ text-align: left; padding: 6px 8px 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
     #due-crew .dc-add .acts {{ margin-left: auto; font-size: 12px; color: var(--dc-faded); }}
     #due-crew .dc-add .acts a {{ display: inline; border: 0; padding: 0; font-size: 12px; line-height: inherit; border-radius: 0; }}
@@ -322,7 +322,7 @@ def _css(cfg):
     @keyframes dcbreathe {{ from {{ opacity: .4; transform: scale(.85); }} to {{ opacity: 1; transform: scale(1); }} }}
     @keyframes dcspin {{ to {{ transform: rotate(360deg); }} }}
     @media (prefers-reduced-motion: no-preference) {{
-      #due-crew .dc-live {{ animation: dcbreathe 2.4s ease-in-out 7 alternate; }}  /* 3.9.1 (Sam's pick D): a few pulses, then lit */
+      #due-crew .dc-live {{ animation: dcbreathe 2.4s ease-in-out 7 alternate; }}  /* 3.9.1: a few pulses, then lit */
       #due-crew .dc-foot a.ic.dc-spin {{ display: inline-block; animation: dcspin .8s linear infinite; }}
     }}
     #due-crew .dc-plan {{ display: inline-block; width: 36px; height: 4px; border-radius: 2px;
@@ -370,14 +370,14 @@ def _css(cfg):
     #due-crew .dc-sw a.on {{ color: var(--dc-ink); font-weight: 700; box-shadow: inset 0 -2px var(--dc-accent);
       padding-bottom: 2px; }}
     #due-crew .dc-sw a.add {{ color: var(--dc-accent); font-weight: 700; }}
-    /* 3.9.10 (Sam: "make sure the spacing on today / week are the same"): a word keeps the room its bold takes,
+    /* 3.9.10: a word keeps the room its bold takes,
        so picking one never moves the others */
     #due-crew .dc-sw a[data-t] {{ display: inline-block; padding-bottom: 2px; }}
     #due-crew .dc-sw a[data-t]::after {{ content: attr(data-t); display: block; height: 0; overflow: hidden; visibility: hidden;
       font-weight: 700; }}
     #due-crew .dc-sw a i {{ font-style: normal; font-size: 10px; font-weight: 700; color: var(--dc-accent-ink);
       background: var(--dc-accent); border-radius: 99px; padding: 0 5px; margin-left: 4px; }}
-    /* 3.8.0, head row B (Sam's pick): Crew's views, and a squad's names, in
+    /* 3.8.0, head row B: Crew's views, and a squad's names, in
        the table's top-left corner; what was there goes under the table.
        Decks has no table: its picker has a line of its own, with the key */
     #due-crew th.dc-corner {{ text-align: left; white-space: normal; }}
@@ -537,7 +537,7 @@ def _css(cfg):
       margin-top: 8px; padding: 7px 9px; border-radius: 8px; background: var(--dc-well); }}
     #due-crew .lwh a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .lwx {{ color: var(--dc-muted); font-size: 11px; margin-top: 6px; }}
-    /* round five, Sam's pick A: the week as seven small days (its bar, what's left, a quiz under its
+    /* round five, the maintainer's pick A: the week as seven small days (its bar, what's left, a quiz under its
        day), names in the day's details, which open under the week on a click (motion.js 8) */
     #due-crew .pwk {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }}
     #due-crew .pwk .pc {{ display: grid; gap: 4px; align-content: start; padding: 6px 7px 7px; min-height: 58px; min-width: 0;
@@ -585,7 +585,7 @@ def _css(cfg):
     #due-crew .pday .pwhy {{ font-size: 11.5px; color: var(--dc-muted); }}
     #due-crew .pday .pwhy a.tp {{ font-weight: inherit; }}
     /* 3.8.0: a set of cards that opens in Browse (a topic, "16 left"): one look
-       everywhere, the board's green, as Today's (Sam: "pick one style and stick with it") */
+       everywhere, the board's green, as Today's */
     #due-crew a.tp {{ color: var(--dc-accent); font-weight: inherit; text-decoration: none; }}
     #due-crew a.tp:hover {{ text-decoration: underline; text-underline-offset: 2px; }}
     #due-crew .pcrew {{ font-size: 11.5px; color: var(--dc-muted); margin-top: 8px; }}

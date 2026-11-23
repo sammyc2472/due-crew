@@ -9,7 +9,7 @@ Every run of 3 to 9 digits is a number; only the ones the deck has as a
 question count, so a date or a score pasted with them finds nothing and is
 said as such ("3 numbers aren't questions here"), never guessed at.
 
-3.9.3 (Sam): no In common; what's not sticking is Insights' to say, from
+3.9.3: no In common; what's not sticking is Insights' to say, from
 my answers once I've studied them. 3.9.5 (Study where the cards are):
 Their topics, the map's parts the questions are in (topics), each with
 the map's % and a Study of what I missed there.
@@ -71,7 +71,7 @@ def find(idx, text, bank=None):
 
 
 def close(found):
-    """Whether the paste's banks are close enough to ask which (3.9.3, Sam):
+    """Whether the paste's banks are close enough to ask which:
     the runner-up has at least half as many of its numbers as the first. One
     stray number in another bank isn't a question."""
     hits = [n for _b, n in found.get("banks") or () if n]

@@ -24,7 +24,7 @@ from .squads import _squads_html
 from .closet import CLOSET_CSS, closet_line
 from .scrapbook import scrapbook_line
 
-# 3.9.10 (Sam: "find a new settings gear because this one doesn't really fit and feels strangely spaced"): the
+# 3.9.10: the
 # foot's two icons drawn, one size and one stroke (a font's ⚙ and ↻ came in whatever size and place the font had)
 _IC = ('<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">%s</svg>')
@@ -69,7 +69,7 @@ def _clock(ts, now=None):
 
 
 def offline_html(fetched_at, now=None):
-    """3.9.9 (Off the Board, 11, Sam's pick): Due Crew couldn't be reached
+    """3.9.9 (Off the Board, 11, the maintainer's pick): Due Crew couldn't be reached
     (no network, or the server away), said plainly on top of every tab where
     the foot's "Couldn't sync" was the only word. What I study still counts:
     the next sync reads it from Anki. Try now is Refresh."""
@@ -288,7 +288,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                     f'onclick="{_pycmd("knockmute:" + uid)}">&times;</a></div>')
     for uid, who, days in (milestones or [])[:2]:
         emoji = "&#128175;" if int(days) < 365 else "&#127881;"
-        fig = (milestone_sev or {}).get(uid)  # 3.8.1 (Sam's pick): Pip hops in the emoji's place
+        fig = (milestone_sev or {}).get(uid)  # 3.8.1: Pip hops in the emoji's place
         icon = f'<span class="dc-fig">{_sev.slot(fig, 40)}</span>' if fig else f"<span>{emoji}</span>"
         bans.append(f'<div class="dc-wrap">{icon}'
                     f'<span>{_t("{who} just reached a {n}-day streak.", who=f"<b>{_html.escape(str(who))}</b>", n=int(days))}</span>'
@@ -334,7 +334,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     body = ((offline_html(fetched_at) if offline else "") + (notice_html(notice) if notice else "")
             + _one_at_a_time(bans) + lobby + body)
 
-    # 3.9.10 (Sam: "I've been meaning to redo the bottom"): three words, each saying what it opens.
+    # 3.9.10: three words, each saying what it opens.
     # Friends is the Friends window (its list, my code, Copy invite: the Crew menu went, Shared decks to
     # Crew › Decks); Share my stats is Share's menu by what leaves. I'm studying went (the dot shows by
     # itself) and Open a room is the top bar's (▶ Fifteen?'s arrow). Refresh and Settings stay quiet icons
@@ -404,7 +404,7 @@ def _card(cfg, title, body_html, sheet=""):
 
 def signed_out_card(cfg, expired=False, gone=False, sev=None):
     """gone (Q4): the account was deleted after 12 months without activity.
-    sev (3.8.1, Sam's pick): Pip's markup, waving beside the words until
+    sev: Pip's markup, waving beside the words until
     you start (rooms.signed_out_sev), or None."""
     if gone:
         start = f'<a href="#" onclick="{_pycmd("setup")}">{_t("Start again with your email")}</a>'

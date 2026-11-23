@@ -92,7 +92,7 @@ def _deck_counts(content):
 
 
 def _on_render(deck_browser, content):
-    _deck_counts(content)  # 3.9.12: Anki's own list without the siblings it will bury (Settings › Study; on unless turned off: SC, 16 Nov, "start it on")
+    _deck_counts(content)  # 3.9.12: Anki's own list without the siblings it will bury (Settings › Study; on unless turned off)
     if onigiri.asked(mw, content):
         return  # 3.10.2: a dashboard's grid asking for a cell's worth: the board goes under it, whole (_under)
     _state["hook_drew"] = True  # 3.10.2: the page asked for the board (a dashboard in the Decks screen's place doesn't)
@@ -129,8 +129,7 @@ def _on_render(deck_browser, content):
             _state["board_shown"] = True
             if magic_flow.on():
                 # 3.9.9: under the deck list, over Anki's "Studied…" line
-                # (3.9.9, Sam's screenshot: Anki puts content.tree inside its <table>, and a browser lifts a
-                # div out of a table to above it; the start of content.stats is under the list, over "Studied…")
+                #
                 content.stats = board.magic_field(c) + (content.stats or "")
             content.stats += _board_html(c)
             _push_if_stale()

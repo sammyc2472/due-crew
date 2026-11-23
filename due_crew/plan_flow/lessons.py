@@ -673,7 +673,7 @@ def board_view(c):
             joy(card, today)  # 3.9.6: what's happened to it since it was last looked at
         except Exception:
             oops()
-    try:  # 3.9.9 (Sam's pick B): a plan's exam, asked once on its card
+    try:  # 3.9.9: a plan's exam, asked once on its card
         ask = P.exam_offer(plan_list, (c or {}).get("exam_date"), today, (c or {}).get("exam_asked"),
                            (c or {}).get("exam_from"))
     except Exception:

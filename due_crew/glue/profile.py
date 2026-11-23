@@ -78,7 +78,7 @@ def _on_profile_open():
     except Exception:
         oops()
     try:
-        errs_flow.open_profile()  # 3.9.9: this profile's counts for Sam
+        errs_flow.open_profile()  # 3.9.9: this profile's counts for the maintainer
         from .. import team_flow as _tf
         _tf.ASYNC = True  # 3.9.9: the board's Insights is worked out a part at a time (insights_soon)
         _tf.warm_soon()  # and ahead of its first ask, once the morning is through

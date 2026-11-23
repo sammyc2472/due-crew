@@ -150,8 +150,7 @@ def browse_topic(pid, uids, i):
 
 
 def study_topic(pid, uids, i):
-    """3.9.5 (Sam: "if one clicks on a tagged section on a plan (like a video
-    tags) then it moves them into a filtered deck?"): a topic of a date on
+    """3.9.5: a topic of a date on
     Today, as a deck named for it: its cards I haven't seen and the
     ones due today (P.new_and_due; never reviews ahead of their date), in
     the deck's order. A card another Due Crew deck holds comes out of it
@@ -224,7 +223,7 @@ def _refill(col, did, cids):
     try:
         col.sched.add_or_update_filtered_deck(deck)
     except Exception as e:
-        # 3.9.12 (Sam's report, a day's Study): the cards it would get back are suspended now, or another
+        # 3.9.12: the cards it would get back are suspended now, or another
         # add-on's deck took them, and Anki refuses a filtered deck that finds none ("No cards matched the
         # provided search"). That isn't an error of ours: the deck stays empty, for the morning's tidy.
         # Anything else is still said.

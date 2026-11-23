@@ -723,7 +723,7 @@ class Run:
             self.check("Magic search: what's typed reaches it", True)
         except Timeout:
             self.check("Magic search: what's typed reaches it", False, repr(win.face.text))
-        # the window is as tall as what's in it (Sam, 3.9.9: it had stayed at its first size)
+        # the window is as tall as what's in it
         fits = None
         for _ in range(60):
             need = yield self.js("Math.ceil(document.querySelector('.dcm').getBoundingClientRect().height)", win.web)
@@ -753,7 +753,7 @@ class Run:
                                            for w in QApplication.topLevelWidgets()), 10, "the window to close")
         self.check("Magic search: its window closes", True)
         # opened on a search already typed (the Decks field's Enter): the page says its height before Anki's
-        # bridge is up; the window must still get it (Sam, 3.9.9: it stayed at its first size)
+        # bridge is up; the window must still get it
         self.probe.step = "Magic search: open on what's typed"
         from due_crew import magic_flow
         from due_crew.ui.magic_window import START_H

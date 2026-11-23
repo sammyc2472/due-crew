@@ -1,4 +1,4 @@
-"""3.9.2, Reviews ahead (Sam's picks, 18 Oct): what the next six weeks ask
+"""3.9.2, Reviews ahead: what the next six weeks ask
 of a deck, in cards a day as Anki counts them (each card once a day),
 counted from my own review log, never a model. Mine alone: worked out in
 my Anki, never sent.

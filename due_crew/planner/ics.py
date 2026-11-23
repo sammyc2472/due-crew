@@ -1,4 +1,4 @@
-"""Add to my calendar (3.9.6, Sam's pick): a plan's sets and its quizzes
+"""Add to my calendar: a plan's sets and its quizzes
 and exams as a calendar file (.ics, RFC 5545) for Google, Apple or Outlook
 calendars. Each set an all-day event on its days (a spread set from its
 first day to its finish-by day), each quiz or exam an all-day event, each

@@ -597,7 +597,7 @@ function drawAll(x, view, sheet, mode) {
   await run(qe, "new_event", { name: "Midterm", day: qe.day(3) });
   check("planface: …one before the last set never does", qe.B.doc.end === qe.day(30), qe.B.doc.end);
 
-  // -- 3.9.9 (Sam's pick B): an event marked the exam, on the site as in Anki (webface.c_event_kind), and kept through the text --
+  // -- 3.9.9: an event marked the exam, on the site as in Anki (webface.c_event_kind), and kept through the text --
   let xp = (await run(qe, "pick", { key: ["event", "q1"] })).panel;
   check("planface: an event's panel says whether it's the exam (not yet)", xp.exam === false, xp.exam);
   const saves = qe.store.log.length;
@@ -624,7 +624,7 @@ function drawAll(x, view, sheet, mode) {
   check("planface: pasted plan lines show their changes first, nothing on yet", s.sheets.length === pn + 1 && pasteSheet.yes === "Add to the plan"
     && !s.B.doc.units.some((u) => u.name === "Pasted"), pasteSheet);
   await run(s, pasteSheet.cmd, pasteSheet.args);
-  check("planface: …the sheet's Add to the plan puts them on (Sam, 7 Nov: it showed the same sheet again, every press)",
+  check("planface: …the sheet's Add to the plan puts them on (it showed the same sheet again, every press)",
     s.B.doc.units.some((u) => u.name === "Pasted") && s.sheets.length === pn + 1, [s.B.doc.units.map((u) => u.name), s.sheets.length - pn]);
   await run(s, "discard", { sure: true });
   check("planface: Discard: the plan as it was saved", !s.B.doc.units.some((u) => u.name === "Neoplasia") && !s.f.F.changes.length);
@@ -825,8 +825,7 @@ function drawAll(x, view, sheet, mode) {
   nf.cmd(msg("new_follow", { code: "https://duecrew.com/p/QW12ER34?from=x" }));
   check("planface: Someone's plan: a pasted link is its code (plans.link_code)", ns.went.includes("/p/QW12ER34"), ns.went);
 
-  // -- every sheet the face draws, pressed as a person presses it (Sam, 7 Nov: Add to the plan drew the same
-  //    sheet again; the test had sent the command itself): drawn on the page, its boxes filled in, its yes
+  // -- every sheet the face draws, pressed as a person presses it: drawn on the page, its boxes filled in, its yes
   //    clicked, the message the page sends back through the face. It reaches a handler, something happens,
   //    and what comes back isn't the same sheet. Every sheet planface.js can draw is in the list. --
   const pressSheet = async (x, sh) => {
@@ -988,7 +987,7 @@ function drawAll(x, view, sheet, mode) {
       said.push(r1.f.F.status);
       back();
     }
-    check("ceilings: the size, the account's plans together and picked cards in Sam's words; an older Worker's answer (or ids) as before",
+    check("ceilings: the size, the account's plans together and picked cards in our words; an older Worker's answer (or ids) as before",
       JSON.stringify(said) === JSON.stringify([
         "A plan can be up to 1.5 MB. This makes 1.7 MB. Pasted IDs take the most room.",
         "Your plans can be up to 24 MB together. They're at 23.6 MB. Delete one, or make this one smaller.",

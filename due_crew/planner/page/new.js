@@ -5,7 +5,7 @@
   var DAY1 = ["M", "T", "W", "T", "F", "S", "S"], DAYN = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   var laid = "";  // 3.9.6: the path last laid out; drawn again the same, it doesn't lay itself out again
 
-  /* 3.9.6, day one (Sam's pick): the plan as the board's path will draw it, set by set, the first
+  /* 3.9.6, day one: the plan as the board's path will draw it, set by set, the first
      outlined (where I start), its exam a diamond at the end; its sets come in one after another
      when the plan changes shape (new.css, nothing with Reduce motion). No Pip in the plan window. */
   function path(h, p) {

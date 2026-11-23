@@ -114,7 +114,7 @@ S.update({
 })
 # 3.8.1: Pip by the logo for a moment (it goes by itself after sev.LOGO_SECONDS), and the session's line
 from due_crew import sev as SV
-# each of its moves (Sam: "variety!"): a different one each time it comes
+# each of its moves: a different one each time it comes
 S.update({f"sev{k}{'' if m == SV.moves(k)[0] else '.' + m}": (base, R(due=DV_BASE, you=you("today"), sev={"svg": SV.move(k, m), "ago": 0}), None)
           for k in ("hop", "cheer", "exam", "hello") for m in SV.moves(k)})
 S.update({f"fifteendone{'' if m == 'stack' else '.' + m}": (base, R(due=DV_BASE, you=you("today"), room={

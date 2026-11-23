@@ -104,8 +104,7 @@ CLOSET_CSS = """
        and above it for a hat, so the row is a touch taller than an emoji's */
     #due-crew .dc-rsev { display: inline-block; vertical-align: middle; margin: -3px 8px -6px 2px; line-height: 0; }
     #due-crew a.dc-rsev, #due-crew a.dc-rsevl { text-decoration: none; border: 0; }
-    /* 3.9.10 (Sam: "the way the person who you're on kinda hovers / gets bigger is disruptive… just the cheer
-       button appears"): a crew row's Pip is still, pointed at or not; the Cheer pill is what a row shows */
+    /* 3.9.10: a crew row's Pip is still, pointed at or not; the Cheer pill is what a row shows */
     #due-crew tr .dc-rsev .sv, #due-crew tr .dc-rsev .sv * { animation: none !important; }
     /* 3.8.22: a plan card's squad line: who showed up, side by side, still until it's pointed at */
     #due-crew .pcrew .pips { display: inline-flex; gap: 4px; vertical-align: middle; margin: 8px 5px 0 0; }  /* a hat clear of the line above */
@@ -204,7 +203,7 @@ def closet_html(view, cfg):
     progress = {k: v for k, v in (view.get("progress") or {}).items() if k in _closet.BY and k not in have}
     fig = _sev.svg("hello" if new else "idle", rest=bool(view.get("rest")), look=look, label=_t("Your Pip"))
     colour = (f'<div class="cl-col"><span>{_t("Colour")} <small>{_t("Pip and your board")}</small></span>'
-              f'<span class="st-sw" role="group" aria-label="{_t("Colour")}">{_accent_swatches(cfg)}</span></div>')  # 3.9.0 (Sam)
+              f'<span class="st-sw" role="group" aria-label="{_t("Colour")}">{_accent_swatches(cfg)}</span></div>')  # 3.9.0
     me = (f'<div class="cl-me"><div class="cl-fig">{fig}</div>{colour}{_closet_ons(look)}'
           f'<div class="cl-msg" aria-live="polite">{str(view.get("msg") or "")}</div>'
           + (f'<a class="st-lk" href="#" {_st_click("closetoff")}>{_t("Take it all off")}</a>' if look else "")

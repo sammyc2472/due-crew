@@ -1,9 +1,9 @@
-"""New plan in the HTML window ("Plans end to end", Sam's pick): the one way
+"""New plan in the HTML window ("Plans end to end", the maintainer's pick): the one way
 to start a plan, in the tabs' place. A resource, chapter by chapter (its chapters
 in the deck's order, one lesson each, on my study days: edits.resource_plan);
 someone's plan (a code, or the library on duecrew.com); or start empty (a
 name, the deck, the exam it ends with, then the deck beside it to lay out).
-A class's calendar waits (Sam: not yet). Nothing is sent until Make: Make
+A class's calendar waits. Nothing is sent until Make: Make
 it puts the plan on duecrew.com as mine (POST /plans, then the builder's
 save); Start it also follows it here (my own plan, nobody waits on my
 changes for me), today's lesson in my deck or its own (the follow's
@@ -146,7 +146,7 @@ class NewPlan:
 
     @staticmethod
     def _path_view(doc, dates):
-        """3.9.6, day one (Sam's pick): the plan laid out set by set, as the
+        """3.9.6, day one: the plan laid out set by set, as the
         board's path will draw it: {n, first, end, event}: how many sets,
         the first one's day, and what it ends with (its exam, or its last day)."""
         if not dates:

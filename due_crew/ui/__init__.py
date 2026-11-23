@@ -226,8 +226,7 @@ def role(label, name):
     return label
 
 
-# 3.9.1 (Sam: "make sure all modals are in our style", then "washed out, bad
-# spacing, not engaging"): a Qt window in the board's look, as its sheets and
+# 3.9.1: a Qt window in the board's look, as its sheets and
 # the Cheer window are. Every box, arrow, tick, radio dot and list is drawn
 # here, on Fusion (base_style), so a Mac, Windows and Linux, and Anki's own
 # style or the system's, all get the same window: a style sheet over the
@@ -815,7 +814,7 @@ def date_dialog(parent, title, day, lo=None, hi=None):
     calendar). day, lo, hi: datetime.date (lo and hi the first and last
     that can be picked). The board's own date fields used the page's date
     picker, which a redraw on its change could pull out from under itself
-    (Sam: Anki quit)."""
+."""
     from aqt.qt import QCalendarWidget, QDate, QDialog, QDialogButtonBox, QVBoxLayout
     dlg = styled(QDialog(parent))
     dlg.setWindowTitle(title)

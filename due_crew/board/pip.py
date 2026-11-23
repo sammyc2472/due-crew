@@ -45,7 +45,7 @@ HW_CSS = """
     #due-crew .dc-hw .hwbat path { fill: var(--dc-ink); opacity: .85; }
     #due-crew .dc-hw .hwbat .e { fill: var(--dc-hours); }
     @media (prefers-reduced-motion: no-preference) {
-      /* three bats across the line, once a day: past the logo's line, never over it (Sam) */
+      /* three bats across the line, once a day: past the logo's line, never over it */
       #due-crew .dc-hw .hwbat { animation: dc-hwbat 4.2s linear calc(var(--d) - var(--ago, 0s)) both; }
       /* their wings flap for the flight, then stop (3.9.1: they flapped on out of sight, the frames never ending) */
       #due-crew .dc-hw .hwbat .w { transform-box: fill-box; transform-origin: 50% 50%;
@@ -63,7 +63,7 @@ def _low(name):
 
 
 def halloween_html(hw, cfg):
-    """3.8.22, Halloween week (24 to 31 Oct; Sam's pick, round three): a line
+    """3.8.22, Halloween week (24 to 31 Oct; the maintainer's pick, round three): a line
     under the board's head with this week's days, the five things in
     order (mine in colour), the next and when; three bats across it once a
     day (hw["bats"]: how long they've been out, as Pip by the logo; None
@@ -128,8 +128,7 @@ SETTINGS_PIP = 44  # 3.8.22: mine in Settings › You, beside my name and status
 
 
 def squad_pip(uid, name, you, people, cfg, size=None, nth=None):
-    """3.8.21: someone's Pip on the Squads tab, in the emoji's place (Sam: "the
-    squads page still has the old emojis"): mine as on my row; a crewmate's
+    """3.8.21: someone's Pip on the Squads tab, in the emoji's place: mine as on my row; a crewmate's
     in their colour and look (a mutual friend's, which only the crew brings);
     anyone else plain, in the default colour, since all a squadmate shares is
     a name and an emoji. people: {uid: crew entry}. None with Pip off."""
@@ -137,7 +136,7 @@ def squad_pip(uid, name, you, people, cfg, size=None, nth=None):
     return row_sev({"you": bool(you), "name": name, "accent": p.get("accent"), "look": p.get("look")}, cfg, size, nth)
 
 
-STAMP_PIP = 40  # 3.8.22: who stamped a bingo square, bigger than the emoji was (Sam: "make the bingo stamps bigger")
+STAMP_PIP = 40  # 3.8.22: who stamped a bingo square, bigger than the emoji was
 BINGO_PIP_CSS = """
     #due-crew .bg-sq.stamped { padding-bottom: 34px; }
     #due-crew .bg-sq .st.sp { width: auto; height: auto; background: none; box-shadow: none; border-radius: 0; bottom: 4px; }

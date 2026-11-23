@@ -1,4 +1,4 @@
-"""The calm board (3.9.9; Sam's pick from the review's mocks). A new person
+"""The calm board (3.9.9; the maintainer's pick from the review's mocks). A new person
 sees Crew and Today; a part of the board stays folded until it has
 something to show them, then says so in one line. Nothing is removed: Show
 all opens everything, Settings › Board has the switch, and any link to a

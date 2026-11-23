@@ -1,4 +1,4 @@
-"""3.9.12 (SC: "i want to change the deck list number"; the mock's A): Anki's deck list without the
+"""3.9.12: Anki's deck list without the
 siblings it will bury.
 
 With "bury siblings" on, Anki's deck list counts every card of a note: 12 for six notes with two cards

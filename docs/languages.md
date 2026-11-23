@@ -1,6 +1,6 @@
 # Languages
 
-Due Crew in Spanish, Portuguese, German and French, beside English (SC, 13 Nov 2026). Drafted by AI, said
+Due Crew in Spanish, Portuguese, German and French, beside English. Drafted by AI, said
 so where the language is picked, with a way to send a better wording. Anki's language unless Settings ›
 Board › Language says otherwise.
 
@@ -45,7 +45,7 @@ Next, a surface at a time:
 ## Open
 
 - A better wording goes through Feedback for now. If many come in, a form that names the phrase
-  (pick it on the screen, type yours) would save SC reading free text.
+  (pick it on the screen, type yours) would save the maintainer reading free text.
 - A crewmate's own words are never translated; a share I send is in my language, not the reader's.
 
 ## A round done by a helper

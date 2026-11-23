@@ -3,7 +3,7 @@ starts on this computer. A, the default: the morning opens a lesson's cards
 in the plan's deck, as ever. B: the same opening, then each open lesson with
 cards to learn is a filtered deck of its own, Due Crew::<plan>::<NN> <lesson>,
 in Anki's deck list: its new cards and the learning ones due now, never a
-review (Sam's FSRS rule); one undo step with the open, so the board's Not
+review; one undo step with the open, so the board's Not
 today takes the decks too; tidied once empty. plans.json only, never sent.
 
 Against a fake collection with Anki's filtered decks and undo (below; the
@@ -568,11 +568,7 @@ TODAY_DECK = "Due Crew::Path Book · Today"
 
 
 def test_study_a_day_v396():
-    """3.9.6, a day's Study in You › Plans' week (Sam: "study all for the
-    day ... the filtered deck of just those new / review cards for the day
-    ... not just for today for past days too ... when you've clicked on one
-    of the days and its stuff pops down"; "declutter the plans tab, not add
-    more clutter"): in a day's details, one Study, today's or a past day's:
+    """3.9.6, a day's Study in You › Plans' week: in a day's details, one Study, today's or a past day's:
     the day's sets' new cards not seen yet and theirs due today (today:
     every set's due today too); never a review ahead; emptied the morning
     after; on B, a set's own deck gives its cards up and keeps the rest."""
@@ -627,7 +623,7 @@ def test_study_a_day_v396():
         F.study_day(w.pid, day(0))
         check("nothing new or due today: said, no deck", w.deck(TODAY_DECK) is None
               and w.toasts[n:] == ["Nothing new or due today in this plan."], w.toasts[n:])
-    # the board: in a day's details, not on the card's line (Sam: declutter)
+    # the board: in a day's details, not on the card's line
     mon = P.week_start(day(0))
     with World() as w:
         w.follow()

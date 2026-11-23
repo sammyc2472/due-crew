@@ -100,7 +100,7 @@ STORE.plans[PID]["doc"]["events"] = [{"id": "e1", "day": day(4), "name": "Heme q
 STORE.plans[PID]["doc"]["pace"] = {"mode": "daily", "days": [1, 1, 1, 1, 1, 0, 0], "daily": 40}
 next(u for u in STORE.plans[PID]["doc"]["units"] if u["id"] == "u3")["for"] = "e1"
 STORE.plans[PID]["doc"]["remarks"] = [{"id": "r1", "tag": f"{R}::05_Red_cell_disorders::Hemolytic", "text": "Start from the smear."}]
-# a class plan Sam follows
+# a class plan the maintainer follows
 PID2, CODE2 = STORE.add_plan("dre", "MS2 Block 2", "Big Step 1", [
     {"id": "c1", "name": "Anemias I", "opens": day(-3), "tags": ["#Big_Step_1::#Video_Series::Heme::Anemia"]},
     {"id": "c2", "name": "Hemolysis", "opens": day(0), "tags": [f"{R}::05_Red_cell_disorders::Hemolytic"],

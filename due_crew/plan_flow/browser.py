@@ -100,8 +100,7 @@ def opens_map():
 
 
 def browser_row(item, is_note, row, columns):
-    """gui_hooks.browser_did_fetch_row (Sam: "I want to be able to see if a
-    card will be unsuspended by a plan in the due column"): a suspended card
+    """gui_hooks.browser_did_fetch_row: a suspended card
     a plan opens on a day says the day and the plan in Due, "Thu 5 Nov ·
     Heme 2" (plans.opens_words). A leech never opens, so it keeps Anki's
     words; so does every other card, and Notes mode. Never raises: Anki

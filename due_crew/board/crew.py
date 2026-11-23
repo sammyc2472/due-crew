@@ -44,7 +44,7 @@ def _head(period, show_up=False, hidden=frozenset(), crew="today", sev=None):
         pills += (f'<a class="{cls}" href="#" '
                   f'onclick="{_pycmd("period:" + (crew if key == "crew" else key))}">{_t(label)}</a>')
     # 3.8.1: Pip beside the logo, never on it (the logo itself never changes),
-    # and only for a moment: it pops in, plays it, and goes (Sam)
+    # and only for a moment: it pops in, plays it, and goes
     beside = (f'<a class="dc-sev once" href="#" title="{_t("Pip’s closet")}" onclick="{_pycmd("closet")}" '
               f'style="--ago:{float(sev.get("ago") or 0):.2f}s">{_sev.slot(sev["svg"], 36)}</a>'
               if sev and sev.get("svg") else "")  # 3.8.2: Pip's closet is a click away
@@ -66,7 +66,7 @@ def _crew_picker(period, show_up=False, hidden=frozenset()):
 
 
 def _corner(inner):
-    """3.8.0, head row B (Sam's pick): a picker in the table's top-left
+    """3.8.0, head row B: a picker in the table's top-left
     corner, over the rank and the name, where the header was empty."""
     return f'<th class="lt dc-corner" colspan="2">{inner}</th>'
 
@@ -232,10 +232,9 @@ def _table_html(data, cfg, period, pick=""):
         return _presence_html(fresh, dormant, data["labels"], data["entries"], pick, cfg) + _solo_html(data)
     body = ""
     for row in fresh:
-        rank = ""  # 3.9.10, one grid: no first column at all. 3.9.9 (Sam, the design mocks' 2): no medals, no places: the order says it, and this isn't a race
+        rank = ""  # 3.9.10, one grid: no first column at all. 3.9.9: no medals, no places: the order says it, and this isn't a race
         body += _row_html(row, rank, cfg, period, held=row["user_id"] in held)
-    # 3.9.12 (SC: "keep yesterday at the bottom but not distinguished by a header ... and put the bench
-    # without the zzz or clear separation"): a friend who's been away longer than yesterday, or is on a
+    # 3.9.12: a friend who's been away longer than yesterday, or is on a
     # break, has no row: their Pip sits on the bench under the board (_bench_html). Q3's fold of the
     # long quiet went with it: the bench says how long for each.
     bench = [r for r in dormant if (r["quiet"] or r["paused"]) and not r["you"]]
@@ -247,8 +246,7 @@ def _table_html(data, cfg, period, pick=""):
     # the name column ellipsizes, so the table can never outgrow the card;
     # past the row cap it scrolls inside it
     # 3.9.9: what it's sorted by, for a narrow window's two columns (style.py)
-    # the bench is the scroll's last thing, never held under it (SC: "they should be at the bottom of the
-    # scroll"); it counts as two rows towards the cap
+    # the bench is the scroll's last thing, never held under it; it counts as two rows towards the cap
     seats = _bench_html(bench, cfg)
     return _scroll(f'<table class="dc-s-{sort}"><tr>{heads}</tr>{body}</table>{seats}',
                    body.count('<tr class=') + (2 if seats else 0)) + solo
@@ -267,7 +265,7 @@ def _bench_html(rows, cfg):
     for i, row in enumerate(rows[:BENCH_MAX]):
         name = str(row.get("name") or "?")
         pose, moment = BENCH_POSES[i % len(BENCH_POSES)]
-        how = away_words(row.get("last_updated"))  # a break reads as anyone's time away (SC: "just how long since we saw them")
+        how = away_words(row.get("last_updated"))  # a break reads as anyone's time away
         light, dark = accent_pair(row.get("accent"))
         if cfg.get("sev", True):
             fig = (f'<span class="dc-rsev" style="--rs-l:{light};--rs-d:{dark};{_sev.blink_css(i)}">'
@@ -285,7 +283,7 @@ def _bench_html(rows, cfg):
 
 
 BENCH_PIP = 30
-# a seat's Pip, in turn (SC: "a mix"): eyes closed and smiling, awake, off with a suitcase, asleep. (pose, moment):
+# a seat's Pip, in turn: eyes closed and smiling, awake, off with a suitcase, asleep. (pose, moment):
 # the resting one breathes as the sleeper does (its own moment is the breathing box, which never stops)
 BENCH_POSES = (("rest", "nap"), ("idle", None), ("away", None), ("nap", None))
 

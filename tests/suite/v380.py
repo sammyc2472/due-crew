@@ -81,7 +81,7 @@ def test_plans_tab_v341():
           and "<b>MS2 &lt;b&gt;Block&lt;/b&gt;</b>" in h)
     tidx = next(i for i, d in enumerate(week) if d["today"])
     cells = h.split('<div class="pwk">')[1].split('<div class="pday"')[0]
-    check("week: round five, Sam's pick A, seven small days: names in the details, not the days; every day's details shut "
+    check("week: round five, seven small days: names in the details, not the days; every day's details shut "
           "until its click; names escaped",
           'class="pwk"' in h and "V&amp;B &lt;i&gt;" in h and "<i>" not in h.replace("<i class", "").replace("<i style", "")
           and 'class="pc now"' in h and " sel\"" not in h and "Path Book" not in cells and 'class="chip' not in h
@@ -143,7 +143,7 @@ def test_plans_tab_v341():
           and "plancatch:p1" not in catching and "planbehind:p1" not in catching and "plancatchstop:p1" in catching)
     from due_crew import due as D
     lists = board.you_html({}, due=D.view("2026-10-07", [], [], {}), you={"tab": "plans", "plans": {"cards": [base]}})
-    check("due on: the week is on the card whether Due's lists are on or off (Sam's pick A)",
+    check("due on: the week is on the card whether Due's lists are on or off",
           'class="pwk"' in lists and 'class="pwk"' in board.you_html({}, due=None, you={"tab": "plans", "plans": {"cards": [base]}}))
     paused = board._plan_card_html(dict(base, paused=True, sub="paused until Mon 12 Oct", session=None))
     check("now: paused, with Resume now", "paused until Mon 12 Oct" in paused and "No new cards while it&rsquo;s paused." in paused
@@ -484,7 +484,7 @@ def test_bingo_end_to_end():
 
 
 def test_crew_picker_v380():
-    """3.8.0 (Sam): Today and Week are one Crew tab with a picker, as a squad
+    """3.8.0: Today and Week are one Crew tab with a picker, as a squad
     is picked on the Squads tab (and Decks with them, the board being my
     people: Crew and Squads). The Crew pill goes back to the last one
     picked; show-up mode has This week (one view for both) and Decks."""
@@ -550,7 +550,7 @@ def test_crew_picker_v380():
 
 
 def test_you_bubble_v380():
-    """3.8.0 (Sam): Due and Crew split. The board is my people (Crew:
+    """3.8.0: Due and Crew split. The board is my people (Crew:
     Today, Week, Decks; Squads); what's mine is the You bubble over it:
     Today, Upcoming and Later (Due's lists, when on), then Plans and
     Insights, each hideable in Settings. A saved Plans tab opens there.
@@ -620,7 +620,7 @@ def test_you_bubble_v380():
     check("refined: the box's tabs are words, Hide a word", 'class="du-tabs du-more"' in bh and "border: 1px solid var(--dc-line);\n"
           "      border-radius: 99px; padding: 2px 10px" not in bh and ">Hide &#9652;</a>" in bh)
     foot = bh.split('class="dc-foot"')[1]
-    # 3.9.10 (Sam: "I've been meaning to redo the bottom"): three words, each saying what it opens
+    # 3.9.10: three words, each saying what it opens
     words = re.findall(r'<a [^>]*onclick="pycmd\(\'duecrew:([a-z]+)\|[^>]*>([^<]+)</a>', foot.split('class="sp"')[0])
     check("the foot: Friends opens the Friends window, Scrapbook the scrapbook, Share my stats the share menu; no pill, no room, no Crew menu; who's waiting stays",
           words[:3] == [("friends", "Friends"), ("scrapbook", "Scrapbook"), ("sharemenu", "Share my stats")] and 'class="pb' not in foot
@@ -898,14 +898,14 @@ def test_long_quiet_friends_fold():
                         ent("w", "Wren", ago(8)), ent("p", "Priya", ago(120)), ent("t", "Theo<", ago(200))],
             "labels": labels, "tomorrow": "", "pending": []}
     page = board.render(data, {"period": "today"}, 0)
-    # 3.9.12 (SC: "put the bench without the zzz or clear separation"): on the crew's board a friend who's been
+    # 3.9.12: on the crew's board a friend who's been
     # away longer than yesterday has no row and no fold: their Pip is on the bench, asleep, with how long
     bench = page[page.index('class="dc-bench"'):]
     bench = bench[:bench.index("</div>")]
     check("the bench: everyone away longer than yesterday, names escaped, how long under each, a click their profile",
           bench.count('class="bn"') == 3 and ">Wren<" in bench and ">a week<" in bench and "Theo&lt;" in bench and "<Theo<" not in bench
           and ">since " in bench and f"duecrew:profile:w|{board.BOARD_KEY}" in bench and "m-nap" in bench, bench[:600])
-    check("the bench: a mix by seat (resting, awake, off with a case), each Pip on its own blink clock (SC)",
+    check("the bench: a mix by seat (resting, awake, off with a case), each Pip on its own blink clock",
           bench.count("m-nap") == 1 and "m-idle" in bench and "m-away" in bench and "m-breathe" not in bench
           and len(set(re.findall(r"--sv-b:[\d.]+s;--sv-d:-?[\d.]+s", bench))) == 3, bench[:600])
     rows = page[:page.index('class="dc-bench"')]
@@ -920,7 +920,7 @@ def test_long_quiet_friends_fold():
     paused = dict(data, entries=[data["entries"][0], dict(ent("b", "Bea", ago(16)), paused=True)])
     pb = board.render(paused, {"period": "today"}, 0)
     pb = pb[pb.index('class="dc-bench"'):]
-    check("the bench: someone on a break sits there too, with how long since they were here, as anyone (SC: no \"on a break\")",
+    check("the bench: someone on a break sits there too, with how long since they were here, as anyone ",
           ">Bea<" in pb and ">2 weeks<" in pb and "on a break" not in pb.split("</div>")[0])
     from due_crew.board import base as _base
     now = datetime.now(timezone.utc)
@@ -1270,7 +1270,7 @@ def test_due_board_and_clicks():
 
 
 def test_plan_windows_ways_in_v393():
-    """3.9.3 (Sam's picks): the plan windows, for everyone, and their ways in:
+    """3.9.3: the plan windows, for everyone, and their ways in:
     each card's Your plans… (round five: the head row's Open plans and New
     plan ▾, the card's Open and Plan ▾ went), the empty state's ways (New
     plan…, Your plans…), Insights' Missed questions line on a deck with a
@@ -1308,28 +1308,28 @@ def test_plan_windows_ways_in_v393():
     v = {"right": {}, "target": 90}
     from due_crew import due as D
     dv = D.view(TODAY.isoformat(), [], [], {}, reviews={"due": 10, "done": 0})
-    check("3.9.5 (Sam: \"this line is extra because QIDs is in the header\"): no QBank QIDs line in Insights",
+    check("3.9.5: no QBank QIDs line in Insights",
           "planmissed" not in board._insights_html(20, dict(v, bank=True)) and "practice block" not in board._insights_html(20, v))
     off = board._due_html(None, more=[("plans", "Plans"), ("insights", "Insights")], more_tab="insights",
                           more_body="<p>x</p>", magic=True)
     off_one = board._due_html(None, more=[("plans", "Plans"), ("insights", "Insights")], folded=True, magic=True)
-    check("3.9.7, round 2 (Sam: \"this is replacing QBank QID search\"): Due's lists off, Magic search is in the head "
+    check("3.9.7, round 2: Due's lists off, Magic search is in the head "
           "(and the folded line), QBank QIDs' chip gone",
-          # 3.9.9 (Sam's pick G2): it's the field under the deck list now, whatever the You box shows; no link in the box
+          # 3.9.9: it's the field under the deck list now, whatever the You box shows; no link in the box
           "duecrew:magic" not in off + off_one and "planmissed" not in off + off_one
           and "QBank QIDs</a>" not in off + off_one and "pasted question IDs" in board.magic_field({}), off)
     head = board._due_html(dict(dv, qids=True), magic=True)
     head = head[:head.index("</div>")]
-    check("ways in: Magic search in the box's head (QBank QIDs' place, Sam's pick 1), its title saying QIDs, no QIDs chip",
+    check("ways in: Magic search in the box's head (QBank QIDs' place), its title saying QIDs, no QIDs chip",
           "duecrew:magic" not in head and ">QBank QIDs</a>" not in head and "planmissed" not in head
           and "pycmd('duecrew:magic'+" in board.magic_field({}), head)
     up = board._due_html(dict(dv, tab="upcoming"), magic=True)
     one = board._due_html(dict(dv, folded=True), magic=True)
     plans_tab = board._due_html(dv, more=[("plans", "Plans")], more_tab="plans", more_body="<p>x</p>", magic=True)
-    check("ways in: …on every tab and on the folded line (Sam: \"missing the QID chip on the top right\": Magic search's now)",
+    check("ways in: …on every tab and on the folded line ",
           # 3.9.9: one field for every tab and the folded line: it's above the box, drawn with the Decks page
           not any("duecrew:magic" in x for x in (up, one, plans_tab)) and "du-fold" in one, one)
-    check("ways in: …on one baseline with the rest (Sam: \"a bit higher than everything else\"): one line height for the head's words, the folded line by baseline",
+    check("ways in: …on one baseline with the rest: one line height for the head's words, the folded line by baseline",
           "#due-crew .du-one > a, #due-crew .du-one > .du-n { line-height: 16px; }" in fakes.board_source()
           and "#due-crew .du-one { display: flex; align-items: baseline;" in fakes.board_source())
     from due_crew import due_flow
@@ -1347,7 +1347,7 @@ def test_plan_windows_ways_in_v393():
 
 
 def test_recover_by_deck_count_v393():
-    """3.9.3, Sam's pick A: Recover leeches takes a leech by its deck's own
+    """3.9.3, the maintainer's pick A: Recover leeches takes a leech by its deck's own
     leech count (as Insights' Leeches counts them), never one I left out,
     and asks once before the ones its old line (8 lapses) left in my
     reviews."""
@@ -1622,8 +1622,7 @@ def test_remaining_oct():
 
 
 def test_plan_switch_round5():
-    """Round five, Sam's pick 3 ("with multiple plans, we don't need two
-    buttons for your plans", then "Let's go with 3"): two or more plans
+    """Round five, pick 3: two or more plans
     followed show one at a time, their names a switch in the card's head
     with one Your plans… on the plan shown; this computer keeps the pick
     (`plan_pick`), and Browse › Show on my plan's plan comes first."""
@@ -1686,8 +1685,7 @@ def test_plan_switch_round5():
 
 
 def test_date_details_round5():
-    """Round five (Sam: "what happens when you click on a date? worried
-    about overlap with the today page"): a plan's date on Today and Upcoming
+    """Round five: a plan's date on Today and Upcoming
     opens its details, a click on its name, with what the Plans tab's week
     had for it: Browse its cards, the ones left, Open now, Move…, Skip it,
     Put it back, why it left cards shut. Each click as the board sends it."""
@@ -1707,11 +1705,10 @@ def test_date_details_round5():
           and "plannow" not in h and "planskip" not in h)
     check("details: today's row keeps its topics on the row (each its Study and Browse, 3.9.5), not again under it",
           h.count("plantopicstudy:p1:u1:0") == 1 and h.count("plantopic:p1:u1:0") == 1)
-    check("details: a topic's name shows its two ways beside it (Sam: \"need that option to browse or make the filtered deck\")",
+    check("details: a topic's name shows its two ways beside it ",
           'id="dc-tp-p1u1-0" hidden><a href="#" title="A filtered deck: ' in h and "pycmd('duecrew:plantopicstudy:p1:u1:0|" in h
           and "document.getElementById('dc-tp-p1u1-0')" in h and ">Browse</a></span>" in h, h)
-    check("details: the name stays underlined while they show; the one clicked stays marked (Sam: \"they should underline "
-          "and show that they are being selected\")",
+    check("details: the name stays underlined while they show; the one clicked stays marked",
           "this.classList.toggle('on',!x.hidden)" in h and h.count("this.classList.add('on')") == 2
           and "a.dc-tpn.on { text-decoration: underline" in board.DUE_CSS and ".du-tpgo a:hover" in board.DUE_CSS, h)
     up = board._due_short(D._date_row(dict(base, opens="2026-10-09", seen=0), {}, T, short=True))
@@ -2313,7 +2310,7 @@ def test_insights_379():
     check("map: a subject opens into its parts, each with its own way to Browse",
           [(t["name"], t["n"]) for t in kids] == [("Anatomy", 20), ("Pathology", 20)]
           and kids[0]["find"] == {"tags": [f"{R}::^Systems::Cardio::Anatomy"]} and not kids[0].get("kids"), kids)
-    # Sam: one block unsuspended, the deck's top level is one big tile: a level down instead
+    # the maintainer: one block unsuspended, the deck's top level is one big tile: a level down instead
     block = {}
     for c in range(250):
         part = ("Cardio::Physiology", "Cardio::Pathology", "Cardio::Pharm", "Renal::Physiology", "Pulm::Pathology")[
@@ -2324,7 +2321,7 @@ def test_insights_379():
           [(t["name"], t["n"], t["started"]) for t in bk] == [("Cardio · Physiology", 80, 40), ("Cardio · Pathology", 70, 35),
                                                               ("Cardio · Pharm", 50, 25), ("Renal · Physiology", 30, 15),
                                                               ("Pulm · Pathology", 20, 10)], bk)
-    # Sam: yield tiers split a deck evenly, and say nothing about what's in it
+    # the maintainer: yield tiers split a deck evenly, and say nothing about what's in it
     tiers = ["1-HighYield", "2-RelativelyHighYield", "3-HighYield-temporary", "4-LowerYield", "5-LowYield"]
     yt = {c: [f"{R}::$HighYield::{tiers[c % 5]}", f"{R}::^Systems::{sy[c % 6]}::{['Anatomy', 'Pathology'][c // 6 % 2]}"]
           for c in range(300)}
@@ -2391,7 +2388,7 @@ def test_insights_379():
           and "Split by" not in board._ins_map(10, nest, "fsrs", (), [{"key": "a", "name": "Systems", "on": True}]), wy)
     wy2 = board._ins_map(10, nest, "fsrs", (), [{"key": "a", "name": "Systems", "on": False}, {"key": "b", "name": "A much longer way <x>", "on": True}])
     src = fakes.board_source()
-    check("map (3.9.5, Sam: \"the carets are justified to the longest thing\"): the pick shows the way picked, its ▾ beside it, "
+    check("map: the pick shows the way picked, its ▾ beside it, "
           "the select laid over them; no ▾ on the board sits after a select",
           '<span class="dc-wp"><b>Systems</b><i aria-hidden="true">&#9662;</i><select' in wy
           and '<b>A much longer way &lt;x&gt;</b><i aria-hidden="true">&#9662;</i>' in wy2
@@ -2416,7 +2413,7 @@ def test_insights_379():
           ">Exam Mon 30 Nov</a>" in mine and 'class="dc-sw"' in mine and "exampick" in yh
           and "Add exam date" in board._you_insights(dict(ins, plan=None, exam='"><img x>'))
           and "<img x>" not in board._you_insights(dict(ins, plan=None, exam='"><img x>')))
-    check("you › insights: 3.8.0 (Sam), one deck still says its name; no date, Add exam date opens the picker",
+    check("you › insights: 3.8.0, one deck still says its name; no date, Add exam date opens the picker",
           '<b class="ideck" title="Step 1">Step 1</b>' in lone and ">Add exam date</a>" in lone and "duecrew:exampick" in lone
           and "setexam:off" not in lone)
     check("you › insights: a date set reads as the day, with × to take it off",
@@ -2835,7 +2832,7 @@ def test_one_settings_keys_study_v380():
         # the keys: listed, one switch, and it applies at once
         st = board.settings_html({"tab": "study", "signed_in": True}, conf)
         keys = ("⌘⇧S", "⌃⇧Q") if sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")  # 3.9.3: the suite on a Mac too
-        check("keys: Settings › Study lists both in this computer's names; 3.9.12 (SC agreed): no switch, the keys are on",
+        check("keys: Settings › Study lists both in this computer's names; 3.9.12: no switch, the keys are on",
               keys == (board.STUDY_KBD, board.ASK_KBD) and all(k in st for k in keys) and "set:shortcuts" not in st
               and SM.change(["set", "shortcuts", "0"], {}) is None and SM.BOARD_DEFAULTS["shortcuts"] is True, keys)
         said = []
@@ -2846,7 +2843,7 @@ def test_one_settings_keys_study_v380():
         # Study today: the walk's order
         check("study: the plans' decks first, in plan order", D.study_next([5, 3], {5: 0, 3: 4, 9: 40}) == ("deck", 3))
         check("study: then the deck with the most due", D.study_next([5], {5: 0, 7: 3, 9: 40}) == ("deck", 9))
-        check("study: then done; no misses step (3.8.1, Sam: it built a deck nobody asked for)",
+        check("study: then done; no misses step",
               D.study_next([5], {5: 0, 9: 0}) is None and D.study_next([], {}) is None)
         # the walk, through Anki's screens
         sel = []
@@ -2888,7 +2885,7 @@ def test_one_settings_keys_study_v380():
         v = D.view(T0, [{"pid": "p", "uid": "u", "plan": "P", "name": "A", "opens": T0, "seen": 2, "total": 5}], [], {},
                    reviews={"due": 10, "done": 0})
         h = board._due_html(v)
-        check("study: 3.9.3, Today's head has no Study today (Sam), open or folded",
+        check("study: 3.9.3, Today's head has no Study today, open or folded",
               "duestudy" not in h and "Study today" not in h and "duestudy" not in board._due_html(dict(v, folded=True)))
         one = D.view(T0, [{"pid": "p", "uid": "u", "plan": "P", "name": "A", "opens": T0, "seen": 2, "total": 5},
                           {"pid": "p", "uid": "o", "plan": "P", "name": "Old", "opens": "2026-09-30", "seen": 0, "total": 4}], [], {},
@@ -3172,13 +3169,13 @@ def dc_mw():
 
 
 def test_head_row_b_v380():
-    """3.8.0, head row B (Sam's pick, from the spec's four): Crew's views sit
+    """3.8.0, head row B: Crew's views sit
     in the table's top-left corner, where the header was empty, and a
     squad's names in its table's; what was in that corner (show-up mode's
     "N showed up today", a squad's headline) goes under the table, and the
     bingo card under that. Decks has no table: its picker has a line of its
     own with the key at the right. The site draws the same (the twin).
-    Crew and Share in the footer lose their carets (Sam)."""
+    Crew and Share in the footer lose their carets."""
     import re as _re
     T0 = TODAY.isoformat()
     labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
@@ -3257,7 +3254,7 @@ def test_head_row_b_v380():
     check("Open a room is the top bar's: ▶ Fifteen?'s arrow sends its own keyed command, which offers the two ways",
           "send('room15menu')" in rw and "e.stopPropagation()" in rw
           and [k for _l, k in _rooms.START_WAYS] == ["fifteen", "room"] and 'cmd == "room15menu"' in open(_rooms.__file__, encoding="utf-8").read())
-    check("footer: Friends and Share my stats, without carets (Sam)",
+    check("footer: Friends and Share my stats, without carets",
           ("duecrew:friends|" + KK + "'); return false;\">Friends</a>") in today
           and ("duecrew:sharemenu|" + KK + "'); return false;\">Share my stats</a>") in today
           and "&#9662;" not in today.split('class="dc-foot"')[1])
@@ -3485,7 +3482,7 @@ def test_find_a_setting_v380():
 
 
 def test_site_plan_page_is_the_addons():
-    """Your plans on duecrew.com is the add-on's plan page (Sam's call): one
+    """Your plans on duecrew.com is the add-on's plan page: one
     look, one set of page scripts. site/public/planpage/ holds
     due_crew/planner/page/*.js and *.css byte for byte (tools/gen_plan_page.py
     writes them; running it again changes nothing); the site's face
@@ -3613,7 +3610,7 @@ def test_board_motion_round_two_v380():
     for sel in ("th > a.on", ".dc-wrap", ".du-line", ".dc-room .fc > i", ".irow", ".tmap .tm", ".du-bh"):
         check(f"motion 2: a rule for {sel}", f'sel: "{sel}"' in js)
     plan = js[js.index("    plan: function (el, was) {"):js.index("    map: function (el, was, v, snap)")]
-    check("3.9.3: switching plans slides (Sam): a rule for the names, the pressed one moves, the plan comes from its side, the box to its height",
+    check("3.9.3: switching plans slides: a rule for the names, the pressed one moves, the plan comes from its side, the box to its height",
           'sel: ".psw", kind: "plan"' in js and "slide(el, x.on)" in plan and "now.i < x.on.i ? -1 : 1" in plan
           and 'translateX(" + (24 * dir) + "px)' in plan and "inner(box, x.h)" in plan, plan[:300])
     check("motion 2: what leaves comes back for a moment only where it sat, under the same heading, and never twice",
@@ -3643,7 +3640,7 @@ def test_board_motion_round_two_v380():
     v = D.view(day, [], [], {}, reviews={"due": 30, "done": 5})
     full = board._due_html(dict(v, study_to="<Cardio>"))
     one = board._due_html(dict(v, study_to="<Cardio>", folded=True))
-    check("3.9.3: no Study today in the box, open or folded (Sam); Ctrl+Shift+S still walks the day",
+    check("3.9.3: no Study today in the box, open or folded; Ctrl+Shift+S still walks the day",
           "duestudy" not in full and "Study today" not in full and "duestudy" not in one and "Study today" not in one, full[:400])
     site = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
     builder = open(os.path.join(REPO, "site", "public", "builder.js"), encoding="utf-8").read()
@@ -3731,7 +3728,7 @@ def _tags_of(col, nid):
 
 
 def test_plan_tags_v380():
-    """3.8.0, plan tags (Sam's picks: real tags, owner and co-authors only,
+    """3.8.0, plan tags (the maintainer's picks: real tags, owner and co-authors only,
     the AI on duecrew.com; DueCrew::<plan>::<tag>; made from tags too;
     a follower's Anki gets one as soon as the plan updates). The name rule
     is one in three places; the doc keeps names and guids only; this copy's

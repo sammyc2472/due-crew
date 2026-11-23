@@ -306,7 +306,7 @@ def _worded(data):
 
 # 3.8.1: Pip in a fifteen's widgets, drawn by sev.py and handed over as markup
 FIFTEEN_SEV = ("focus", "ready", "again", "ring", "rest", "stretch", "breathe")
-# the places in a fifteen whose moves take turns, a round each (Sam: "variety!")
+# the places in a fifteen whose moves take turns, a round each
 FIFTEEN_VARY = ("focus", "ring", "stretch")
 
 

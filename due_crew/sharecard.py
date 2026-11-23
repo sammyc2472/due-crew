@@ -1,6 +1,5 @@
 """3.8.0: my day, my week, my year and all time as pictures, made in Anki
-with Copy picture and Save… (Sam: "make the copy picture do the same thing
-for all the other places it is instead of opening the website"). They are
+with Copy picture and Save…. They are
 the site's cards (site/public/cards.js: its layouts, look and words), from
 my own Anki's reviews. Pure: the numbers, the switches, and each card as a
 list of things to draw; ui/share_card_dialog.py paints and copies.
@@ -167,7 +166,7 @@ def year_options(days, today):
 
 
 def plan(name, sets, done, cards, weeks, brow="Finished", sev=True, cap=False, last="", code=None):
-    """3.9.6, a plan's card (Sam's pick, the mock's K4 redrawn): its path, a
+    """3.9.6, a plan's card: its path, a
     segment a set, Pip hopping each one done and standing on the last (in
     its new grad cap, finished); then "FINISHED", the plan's name and "19
     sets · 2,046 cards · 6 weeks". On its way (a milestone's Share): brow
@@ -286,7 +285,7 @@ def _day_cell(o, x, y, s, c, r, ring):
         o.ring(x - ring, y - ring, s + 2 * ring, s + 2 * ring, r + ring, pal["ink"], ring * 0.75)
 
 
-# 3.8.1, the week card's Pip (Sam's pick, "Pip hops across the week"): it
+# 3.8.1, the week card's Pip: it
 # lands on the days I studied and hops over the rest. A picture is still,
 # so the hops are its trail, a dotted arc from each day it landed on to
 # the next, and Pip stands on the last. Sizes are over a square's side.

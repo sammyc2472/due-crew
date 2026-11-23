@@ -72,7 +72,7 @@ body .dcm select.deck { flex: 0 1 auto; max-width: 46%; border: 0; background-co
 
 /* chips: one a topic, its count opens its tags */
 
-/* the filters: always there, under the box (Sam) */
+/* the filters: always there, under the box */
 .dcm .chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--dc-line) !important; background: var(--dc-bg) !important;
   border-radius: 999px !important; padding: 3px 11px !important; font-size: 12.5px; white-space: nowrap; color: var(--dc-ink); }
 .dcm .chip:hover { border-color: var(--dc-accent) !important; }
@@ -98,7 +98,7 @@ body .dcm select.deck { flex: 0 1 auto; max-width: 46%; border: 0; background-co
 .dcm .b.pri { background: var(--dc-accent) !important; border-color: var(--dc-accent) !important; color: var(--dc-accent-ink); }
 .dcm .b:disabled { opacity: .45; cursor: default; }
 body .dcm select.b { padding-right: 30px !important; color: var(--dc-ink); font-weight: 600;
-  /* round 2 (Sam: "not clear that this is a drop down"): .b's background took its arrow; it's back, in the ink */
+  /* round 2: .b's background took its arrow; it's back, in the ink */
   background-image: linear-gradient(45deg, transparent 50%, var(--dc-ink) 50%), linear-gradient(135deg, var(--dc-ink) 50%, transparent 50%) !important;
   background-position: calc(100% - 17px) 54%, calc(100% - 11px) 54% !important; background-size: 6px 6px, 6px 6px !important;
   background-repeat: no-repeat !important; }
@@ -200,8 +200,7 @@ body .dcm button.mean:hover { border-bottom-style: solid; }
 .dcm .tops .tr .w { flex: 1; min-width: 0; display: grid; font-size: 13px; }
 .dcm .tops .tr .mu { font-size: 12px; }
 
-/* round 3 (Sam: "giving the user enough information about what has been found so that they can take the
-   appropriate action"): the filters' Only line, one row a topic and its tree, what it found, four tiles */
+/* round 3: the filters' Only line, one row a topic and its tree, what it found, four tiles */
 .dcm .only { display: flex; flex-wrap: wrap; gap: 2px 4px; align-items: center; font-size: 12.5px; }
 .dcm .only .ol { color: var(--dc-muted); font-weight: 700; margin-right: 4px; }
 body .dcm .only .ot { color: var(--dc-muted); padding: 2px 8px; border-radius: 999px !important; font-size: 12.5px; }

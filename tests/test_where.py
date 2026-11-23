@@ -2,7 +2,7 @@
 the cards, no Study sheet. QBank QIDs' Their topics (planner/qids.py) and
 the map's missed cards they count (team.py, team_flow.py), against a fake
 collection (tests/fakes.py). The map's weakest part and its trail's Study
-went before it shipped (Sam's picks on the 3.9.5 review page).
+went before it shipped.
 Standard library only.
 
 Run: python3 tests/test_where.py
@@ -74,7 +74,7 @@ def test_map_html():
     mh = board._ins_map(10, tiles, "right", ())
     deep = board._ins_map(10, tiles, "right", ["r"])
     trail = re.search(r'<div class="tmt">.*?</div>', deep).group(0)
-    check("map (Sam's picks): no weakest part named, and no Study on an open part's trail",
+    check("map: no weakest part named, and no Study on an open part's trail",
           "Weakest" not in mh and "insmapstudy" not in mh + deep and "you missed" not in mh + deep, mh[:1200])
     check("map: opened, the trail says the part, its cards and %, then Browse all, as before 3.9.5",
           ("<b>&lt;b&gt;Renal &amp; co</b> &middot; 30 cards, 66% &middot; <a href=\"#\" onclick=\"pycmd('duecrew:insmapall:10|"
@@ -174,7 +174,7 @@ def test_glue():
               and TF.deck_map(30)[0] is tiles and TF.deck_map(99) == ([], set()))
         send = lambda m: dc._on_js(False, m + "|" + KK, DeckBrowser())  # noqa: E731
         send("duecrew:insmapstudy:30:1")
-        check("insmapstudy (Sam's picks): gone, so the board's handler builds nothing", built == [], built)
+        check("insmapstudy: gone, so the board's handler builds nothing", built == [], built)
         check("study: Insights' own Study still goes through the one helper",
               TF.study_deck("Renal", []) is False and TF.study_deck("Renal", [1]) is True and built[-1] == ("Due Crew::Renal", [1]))
         # ---- QBank QIDs' topics ----
@@ -230,7 +230,7 @@ def test_commands():
     flow = open(os.path.join(REPO, "due_crew", "team_flow.py")).read()
     emitted = set(re.findall(r'_pycmd\(f"(insmap[a-z]*)', src))
     handled = set(re.findall(r'cmd == "([a-z0-9]+)"', flow))
-    check("commands: the map's are handled; its Study is neither emitted nor handled (Sam's picks)",
+    check("commands: the map's are handled; its Study is neither emitted nor handled",
           emitted <= handled and "insmapstudy" not in emitted | handled and not hasattr(T, "weakest"), (emitted, handled))
 
 

@@ -1,5 +1,4 @@
-"""Song of the moment (3.9.6, Sam: "leverage music databases to put a song
-as their soundtrack / song of the moment"): the one song a person picks
+"""Song of the moment: the one song a person picks
 from Apple's public catalog to show their crew. Pure: what a song is, what
 the catalog's answer holds, and where Listen goes in each music app.
 
@@ -13,7 +12,7 @@ Apple's terms for the Search API's covers and previews: they promote the
 song, beside Apple's own badge linking to it, credited ("courtesy of"), and
 a preview only ever streamed, never downloaded or kept. Anki's web view
 can't play Apple's audio and its player can't stream a link, so there are
-no previews (Sam's pick, after the click test); every cover sits on a card
+no previews; every cover sits on a card
 whose foot credits Apple (CREDIT; the search sheet's, CREDIT_SEARCH) beside
 BADGE_URL, linked to the song's page, at Apple's 30 px digital minimum. Spotify and YouTube Music get
 a search link and nothing of theirs is shown, so they ask nothing of us.
@@ -45,7 +44,7 @@ MOTIONS = ("gentle", "lively", "still")
 # Apple's own badge, as its marketing tools serve it (never redrawn or altered)
 BADGE_URL = "https://tools.applemediaservices.com/api/badges/listen-on-apple-music/badge/en-us?size=250x83"
 BADGE_H = 30  # px: Apple's smallest on a screen
-# the credit Apple asks for, saying what it gave (Sam): a song's card, and the search sheet
+# the credit Apple asks for, saying what it gave: a song's card, and the search sheet
 CREDIT = _later("Song and cover courtesy of Apple Music")  # said with t() where it's drawn
 CREDIT_SEARCH = _later("Song search courtesy of Apple Music")
 SEARCH_URL = "https://itunes.apple.com/search"
@@ -168,7 +167,7 @@ def words(song):
     return " · ".join(x for x in (song.get("t"), song.get("a")) if x)
 
 
-LIFE_DAYS = 3  # 3.9.12 (Sam: "disappear after 3 days"): a song is on the floor the day it's picked and the two after
+LIFE_DAYS = 3  # 3.9.12: a song is on the floor the day it's picked and the two after
 
 
 def age(song, today):

@@ -20,7 +20,7 @@ from .v381 import _v381_world
 
 
 def test_room_widget_pips_v3821():
-    """3.8.21 (Sam: "no pips here either!"): a crew room's people are their
+    """3.8.21: a crew room's people are their
     Pips in every widget that showed their initials: the top bar's chip (four,
     then +N), the margin card and the break (a crowd wraps, hats clear the line
     above), as on the room's card. Pip off: the initials, as before. The
@@ -103,7 +103,7 @@ console.log(JSON.stringify({
 
 
 def test_plan_card_squad_pips_v3822():
-    """3.8.22 (Sam: "under squad we haven't switched to pips"): the plan
+    """3.8.22: the plan
     card's squad line draws who showed up as their Pips, as the Squads tab
     does: mine in my look (it opens the closet), a crewmate's in their colour
     and look, anyone else plain. The board's summary names whose faces they
@@ -145,7 +145,7 @@ def test_plan_card_squad_pips_v3822():
           and "Dre’s Pip" in pips, pips[:400])
     check("…in that order (me, the crewmate, the stranger)",
           pips.index(f"--rs-l:{amber[0]}") < pips.index(f"--rs-l:{blue[0]}") < pips.index(f"--rs-l:{plain[0]}"))
-    check("…each blinking at its own moment, as a room's seats (3.9.0, Sam: on bingo they blinked as one)",
+    check("…each blinking at its own moment, as a room's seats",
           all(sev.blink_css(k) in exact[k] for k in range(3)) and len({sev.blink(k) for k in range(3)}) == 3
           and "--sv-d" not in board.squad_pip("dre", "Dre", False, people, cfg), [x[:160] for x in exact])
     off = board._squad_line("p1", {"summary": summ, "unread": 0}, people, dict(cfg, sev=False))
@@ -169,10 +169,7 @@ def test_plan_card_squad_pips_v3822():
 
 
 def test_pips_where_emojis_were_v3822():
-    """3.8.22 (Sam: "all the places where there are emojis we should reflect
-    pips, including bottom bars, we can make the bingo stamps bigger.
-    remove emojis from the friends dialog. invites and text shares can stay
-    as is"): the review screen's chip, a squadmate's card, Settings › You,
+    """3.8.22: the review screen's chip, a squadmate's card, Settings › You,
     the bingo stamps, and on the site the account page, the exam rail and
     who added me back. Pip off: the emojis, as before. A Pip is our own
     markup; a name is only ever its label, escaped."""
@@ -260,7 +257,7 @@ def test_pips_where_emojis_were_v3822():
           sq0.count('class="st sp"') == 3 and f"--rs-l:{amber[0]}" in sq0 and f"--rs-l:{blue[0]}" in sq0
           and f"--rs-l:{plain[0]}" in sq0 and not any(x in sq0 for x in ("🦊", "🐢", "🐸")) and "stamped" in sq0
           and f"width:{round(board.STAMP_PIP * sev.SLOT[0])}px" in sq0 and board.STAMP_PIP * sev.SLOT[0] > 22, sq0[:400])
-    check("bingo: a square's stamps each blink at their own moment when it's pointed at (3.9.0, Sam: \"they all blink at the same time\")",
+    check("bingo: a square's stamps each blink at their own moment when it's pointed at ",
           all(sev.blink_css(k) in sq0 for k in range(3)) and sq0.count("--sv-b:") == 3, sq0[:400])
     check("bingo: a square is a button, so no stamp is a link (mine doesn't open the closet from here)",
           "<a " not in sq0 and "duecrew:closet" not in sq0)
@@ -550,8 +547,7 @@ def test_closet_site_rows_v382():
 
 
 def test_halloween_week_v3822():
-    """3.8.22, Halloween week (Sam's pick, round three: "Line, bats and
-    cobweb", shipped before the 24th): 24 to 31 Oct, a line under the
+    """3.8.22, Halloween week: 24 to 31 Oct, a line under the
     board's head with this week's days and the five things, the next and
     when; three bats across it on the day's first board; a cobweb when every
     Pip on the crew's rows has a Halloween thing on. Nothing outside the
@@ -640,7 +636,7 @@ def test_halloween_week_v3822():
 
 
 def test_year_counts_v3822():
-    """3.8.22 (Sam: "Start the year counts in the next release: Yes"): the
+    """3.8.22: the
     closet's tallies keep a year too, for Wrapped: Fifteens and the hours
     they began, rooms with the crew, cheers sent and got, crew days, each
     squad card's lines once, and the days each thing Pip has on was worn,
@@ -692,8 +688,7 @@ def test_year_counts_v3822():
 
 
 def test_cheers_with_pips_v3822():
-    """3.8.22, cheers with Pips (Sam's pick, round three: "One by one, then
-    and N more"): when cheers land, each sender's Pip rises from the board's
+    """3.8.22, cheers with Pips: when cheers land, each sender's Pip rises from the board's
     bottom edge in turn, tosses the cheer onto my row and ducks back down,
     in place of the flurry; three at most, the rest "and N more"; with
     Reduce motion they stand still in the banner. A mutual friend comes in
@@ -748,19 +743,19 @@ def test_cheers_with_pips_v3822():
 
 
 def test_cheer_shows_v390():
-    """3.9.0, how a cheer lands (Sam's picks, "Cheers, everywhere"): a show
+    """3.9.0, how a cheer lands: a show
     over the whole Decks screen, a different one each time. The bag plays
     every one of the twelve before any repeats, never the same twice in a
     row; it's kept in this computer's config, never sent. flurry_js runs the
     show (show.js) in place of the toss, the banner at the top; Reduce
-    motion and Pip off are as before. Sam's tweaks: the piñata says no
+    motion and Pip off are as before. The maintainer's tweaks: the piñata says no
     "CRACK!", and the fireworks put no name in the middle."""
     import random as _r
     import shutil
     import subprocess
     from due_crew import shows, social
     from due_crew.app import _state, _pending_cheers
-    check("the twelve Sam kept, in the mock's order",
+    check("the twelve the maintainer kept, in the mock's order",
           shows.SHOWS == ("cannon", "pinata", "fireworks", "gift", "bubbles", "wave", "balloons", "rocket", "stamp", "disco", "hat", "snow"))
     rng, bag, seen = _r.Random(7), None, []
     for _ in range(12 * 6):
@@ -794,7 +789,7 @@ def test_cheer_shows_v390():
     sj = board.SHOW_JS
     check("show.js draws all twelve, and only them",
           set(re.findall(r"SHOW\.(\w+) = function", sj)) == set(shows.SHOWS) and len(re.findall(r"SHOW\.(\w+) = function", sj)) == len(shows.SHOWS))
-    check("Sam's tweaks: no \"CRACK!\" on the piñata, no name in the fireworks' middle",
+    check("tweaks: no \"CRACK!\" on the piñata, no name in the fireworks' middle",
           "CRACK" not in sj and "dcs-lbl" not in sj.split("SHOW.fireworks")[1].split("SHOW.gift")[0] and "THWACK!" in sj)
     check("a show never takes markup from the page: names, notes and emoji go in as text; Pips are sev.py's",
           ".innerHTML = s." not in sj and "innerHTML = svg" in sj and sj.count("textContent") >= 8)
@@ -902,7 +897,7 @@ def test_wrapped_flow_v390():
 
 
 def test_crew_tabs_hold_still_v3910():
-    """3.9.10 (Sam: "make sure the spacing on today / week are the same"):
+    """3.9.10:
     the picked view's word is bold, and bold is wider, so Week sat in a
     different place on Today than on Week. Each word keeps its bold room."""
     from due_crew.board import crew, style
@@ -914,10 +909,8 @@ def test_crew_tabs_hold_still_v3910():
 
 
 def test_hooks_v3911():
-    """3.9.11, hooks (Sam: "build that whole implementation you've
-    proposed"): my own line on a card I keep missing, folded till Show when
-    I'm stuck on it (Sam: "especially for one by ones we don't want to spoil
-    the correct answer"); offered quietly beside Edit on a second miss, and
+    """3.9.11, hooks: my own line on a card I keep missing, folded till Show when
+    I'm stuck on it; offered quietly beside Edit on a second miss, and
     once when a card I kept missing has stuck. Shared (a tick on each), it's
     my tip on the card on the server: mutual friends stuck on it read it,
     nobody asking; "This helped" reaches me once. Who knows it keeps its
@@ -1098,8 +1091,7 @@ def test_hooks_v3911():
 
 
 def test_refill_with_nothing_to_take_back_v3912():
-    """3.9.12 (Sam's report from a day's Study: "FilteredDeckError: No cards
-    matched the provided search"): a Due Crew deck that lent its cards gets
+    """3.9.12: a Due Crew deck that lent its cards gets
     the rest back afterwards; when those are suspended now, or another
     add-on's deck holds them, Anki refuses a filtered deck that finds none.
     That isn't ours to report: the deck stays empty. Any other error is."""
@@ -1301,7 +1293,7 @@ def test_copy_rules_v3912():
             before = src[:src.find(m.group(1))] if m.group(1) in src else src
             if not ("#" in before or "//" in before or src.strip().startswith(("#", "//", "*"))):  # a comment may still say tip: the code does
                 tips.append((os.path.join(*parts), m.group(1)[:60]))
-    # 3.9.12, later the same day (SC: "let's call hooks tips again sorry"): a tip, never a hook
+    # 3.9.12, later the same day: a tip, never a hook
     check("copy: a line left on a card is a tip wherever a person reads it, never a hook", tips == [], tips[:6])
     banned = []
     pages = dict(files)
@@ -1399,9 +1391,7 @@ def test_one_way_to_keep_a_file_v3912():
 
 
 def test_scrapbook_v3910():
-    """3.9.10, the scrapbook (Sam: "a combo wrapped and home for polaroids /
-    notes, etc. that are ephemeral at the moment or deleted permanently
-    when taken away from the screen"): a polaroid taken down, pushed out or
+    """3.9.10, the scrapbook: a polaroid taken down, pushed out or
     signed out with goes there; good-luck lines once shown, a tip that
     helped, a cheer with words, what I did; by month under the year's page;
     Pin up, Delete, Empty; this computer's, per account, never sent."""
@@ -1459,7 +1449,7 @@ def test_scrapbook_v3910():
     finally:
         dc._reset_runtime, dc._rerender = saved
     n_out = len(SF.items("sam"))
-    # 3.9.12 (SC: it took everything off his Decks screen): signed out they're hidden, not moved; back for their owner
+    # 3.9.12: signed out they're hidden, not moved; back for their owner
     check("signing out: the drawings wait where they hung, shown to nobody else, and are there again for their owner; the scrapbook is as it was",
           cf.fridge(None) == [] and cf.fridge("nia") == [] and len(cf.fridge("sam")) == FR.KEEP and n_out == 3 and SF.items("nia") == [], n_out)
     last = cf.fridge("sam")[-2]  # (the newest there is "day 1", pinned up above and still in the scrapbook)
@@ -1568,7 +1558,7 @@ def test_banner_actions_sit_together_v390():
     """A banner with two actions (the closet's Wear it and Closet) keeps
     them together at its right end: each .wc pushes itself right with an
     auto margin, so two of them split the free space and the first floated
-    mid-banner (Sam, 16 Oct). They stay on one line, and the closet's words
+    mid-banner. They stay on one line, and the closet's words
     sit left when they wrap (the Decks screen's <center> reaches them)."""
     from due_crew import closet
     k = next(t["k"] for t in closet.THINGS if t["slot"] != closet.COSTUME)
@@ -1603,8 +1593,7 @@ def _keyframe_lists(src):
 
 
 def test_motion_ends_where_it_lands_v390():
-    """3.9.0, the motion audit (Sam, 17 Oct: Crew to Squads "visibly flicks
-    from rectangular to fit the pill"; "everything should be smooth!").
+    """3.9.0, the motion audit.
     tools/motion_audit.js plays every motion with its frames held and
     measures the last one against the page once it has cleaned up; these
     are the fixes it led to, so none comes undone: the pick's pill takes
@@ -1688,7 +1677,7 @@ def test_motion_ends_where_it_lands_v390():
 
 
 def test_doodle_cheers_v391():
-    """3.9.1, doodle cheers (Sam: "create the doodles thing"): a cheer can
+    """3.9.1, doodle cheers: a cheer can
     carry a drawing (strokes on the 300 x 170 pad) or a sign their Pip holds
     up. Numbers and one line of words, both ways; it lands held up by the
     sender's Pip (in the banner with Pip off or Reduce motion), and stays on
@@ -1756,7 +1745,7 @@ def test_doodle_cheers_v391():
           "&lt;b&gt;hi&lt;/b&gt;" in sign and "<b>" not in sign and board.doodle_html({"k": "draw", "s": [[16, 1, 1]]}) == "")
     from due_crew.backend.shapes import DOODLE_INKS, DOODLE_PEN_MAX
     inked = board.doodle_html({"k": "draw", "s": [[2 * (2 + i) + 1, 1, 1] for i in range(len(DOODLE_INKS))] + [[0, 1, 1]]}, "rose")
-    check("every accent on the pad (Sam: \"all of our colors\"): pen >> 1 names one of ours by place, in the board's own shades; 0 is still the sender's",
+    check("every accent on the pad: pen >> 1 names one of ours by place, in the board's own shades; 0 is still the sender's",
           DOODLE_PEN_MAX == 15 and set(DOODLE_INKS) == set(board.ACCENTS) and len(DOODLE_INKS) == len(board.ACCENTS)
           and all(f'stroke="{board.accent_pair(n)[0]}" stroke-width="6"' in inked for n in DOODLE_INKS)
           and inked.endswith(f'<path d="M1 1 l0.1 0" stroke="{board.accent_pair("rose")[0]}" stroke-width="3"/></svg>'))
@@ -1772,7 +1761,7 @@ def test_doodle_cheers_v391():
     check("the landing: the doodle rides in as data (no '</' to end the script), buys time, and its Pip holds it up in the show's place",
           "</script><b>" not in js and "&lt;/script&gt;" in js and "linger += 2500" in js and "if (held)" in js
           and "var dd = null" in board.flurry_js([party], "x"))
-    # the landing's caption (Sam: "put the included text ... under like a caption ... with their name")
+    # the landing's caption
     capt = board.doodle_landing({"from": "dre", "name": "Dre Smith", "note": "good luck", "doodle": draw, "ni": 0}, ents, {"sev": True})
     js = board.flurry_js([party], "🎉 Dre sent cheers", notes=["good luck"], pips=[{"svg": "<svg></svg>", "a": ["#1", "#2"]}], doodle=capt)
     dd = json.loads(re.search(r"var dd = (\{.*?\}), held", js).group(1).replace("<\\/", "</"))
@@ -1800,7 +1789,7 @@ def test_doodle_cheers_v391():
     people = {"dre": {"user_id": "dre", "name": "Dre", "look": ["cap"], "accent": "purple"}}
     fr = board.fridge_html(moved[-3:], people, {"sev": True})
     tape = board.accent_pair("purple")[1].lstrip("#")
-    check("pinned around the Decks screen as Polaroids (Sam's pick): newest first, the note on the frame, their Pip and name "
+    check("pinned around the Decks screen as Polaroids: newest first, the note on the frame, their Pip and name "
           "(no \"from\", for room), taped up in their colour, a × to take it down, my place for the one I moved",
           fr.count('class="fz"') == 3 and fr.index("29 Oct") < fr.index("27 Oct") and "&ldquo;day 29&rdquo;" in fr
           and '<div class="fw"><span class="sv-slot"' in fr and ">from " not in fr and f"duecrew:fridgedown:{k}" in fr
@@ -1855,7 +1844,7 @@ def test_doodle_cheers_v391():
 
 
 def test_fridge_pip_whole_v392():
-    """3.9.2 (Sam: "pips get cutoff on the polaroids"): the line under a
+    """3.9.2: the line under a
     Polaroid never clips (only the name shortens with …), and Pip's slot
     leaves room above it for the head, hat and what it holds."""
     css = board.FRIDGE_CSS
@@ -1868,7 +1857,7 @@ def test_fridge_pip_whole_v392():
 
 
 def test_fridge_dates_local_v392():
-    """3.9.2 (Sam: "some of the dates on polaroids are wrong"): a cheer's at
+    """3.9.2: a cheer's at
     comes from the server in UTC, and the Polaroid showed its first ten
     characters, the UTC date, so a doodle sent on an American evening was
     dated the next day. It's this computer's day now."""
@@ -1900,7 +1889,7 @@ def test_fridge_dates_local_v392():
 
 
 def test_fridge_dark_v392():
-    """3.9.2 (Sam: "also need dark mode for polaroids"): at night a Polaroid's
+    """3.9.2: at night a Polaroid's
     frame and photo go dark, a doodle's black ink reads light and each colour
     takes its night shade, Pip and Undo the sender's night accent; as
     Settings › Theme says (Match Anki: its night mode and the computer's)."""
@@ -1924,7 +1913,7 @@ def test_fridge_dark_v392():
           and f"--fa:{pl};--fd:{pd};" in dark and "--fz-acc: var(--fd)" in dark and "--sv-a: var(--fz-pip)" in board.FRIDGE_CSS
           and "--fz-pip: var(--pd, var(--fd))" in dark and "--fz-pip: var(--pa, var(--fa))" in light)
     check("a theme change draws it again (it's kept as last drawn)", dark != light != auto)
-    # 3.9.10 (Sam: "everyone's polaroids are now showing their pip as green even if they use a different color"):
+    # 3.9.10:
     # the Pip wears the colour its person has now; the tape and the drawing keep the one it came in
     bl, bd = board.accent_pair("blue")
     gl, gd = board.accent_pair("green")
@@ -2011,8 +2000,7 @@ def test_fridge_account_and_undo_v391():
 
 
 def test_native_emoji_picker_v391():
-    """3.9.1 (Sam: "the emoji drawer is missing tons that are natively
-    supported. want the other option to just open the native drawer?"): on a
+    """3.9.1: on a
     Mac or Windows the Cheer window's "other" opens the computer's own
     picker into a focused box; where there's none (Linux), or asking fails,
     the window's own drawer opens instead."""
@@ -2041,7 +2029,7 @@ def test_native_emoji_picker_v391():
           and "pycmd('duecrew:emojipicker:' + [r.left, r.top, r.width, r.height]" in js
           and "window.dcCheerNoNative = function () { unpick(); openDrawer(); };" in js
           and "if (t) { unpick(); choose(t); }" in js and "if (pickIn.style.display !== 'none') { unpick(); other.focus(); }" in js)
-    check("3.9.2 (Sam: the custom picker didn't take the pick): our own box takes it over the page's, the page gets it; "
+    check("3.9.2: our own box takes it over the page's, the page gets it; "
           "the window's close or Esc puts the box away",
           "window.dcCheerPicked = function (t) { var e = oneEmoji(String(t || '').trim()); if (e) { unpick(); choose(e); } };" in js
           and "pycmd('duecrew:emojipickeroff|' + window.dcBK)" in js and "closing: unpick  // 3.9.2: other's box" in js
@@ -2087,7 +2075,7 @@ def test_native_emoji_picker_v391():
 
 
 def test_more_emoji_v392():
-    """3.9.2 (Sam's pick): the Cheer window's Other (and a status) takes the
+    """3.9.2: the Cheer window's Other (and a status) takes the
     emoji a picker gives below U+2190 (© ® ‼ ⁉ ™ ℹ); keycaps start with a
     digit, which the Worker refuses, so they stay out; letters never pass.
     The page's oneEmoji keeps the same list (shapes.EMOJI_LOW)."""
@@ -2121,9 +2109,7 @@ def test_more_emoji_v392():
 
 
 def test_cheer_pill_and_window_v391():
-    """3.9.1 (Sam: "Cheers, clearer: build 1", "get rid of the current cheers
-    click to the right of the stats", "make the cheers and doodles modals in
-    the design language of our add on"): a crewmate's row has a "🎉 Cheer"
+    """3.9.1: a crewmate's row has a "🎉 Cheer"
     pill after the name (only while the pointer or a key is on the name:
     "not persistent all the time"), the 🎉 column is gone, and the
     Cheer window is drawn on the Decks screen in the board's look, its Send
@@ -2270,7 +2256,7 @@ def test_cheer_pill_and_window_v391():
 
 
 def test_two_buttons_v391():
-    """3.9.1, two buttons (Sam's picks from the mock): Again and Good alone,
+    """3.9.1, two buttons: Again and Good alone,
     every deck, 2, 3 and 4 count as Good, FSRS off allowed with a note; a
     switch in Settings › Board › Reviewing, and Try two buttons on Insights'
     Hard habit line, with its Undo there. Two of Anki's hooks; nothing sent."""
@@ -2363,8 +2349,7 @@ def test_two_buttons_v391():
 
 
 def test_efficiency_review_screen_v391():
-    """3.9.1, the efficiency run (Sam: "I don't want our add on to impact anki
-    performance"): the review screen's widgets go to a page once, and again
+    """3.9.1, the efficiency run: the review screen's widgets go to a page once, and again
     only when they change or the page is new; taking one down is a few
     lines; the knows chip is taken down only when one's up; an answer draws
     only the Pips its chip could name; Pip's drawing and the config are kept."""
@@ -2714,13 +2699,13 @@ def test_efficiency_idle_v391():
           "room && room.contains(x.target)" in rm.BAR_BALANCE and "n === chip || n === room" in rm.BAR_BALANCE)
     from due_crew import sev as _sev
     forever = [x for x in _re.findall(r"[^{}\n]*\{[^{}]*\binfinite\b[^{}]*\}", _sev.CSS) if "--sv-on: var(--sv-hover, infinite)" not in x]
-    check("Pip at rest (Sam's pick A): every loop of Pip's plays about twelve seconds, then rests; only the break's "
+    check("Pip at rest: every loop of Pip's plays about twelve seconds, then rests; only the break's "
           "breathing and stretch go on (the exercise); pointing at Pip plays it on",
           forever and all("m-breathe" in x or "m-stretch" in x for x in forever)
           and ".sv:hover, .sv-slot:hover .sv { --sv-on: var(--sv-hover, infinite); }" in _sev.CSS and ".dc-rest { --sv-hover: 1; }" in _sev.CSS
           and _sev.CSS.count("var(--sv-on, ") >= 40, forever)
     src = fakes.board_source()
-    check("Pip at rest (Sam's pick C): the fridge's Pips are still until pointed at; a plan card's and a bingo square's move while hovered; a crew row's never (3.9.10, Sam: only the Cheer pill shows)",
+    check("Pip at rest: the fridge's Pips are still until pointed at; a plan card's and a bingo square's move while hovered; a crew row's never",
           "#dc-fridge .fz:not(:hover) .sv, #dc-fridge .fz:not(:hover) .sv * { animation: none !important; }" in board.FRIDGE_CSS
           and "#dc-fridge .fz:hover .sv { --sv-on: var(--sv-hover, infinite); }" in board.FRIDGE_CSS
           and all(f"#due-crew {k}:hover .dc-rsev .sv {{ --sv-on: var(--sv-hover, infinite); }}" in src for k in (".pcrew", ".bg-sq"))
@@ -2730,7 +2715,7 @@ def test_efficiency_idle_v391():
     check("Pip at rest (the bug hunt): the break screen's Pip goes on all break, whichever of its stretch moves it does",
           "root.style.setProperty('--sv-on', 'infinite');" in rm._RUNTIME
           and rm._RUNTIME.index("root.style.setProperty('--sv-on', 'infinite');") > rm._RUNTIME.index("var bs = FIF && D.sev"))
-    check("the studying-now dot (Sam's pick D): a few pulses, then lit, in Anki and on the site",
+    check("the studying-now dot: a few pulses, then lit, in Anki and on the site",
           "dcbreathe 2.4s ease-in-out 7 alternate" in fakes.board_source()
           and ".chip.live::before { animation: dcbreathe 2.4s ease-in-out 7 alternate; }" in app_css
           and "dcbreathe 2.4s ease-in-out infinite" not in app_css)
@@ -2990,7 +2975,7 @@ def test_decks_page_key_v391():
 
 
 def test_veil_v391():
-    """3.9.1 (Sam: "when cheering, the full background doesn't grey out"):
+    """3.9.1:
     while a window is open over the board, the top and bottom bars (pages
     of their own) wear its backdrop too; a tap on them is Esc on the board.
     The board's page says when; leaving it, or a new page, takes it off."""
@@ -3100,7 +3085,7 @@ def test_veil_v391():
 
 
 def test_sheets_v391():
-    """3.9.1 (Sam: "make sure all modals are in our style"): a question, one
+    """3.9.1: a question, one
     line or one of a few, as a sheet on the Decks screen in the Cheer
     window's look; the Qt one off the board. Only a yes reaches then, and
     only an answer naming the open sheet's id, with the page's key."""
@@ -3256,7 +3241,7 @@ def test_sheets_v391():
 
 
 def test_qt_look_v391():
-    """3.9.1 (Sam: "make sure all modals are in our style"): every Qt window
+    """3.9.1: every Qt window
     wears the board's look (ui.styled, from attach_alive or its own call):
     its colours for its theme and accent, the main action in the accent; a
     label's own style sheet takes tone(), never palette(...), which a styled
@@ -3298,8 +3283,7 @@ def test_qt_look_v391():
 
 
 def test_qt_look_round_two_v391():
-    """3.9.1, round two (Sam, of the Open a Study Room window on a Mac:
-    "washed out. bad spacing. not engaging"): the Mac's own style drew a
+    """3.9.1, round two: the Mac's own style drew a
     dressed box's arrow in a box and its list as a menu with ticks that cut
     its words off. Every Due Crew window now sits on Fusion (ui.base_style),
     with the board's look drawing every box, arrow, tick, radio dot and list
@@ -3345,7 +3329,7 @@ def test_qt_look_round_two_v391():
 
 
 def test_room_sounds_gone_v398():
-    """3.9.8 (Sam: "remove the whole room sounds feature"): no speaker on
+    """3.9.8: no speaker on
     the chip, no player in the top bar, no recordings shipped, no setting,
     no command; a config that still says room_sound is simply ignored."""
     from due_crew import room_model as rm, settings_model as sm
@@ -3399,7 +3383,7 @@ def _sim_log(days=200, pace=30, seed=7, batch=False):
 
 
 def test_reviews_ahead_392():
-    """3.9.2 (Sam's picks, 18 Oct: Your week becomes Reviews ahead): the next
+    """3.9.2: the next
     six weeks of a deck in cards a day, counted from my own log (how my
     reviews go at each interval, my own new-card curve, when I start new
     cards: in batches, by weekday), its ways (my pace, stop new a week
@@ -3780,7 +3764,7 @@ def test_builder_audit_v392():
 
 
 def test_leeches_392():
-    """3.9.2 (Sam's picks S1-A, S2-A): the cards Anki stopped showing me and
+    """3.9.2: the cards Anki stopped showing me and
     the ones a miss from it, a view in Insights' place: one button a card
     (a crewmate's tip when one has it down, else Ask them, else Bring
     back), Learn it fresh, Edit and Leave it out behind ⋯, Bring all back

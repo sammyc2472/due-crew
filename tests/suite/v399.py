@@ -15,7 +15,7 @@ from .board import _day, _plan_units
 
 
 def test_calm_offline_v399():
-    """3.9.9 (Off the Board, 11, Sam's pick): when Due Crew can't be reached
+    """3.9.9 (Off the Board, 11, the maintainer's pick): when Due Crew can't be reached
     the board says so in a line on top of every tab (the foot's "Couldn't
     sync" was the only word), with when a refresh last got through and Try
     now; a cheer sent then waits, marked on its crewmate's row, and goes
@@ -121,7 +121,7 @@ def test_calm_offline_v399():
           and "offline=False" in inspect.getsource(dc._commit) and src.count("send_held(labels[0])") == 2
           and 'offline=bool(_state.get("offline"))' in inspect.getsource(dc._board_html))
 def test_know_when_it_breaks_v399():
-    """3.9.9, Know when it breaks (Sam's sign-off): each install counts its
+    """3.9.9, Know when it breaks: each install counts its
     own failures by code, never by content (errs.py); the first sync after a
     day ends sends that day's counts once, behind Privacy's switch, and only
     to a Worker that has said it takes them (errs_flow.py, api.push). The
@@ -137,7 +137,7 @@ def test_know_when_it_breaks_v399():
     from due_crew.planner import remote
     from aqt.deckbrowser import DeckBrowser
     CARD = "The external iliac artery <b>becomes</b> the femoral · Sam's /Users/sam/Anki"
-    WORDS = ("iliac", "femoral", "Sam's", "Users", "becomes", "secret", "ZZCODE", "<b>", "artery")
+    WORDS = ("iliac", "femoral", "the maintainer's", "Users", "becomes", "secret", "ZZCODE", "<b>", "artery")
     was = dict(errs._now)
     tmp = tempfile.mkdtemp()
     t = errs.Tally(os.path.join(tmp, "errs.json"))
@@ -537,8 +537,7 @@ const text = (n) => n.textContent;
 
 
 def test_plan_exam_asked_once_v399():
-    """3.9.9 (Sam: "when a plan sets an exam date … it should show for the
-    folks following it"; his pick B, "Exams and Limits"): an author marks
+    """3.9.9: an author marks
     an event the exam; a follower's plan card asks, once, "Heme–Onc block
     exam is Fri 12 Dec. Make it your exam?" Make it mine sets my exam to it
     (the crew's countdown, the good-luck card) and remembers the plan; Not
@@ -826,7 +825,7 @@ def test_calm_board_v399():
 
 
 def test_magic_field_on_the_decks_page_v399():
-    """3.9.9 (Sam's pick G2): the Decks page gets Magic search's field after
+    """3.9.9: the Decks page gets Magic search's field after
     Anki's deck list and over its "Studied…" line (the start of
     content.stats), the board after that line; not with Magic search off, not signed out."""
     import due_crew as dc
@@ -844,7 +843,7 @@ def test_magic_field_on_the_decks_page_v399():
         _state.update(entries=[], settings_tab=None, closet_open=False, wrapped_open=False)
         page = types.SimpleNamespace(tree="<table>DECKS</table>", stats="Studied 9 cards")
         dc._on_render(None, page)
-        # (Sam's screenshot: content.tree is inside Anki's <table>, where a div is lifted to above the list)
+        # (the maintainer's screenshot: content.tree is inside Anki's <table>, where a div is lifted to above the list)
         st = page.stats
         check("decks page: the field under the deck list (outside Anki's table), over its own line, the board after",
               page.tree == "<table>DECKS</table>" and st.startswith("<style>#dc-mgf") and 'id="dc-mgf"' in st
@@ -1063,7 +1062,7 @@ def test_a_quiet_draw_of_the_same_board_is_skipped_v3912():
 
 
 def test_deck_counts_without_buried_siblings_v3912():
-    """3.9.12 (SC's pick A): Anki's deck list as what there is to do: the smaller of Anki's count and the notes
+    """3.9.12: Anki's deck list as what there is to do: the smaller of Anki's count and the notes
     due where a deck buries siblings, a deck and the decks under it; behind a switch, on unless turned off (3.10.0)."""
     import due_crew as dc
     from due_crew import deck_counts as DC, settings_model as SM
@@ -1094,7 +1093,7 @@ def test_deck_counts_without_buried_siblings_v3912():
           and '<span class="zero-count" title="Anki counts 2. 2 are siblings' in DC.rewrite(row(2, 0, 0, 2), {2: (0, 0)}))
     check("the list: a page that isn't shaped as expected is left alone", DC.rewrite("<table>no rows</table>", got) == "<table>no rows</table>"
           and DC.rewrite(None, got) is None)
-    check("the switch: Settings › Study, on unless turned off (3.10.0, SC: \"start it on\"), this computer's", SM.change(["set", "deck_counts", "1"], {}) == {"deck_counts": True}
+    check("the switch: Settings › Study, on unless turned off, this computer's", SM.change(["set", "deck_counts", "1"], {}) == {"deck_counts": True}
           and SM.BOARD_DEFAULTS["deck_counts"] is True and "Deck counts leave out buried siblings" in board._settings_study({})
           and "deck_counts" not in __import__("due_crew.account", fromlist=["x"]).ACCOUNT_KEYS)
     # the glue: nothing read with the switch off; on, one query and the page's rows rewritten
@@ -1123,7 +1122,7 @@ def test_deck_counts_without_buried_siblings_v3912():
 
 
 def test_the_hook_button_reaches_its_window_v3912():
-    """3.9.12 (SC: "the add a hook for last time button isn't working"): the chip's hookadd, sent as the
+    """3.9.12: the chip's hookadd, sent as the
     review screen's bottom bar and the card above it send it, opens the hook's window; from a card's own
     script (a preview, no key) it does nothing."""
     import due_crew as dc
@@ -1157,7 +1156,7 @@ def test_the_hook_button_reaches_its_window_v3912():
 
 
 def test_settings_pruned_v3912():
-    """3.9.12 (SC: "agreed on all the settings adjustments"): Compact rows, Highlight my row, Crew name in shares,
+    """3.9.12: Compact rows, Highlight my row, Crew name in shares,
     Room chip and Shortcuts on leave Settings; Dancing moves to the floor; Suggestions and Recover leeches share a row."""
     from due_crew import settings_model as SM
     pages = board._settings_board({}) + board._settings_study({}) + board._settings_you({"signed_in": True}, {})
@@ -1178,7 +1177,7 @@ def test_settings_pruned_v3912():
 
 
 def test_what_offers_a_tip_v3912():
-    """3.9.12 (SC: "lets loosen", "i like 1-4. 4 only when it's been asked about"): the way to add a tip comes up on a
+    """3.9.12: the way to add a tip comes up on a
     card I pressed Again or Hard on today or yesterday, one that took well over my usual, a leech or nearly one; a
     crewmate's ask has its own Tip button."""
     import sqlite3 as _sql
@@ -1211,7 +1210,7 @@ def test_what_offers_a_tip_v3912():
 
 
 def test_languages_v3100():
-    """3.10.0 (SC: Spanish, Portuguese, German, French; drafted by AI and said so, with a way to send a better
+    """3.10.0 (the maintainer: Spanish, Portuguese, German, French; drafted by AI and said so, with a way to send a better
     wording; Anki's language unless Settings says otherwise): words.py, the files, the crew board in another language."""
     import importlib.util
     from due_crew import words
@@ -1309,7 +1308,7 @@ def settings_model_change(parts):
 
 
 def test_polaroid_tape_is_the_pips_colour():
-    """After 3.9.12 (SC: "the tape on the polaroids should match that user's pip color also"): a doodle drawn in one
+    """After 3.9.12: a doodle drawn in one
     colour by someone who has since changed theirs is taped in the colour their Pip wears now; the drawing keeps its ink."""
     draw = {"k": "draw", "s": [[0, 10, 10, 50, 50]]}
     people = {"dre": {"user_id": "dre", "name": "Dre", "look": [], "accent": "rose"}}
@@ -1341,7 +1340,7 @@ def test_field_log_15_nov():
 
 
 def test_never_imports_itself_by_name():
-    """SC's crash, 15 Nov: the reviewer's "Due Crew: your tip…" did __import__("due_crew.cards"), but AnkiWeb installs
+    """the maintainer's crash, 15 Nov: the reviewer's "Due Crew: your tip…" did __import__("due_crew.cards"), but AnkiWeb installs
     the add-on in a folder named 2035408484, so it raised ModuleNotFoundError. Every import of its own modules is
     relative; no code names the package (an import, __import__ or import_module of "due_crew…")."""
     import ast
@@ -1364,7 +1363,7 @@ def test_never_imports_itself_by_name():
 
 
 def test_scrapbook_scattered_and_fridge_stays_v3912():
-    """SC, 16 Nov: the scrapbook swept his Decks screen (a sign-out did, 3.9.10's rule) and Pin up lost each drawing's
+    """the maintainer, 16 Nov: the scrapbook swept his Decks screen (a sign-out did, 3.9.10's rule) and Pin up lost each drawing's
     place; "They shouldn't leave when a 13th arrives"; a month's keepsakes scattered on the page, not stacked."""
     import re as _re
     from due_crew import fridge as FR, scrapbook as S
@@ -1387,7 +1386,7 @@ def test_scrapbook_scattered_and_fridge_stays_v3912():
 
 
 def test_field_log_choices_v3100():
-    """SC, 16 Nov, after the field log: a computer off the network counts once a day a route; an invite that matches
+    """the maintainer, 16 Nov, after the field log: a computer off the network counts once a day a route; an invite that matches
     nobody says what to do next."""
     from due_crew import errs
     from due_crew.backend import api
@@ -1410,8 +1409,7 @@ def test_field_log_choices_v3100():
 
 
 def test_answer_side_offers_can_be_turned_off_v3101():
-    """3.10.1 (SC: "people want the ability to turn off the add a tip pip pop-up ... and ... X friend knows this ask
-    them"): two switches in Settings › Study › Reviewing, on by default, a person's (they follow the account)."""
+    """3.10.1: two switches in Settings › Study › Reviewing, on by default, a person's (they follow the account)."""
     from due_crew import account, settings_model as SM
     study = board._settings_study({})
     check("two rows under Reviewing, each a switch, on unless turned off, found by Find a setting",
@@ -1426,7 +1424,7 @@ def test_answer_side_offers_can_be_turned_off_v3101():
 
 
 def test_a_plans_deck_is_shared_v3102():
-    """3.10.2 (SC, 17 Nov): who knows a card, friends' tips and Crew › Decks read the decks I share, and a plan on a
+    """3.10.2: who knows a card, friends' tips and Crew › Decks read the decks I share, and a plan on a
     deck didn't count, so almost nobody had any. A plan's deck is shared with my crew, said before Follow and once
     at the board's foot for a plan already running; unticking it in Crew › Decks is the way off; stopping asks."""
     from due_crew import plan_share as PS
@@ -1456,7 +1454,7 @@ def test_a_plans_deck_is_shared_v3102():
 
 
 def test_beside_a_dashboard_v3102():
-    """3.10.2 (SC, 18 Nov 2026: people run Due Crew with Onigiri and the board was missing): a dashboard in
+    """3.10.2: a dashboard in
     the Decks screen's place asks our hook only for what a person put in its grid. Under it by default, in
     its grid where placed, the whole row either way."""
     from due_crew import onigiri

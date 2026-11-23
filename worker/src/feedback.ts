@@ -31,7 +31,7 @@ export async function send(req: Request, s: Session, env: Env): Promise<Response
   const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM feedback WHERE uid = ? AND at > ?").bind(s.uid, now - 86400).first<{ n: number }>();
   if ((n?.n ?? 0) >= FEEDBACK_A_DAY) throw new HttpError(429, "too_many");
   await env.DB.prepare("INSERT INTO feedback (id, uid, at, text, ver) VALUES (?, ?, ?, ?, ?)").bind(ulid(), s.uid, now, text, ver).run();
-  // 3.10.1 (SC: "so I don't miss it by not checking the website"): a copy to FEEDBACK_TO, Sam's mailbox, with the
+  // 3.10.1: a copy to FEEDBACK_TO, the maintainer's mailbox, with the
   // sender's name and never their address (the reply still goes from the admin's page). A mail that fails doesn't
   // fail the feedback: it's kept, and the sender isn't asked to send it twice. Unset: kept only.
   if (env.FEEDBACK_TO) {
@@ -81,7 +81,7 @@ export async function remove(s: Session, env: Env, [id]: string[]): Promise<Resp
 
 /** POST /admin/feedback/{id}/reply {text}: mailed from Due Crew to the
  *  sender, with what they wrote quoted, as "Sam from Due Crew"; an answer
- *  goes to FEEDBACK_REPLY_TO (Sam's own mailbox). Marks it replied and done. */
+ *  goes to FEEDBACK_REPLY_TO. Marks it replied and done. */
 export async function reply(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   adminOnly(env, s);
   const body = await readJson(req, 16 * 1024);

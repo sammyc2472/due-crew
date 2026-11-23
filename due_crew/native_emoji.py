@@ -1,11 +1,10 @@
 """3.9.1: the computer's own emoji picker, for the Cheer window's "other"
-(Sam: "the emoji drawer is missing tons that are natively supported. want
-the other option to just open the native drawer?"). A page can't open it;
+. A page can't open it;
 Python can ask the system: the Character Viewer on a Mac (what ⌃⌘Space
 opens), Win + . on Windows. Linux has no one picker to ask for: there,
 and whenever asking fails, the window opens its own drawer (emoji_drawer).
 
-3.9.2 (Sam: "the custom picker doesn't accept the custom emoji choices"):
+3.9.2:
 the Character Viewer can't type into Anki's web page (Qt's web view never
 takes its insert), so a box of ours, a Qt one, sits exactly over the
 window's "pick one" (catch), focused, and takes the pick there; the page

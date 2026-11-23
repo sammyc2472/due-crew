@@ -3,8 +3,7 @@ Unsuspend, and Study now's deck. Opening a date's or a pick's cards is
 plan_flow's (the same step Browse's open takes).
 
 Never suspends, never opens a leech Anki suspended, never moves a due date
-(3.9.3, Sam: a card I know comes back when Study now asks it, and my answer
-there reschedules it: Again is a lapse, Good an early review). Each is one
+. Each is one
 undo step, named."""
 
 from .. import plans as P

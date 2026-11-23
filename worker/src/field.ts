@@ -1,4 +1,4 @@
-// 3.9.9, Know when it breaks (Sam's sign-off): each install counts what went
+// 3.9.9, Know when it breaks: each install counts what went
 // wrong in it by code (the add-on's errs.py: save:bad_plan, py:<module>:
 // <function>:<type>, cmd:unknown, req:plans.:id:400), never by content, and a
 // day's counts ride the first sync after that day ends, once (POST /sync's

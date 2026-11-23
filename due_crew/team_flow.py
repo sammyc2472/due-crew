@@ -824,7 +824,7 @@ def _work_steps(did, pid=None, exam=""):
         aimed = _in(got) if got else ""
     out["aim"] = {"day": day, "name": name, "in": k, "scoped": bool(prep), "kind": "exam" if eid == MY_EXAM else ""}
     if eid == MY_EXAM:
-        # 3.9.2 (Sam's pick C1-A): my exam covers the cards I started since my last exam (in the
+        # 3.9.2: my exam covers the cards I started since my last exam (in the
         # last 10 weeks), or since a day I picked; else the whole deck. Said in the box, with Change
         c = cfg()
         first_day, why = T.scope(exam, c.get("exam_last"), c.get("exam_since"), today)
@@ -1096,7 +1096,7 @@ def _map(col, did, deck, cutoff):
         ways.append({"key": DECKS_WAY, "name": _t("Subdecks"), "score": dways[0]["score"], "on": by_decks})
         ways.sort(key=lambda w: -w["score"])
     shown = dtiles if by_decks else tiles
-    # 3.9.2 (Sam's pick C2-A): by when I started them, a week a tile, named by what each week was;
+    # 3.9.2: by when I started them, a week a tile, named by what each week was;
     # worked out only when picked (its first answers are one more read of the deck's log)
     start = []
     if pick == T.START_WAY:
@@ -1110,7 +1110,7 @@ def _map(col, did, deck, cutoff):
         if len(start) >= 2:
             ways = [dict(w, on=False) for w in ways]
             shown = start
-    # 3.9.2 (Sam's pick): picked, but all I've started is from one week: said, not snapped back to topics
+    # 3.9.2: picked, but all I've started is from one week: said, not snapped back to topics
     ways.append({"key": T.START_WAY, "name": _t("When you started them"), "score": 0.0, "on": len(start) >= 2,
                  "one": pick == T.START_WAY and len(start) == 1})
     plan_ways = _plan_ways(col, did, active, know) if active else {}
@@ -1278,7 +1278,7 @@ def _pick(did, key):
 
 
 def dated(did):
-    """3.9.5 (Sam's FSRS rule): Insights' Study only before a date: my exam,
+    """3.9.5: Insights' Study only before a date: my exam,
     or a plan's event, in the exam box; else its cards Browse (reviews ahead
     of their date with no date to aim at are FSRS's to schedule)."""
     view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}

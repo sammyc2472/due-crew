@@ -1,6 +1,4 @@
-"""3.9.10, the scrapbook (Sam, 12 Nov: "a combo wrapped and home for
-polaroids / notes, etc. that are ephemeral at the moment or deleted
-permanently when taken away from the screen"): what my crew sent me and
+"""3.9.10, the scrapbook: what my crew sent me and
 what I did, by month, kept on this computer and never sent.
 
 A keepsake is one of five kinds (k):
@@ -129,7 +127,7 @@ def to_fridge(item):
     out = {"from": item.get("from"), "name": item.get("name"), "at": item.get("at"),
            "a": item.get("a"), "n": item.get("n"), "d": item.get("d")}
     if item.get("p"):
-        out["p"] = item["p"]  # back where it hung (SC: "puts things back where they should go")
+        out["p"] = item["p"]  # back where it hung
     return out
 
 

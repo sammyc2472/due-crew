@@ -2,7 +2,7 @@
 for `sidebar`.
 
 Such an add-on draws the Decks screen itself and asks another add-on's render hook only for what a person
-has placed in its grid, in a fixed cell, so the board (Due and the crew, one `#due-crew`) was missing. SC,
+has placed in its grid, in a fixed cell, so the board (Due and the crew, one `#due-crew`) was missing. The maintainer,
 18 Nov 2026: full width under its dashboard, and only there (in its grid too, for a day: taken out).
 
 - `asked(mw, content)`: its grid asking our hook for a cell's worth: the hook draws nothing there.

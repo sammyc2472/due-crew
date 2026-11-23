@@ -9,7 +9,7 @@ beforeEach(async () => {
   [sam, dre, nia] = await Promise.all(["sam", "dre", "nia"].map((u) => person(u)));
   await befriend(sam, dre);
   await befriend(dre, sam);
-  await befriend(sam, nia);  // Nia hasn't added Sam back
+  await befriend(sam, nia);  // Nia hasn't added the maintainer back
 });
 
 const writes = async () => (await db().prepare("SELECT COUNT(*) AS n FROM weeks").first<number>("n"));
@@ -272,7 +272,7 @@ describe("a tip takes the flag down (3.0.1)", () => {
     expect(await flagsOf("sam")).toEqual(["g2"]);
     expect((await dre.call("GET", "/board")).body.friends.find((f: any) => f.uid === "sam").week.tricky)
       .toEqual([{ guid: "g2", deck: "Geo", at: TODAY }]);
-    // a tip isn't Sam studying: his "last active" stays where it was
+    // a tip isn't the maintainer studying: his "last active" stays where it was
     expect(await db().prepare("SELECT updated_at FROM weeks WHERE uid = 'sam'").first<number>("updated_at")).toBe(1000);
     await dre.call("POST", "/cheers/sam", { emoji: "💡", note: "again", guid: "g2" });
     expect(await docOf("sam")).not.toHaveProperty("tricky");
@@ -287,7 +287,7 @@ describe("a tip takes the flag down (3.0.1)", () => {
   });
 
   it("only a tip from someone the flag was shown to counts", async () => {
-    // Nia added Sam; Sam never added Nia back, so he never saw her flag
+    // Nia added the maintainer; the maintainer never added Nia back, so he never saw her flag
     await befriend(nia, sam);
     await db().prepare("DELETE FROM friends WHERE owner = 'sam' AND friend = 'nia'").run();
     await nia.call("POST", "/sync", { week: flagged("g1") });
@@ -300,13 +300,13 @@ describe("a tip takes the flag down (3.0.1)", () => {
   it("the race: a sync before I've read the tip doesn't put the flag back", async () => {
     await sam.call("POST", "/sync", { week: flagged("g1", "g2") });
     await dre.call("POST", "/cheers/sam", { emoji: "💡", note: "Ken-tuck-y", guid: "g1" });
-    // Sam's client still has both flags: it hasn't read the tip yet
+    // the maintainer's client still has both flags: it hasn't read the tip yet
     const r = await sam.call("POST", "/sync", { week: flagged("g1", "g2") });
     expect(r.body.wrote.week).toBe(false);  // what's stored already has g1 down
     expect(await flagsOf("sam")).toEqual(["g2"]);
     // the tip is still waiting, and arrives with its card
     expect((await sam.call("GET", "/board")).body.cheers[0]).toMatchObject({ from: "dre", guid: "g1" });
-    // once it's read, the client drops the flag itself; flagging it again is Sam's call
+    // once it's read, the client drops the flag itself; flagging it again is the maintainer's call
     await sam.call("POST", "/sync", { week: flagged("g1", "g2") });
     expect(await flagsOf("sam")).toEqual(["g1", "g2"]);
   });
@@ -333,7 +333,7 @@ describe("POST /reports (3.0.1)", () => {
     for (const want of ["Reporter: sam", "Reported: dre", "Name: Dre", "Emoji: 🐢", "Unwanted cheers or knocks",
                         "Note: too many cheers", '🔥 "hi there"']) expect(text).toContain(want);
     expect(text).not.toContain("@example.com");
-    expect(await tables()).toBe(before);  // and the cheer is still Sam's to read
+    expect(await tables()).toBe(before);  // and the cheer is still the maintainer's to read
     // 3.8.1: and it's kept for the admin's Inbox
     expect(await db().prepare("SELECT by_uid, kind, target, reason, note, done FROM reports").all().then((r) => r.results))
       .toEqual([{ by_uid: "sam", kind: "person", target: "dre", reason: "cheers", note: "too many cheers", done: 0 }]);

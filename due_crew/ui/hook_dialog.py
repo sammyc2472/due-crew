@@ -10,7 +10,7 @@ from ..backend.shapes import NOTE_MAX
 from ..words import later as _later, t as _t
 
 SHARE_WORDS = _later("Share with my crew")  # both said with _t where shown
-# 3.9.12 (SC: "Never the card itself." doesn't make sense): who reads it, and that only the tip goes
+# 3.9.12: who reads it, and that only the tip goes
 SHARE_NOTE = _later("Friends who have this card see your tip when they miss it. Only the tip is sent.")
 
 

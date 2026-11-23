@@ -41,7 +41,7 @@ def topic_list(doc):
     return [tuple(v) for v in out.values()]
 
 
-# ---- 3.7.9 Insights (mock "Insights", rounds 1-17, drawn on Sam's own
+# ---- 3.7.9 Insights (mock "Insights", rounds 1-17, drawn on the maintainer's own
 # collection): only what's counted, or Anki's own memory model, is said.
 
 STUCK_MIN = 20     # a topic shows with this many cards reviewed in the window
@@ -76,7 +76,7 @@ SCOPE_WEEKS = 10  # 3.9.2: an exam's scope starts after the last exam, when it w
 
 
 def scope(exam, last, since, today):
-    """3.9.2 (Sam's pick C1-A): (first day, why) of what my exam covers:
+    """3.9.2: (first day, why) of what my exam covers:
     the cards I started from that day on. why "set" (a day I picked),
     "last" (the day after my last exam, in the last SCOPE_WEEKS), or ""
     with no day: the whole deck (my pick "all", or no exam that recent).
@@ -110,7 +110,7 @@ def right_days(answers, young=()):
     """The header: {now: [right, n], before: [right, n], days: [% or None,
     oldest first], young: [right, n], older: [right, n]} over [(cid, days
     ago, ease)] review answers, the first answer of each card each day; now
-    is the last DAYS days. young: the cards I started in them (3.9.2, Sam's
+    is the last DAYS days. young: the cards I started in them (3.9.2, the maintainer's
     deck: 2,480 new cards in two weeks made 87% read 77%, the mix as much
     as the memory), now's split by them."""
     first = {}
@@ -501,9 +501,7 @@ def batch_name(cids, tags_of, wide, prefer=None):
     doesn't cover nearly every card I've started (wide: {tag prefix: cards
     with it}, of all of them), else its two biggest topics ("Renal, GI");
     "" when nothing says. A tag's last part, readable. prefer: the map's
-    way (way_of's), the only tags it reads (3.9.2, Sam: a week named by the
-    shared deck a card first came from "isn't helpful", "should be
-    organized by topic"); None reads them all."""
+    way (way_of's), the only tags it reads; None reads them all."""
     count, spell, top, top_spell = {}, {}, {}, {}
     for c in cids:
         seen, tops = set(), set()
@@ -555,7 +553,7 @@ def clip(s, n=NAME_MAX):
 
 
 def started_tiles(first_of, tags_of, know, active, today, prefer=None):
-    """3.9.2 (Sam's pick C2-A, "getting there in reverse"): the map by
+    """3.9.2: the map by
     when I started the cards in play, a week a tile (the last START_WEEKS
     with cards; before them, one tile), each named by its dates and what
     it was (batch_name), shaded by what I know now; the ones in play not

@@ -1633,7 +1633,7 @@ class FakeWorker:
         return bool(p["squad"]) and (p["squad"], me) in self.members and p["owner"] != me and (pid, me) not in self.follows
 
     COUNTS_MIN = 3  # plans.ts COUNTS_MIN: a date's counts from three people counted (3.9.5)
-    BESIDES_MIN = 2  # plans.ts BESIDES_MIN: and from two besides whoever reads them (3.9.5, Sam)
+    BESIDES_MIN = 2  # plans.ts BESIDES_MIN: and from two besides whoever reads them
 
     def _still_in(self, pid, uid):
         """plans.ts STILL_IN: on a plan's team and may still see it (an author, a
@@ -1653,7 +1653,7 @@ class FakeWorker:
     def _in_squad(self, pid):
         """plans.ts IN_SQUAD: who's in a plan's squad toward the three, once
         each: a follower whose progress counts, and an author or co-author on
-        the team (Sam, 3.9.5)."""
+        the team."""
         p = self.plans.get(pid) or {}
         counted = set(self._counted(pid))
         authors = {u for (pl, u) in self.team if pl == pid and (u == p.get("owner") or u in (p.get("editors") or ()))}
@@ -2368,7 +2368,7 @@ class FakeWorker:
                 raise Bad(403, "not_author")
             sharing = self._counted(pid)  # 3.9.5: who counts, and no date's counts under three in the squad
             in_squad = self._in_squad(pid)
-            others = sum(1 for u in sharing if u != me)  # nor under two besides me (Sam)
+            others = sum(1 for u in sharing if u != me)  # nor under two besides me
             units = ({u["id"]: {"opened": 0, "done": 0} for u in p["doc"].get("units") or []}
                      if in_squad >= self.COUNTS_MIN and others >= self.BESIDES_MIN else {})
             for g in sharing.values() if units else ():

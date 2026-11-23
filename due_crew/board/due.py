@@ -27,7 +27,7 @@ DUE_CSS = """
     #due-crew .du-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     @media (max-width: 460px) { #due-crew .du-h > .du-n { display: none; } }  /* Hide stays on the tabs' line */
     #due-crew .du-h .sp { flex: 1; }
-    /* 3.9.3 (Sam: "the QBank piece is a bit higher than everything else"): one line height for the head's words,
+    /* 3.9.3: one line height for the head's words,
        or Hide's ▴ (a fallback font's taller line) and Due's bigger word sit a pixel under the rest */
     #due-crew .du-h > .du-n, #due-crew .du-h > .du-go, #due-crew .du-h > .du-fold,
     #due-crew .du-one > a, #due-crew .du-one > .du-n { line-height: 16px; }
@@ -190,7 +190,7 @@ DUE_CSS = """
     #due-crew .pp-25 i { width: 7px; height: 7px; border-radius: 2px; background: var(--dc-line); }
     #due-crew .pp-25 i.g { background: #3a9a40; } #due-crew .pp-25 i.p { background: #7b5cd6; } #due-crew .pp-25 i.x { background: #1f3f73; }
     @media (prefers-reduced-motion: no-preference) {
-      /* round three (Sam: "add some animation"): pointed at, a game's picture plays; picked, it plays once */
+      /* round three: pointed at, a game's picture plays; picked, it plays once */
       #due-crew .pp-gm:not(.thin):hover .pp-sh, #due-crew .pp-gm.just .pp-sh { animation: pp-pop 1.6s ease-in-out var(--k, 0s) var(--sv-hover, infinite); }
       #due-crew .pp-sh.s1 { --k: .18s; } #due-crew .pp-sh.s2 { --k: .36s; } #due-crew .pp-sh.s3 { --k: .54s; } #due-crew .pp-3 .pp-p.p2 { --k: .35s; }
       #due-crew .pp-gm:not(.thin):hover .pp-4 + .pp-p, #due-crew .pp-gm.just .pp-4 + .pp-p { animation: pp-think 2.4s ease-in-out var(--sv-hover, infinite); }
@@ -498,8 +498,7 @@ def _due_every(r, short=False):
 
 
 def _date_more(r, topics=False):
-    """Round five (Sam: "what happens when you click on a date? worried
-    about overlap with the today page"): a plan's date on Today or Upcoming
+    """Round five: a plan's date on Today or Upcoming
     opens, a click on its name, what the Plans tab's week had for it: its
     cards in Browse and the ones left, Open now (ahead of its day, or shut
     again), Move…, Skip it, Put it back, and why it left cards shut;
@@ -644,7 +643,7 @@ def _due_reviews(r):
 
 def _due_misses(m):
     """3.9.5: under a done Reviews row, today's misses, and where they were
-    (each part opens Browse). A line, not a deck (Sam's FSRS rule). m:
+    (each part opens Browse). A line, not a deck. m:
     due_flow._misses, or None."""
     said = _D.misses_text(m)
     if not said:
@@ -751,10 +750,10 @@ def _due_words():
 
 # 3.8.0: the two keys as this computer writes them (a Mac: Command for Study, Control for Ask, __init__.py)
 STUDY_KBD, ASK_KBD = ("⌘⇧S", "⌃⇧Q") if _sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")
-# 3.9.7: Magic search, from any screen; 3.9.10: ⌘F (Sam: the ⇧ sat low in the field; Anki's main window has no Find)
+# 3.9.7: Magic search, from any screen; 3.9.10: ⌘F
 MAGIC_KBD = "⌘F" if _sys.platform == "darwin" else "Ctrl+F"
 MAGIC_FIELD_ID = "dc-mgf"
-# 3.9.10 (Sam: "get rid of the sample queries… one helpful thing it can prompt a searcher with"): one question
+# 3.9.10: one question
 MAGIC_PROMPT = _later("What do you want to study?")
 _MAGIC_FIELD_ICON = ('<svg class="mag" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" '
                      'stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="11" r="6.2"/><path d="M19.4 20.4l-4.7-4.7"/>'
@@ -816,7 +815,7 @@ _MAGIC_FIELD_JS = r"""
 """
 
 def magic_field(cfg):
-    """3.9.9 (Sam's pick G2, from eight places mocked and three styles):
+    """3.9.9:
     Magic search as a field under Anki's deck list, over its "Studied…"
     line, in the link's place in the You box's head. The board's input with
     the window's magnifier and star; a glint goes round its edge in the
@@ -871,14 +870,14 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None, magic=False)
                 f'<span class="sp"></span>{ql}<a href="#" class="du-fold" title="{_t("Fold to one line")}" '
                 f'onclick="{_pycmd("duefold")}">{_t("Hide")} &#9652;</a></div>{more_body}</div>')
     today = e(v["today"])
-    # 3.9.3 (Sam's pick 1, in Study today's place): in the head on every tab and on the folded line ("missing
+    # 3.9.3: in the head on every tab and on the folded line ("missing
     # the QID chip on the top right"); QBank QIDs then, Magic search since 3.9.7 (its paste is QIDs' way)
     qids = mg
     done_n, total_n = int(v["done_n"]), int(v["total_n"])
     count = _t("{n} of {of} done", n=done_n, of=total_n) if total_n else ""
     if v["folded"]:
         bar = _wbar(done_n, total_n) if total_n else ""
-        go = ""  # 3.9.3: no Study today (Sam); Ctrl+Shift+S still walks the day
+        go = ""  # 3.9.3: no Study today; Ctrl+Shift+S still walks the day
         behind = ('<span class="du-n" style="color:#c77700">' + _t("{n} behind", n=int(v["behind_n"])) + '</span>'
                   if v["behind_n"] else "")
         if v.get("done"):

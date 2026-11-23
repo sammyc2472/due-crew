@@ -134,7 +134,7 @@ def test_dancers_and_more():
     check("front row then a back row half a place along, none on another",
           len(set(places)) == len(places) and [p for p in places if not p[1]] == [(0, False), (66, False), (132, False)])
     css = board.DANCE_CSS
-    check("the places count from the booth (Sam: start by the DJ, then toward the middle); a new song hops in from it",
+    check("the places count from the booth; a new song hops in from it",
           "#dc-dance .dz { position: absolute; bottom: 0; right: calc(var(--x) * 1px);" in css
           and "right: calc(var(--x) * 1px + 6px)" in css and "translate(48px, -26px)" in css and "left: calc(var(--x)" not in css)
     fl = lambda n: int(re.search(r'class="df-fl" style="--fl:(-?\d+)px"', board.dance_html(view(n), {})).group(1))  # noqa: E731
@@ -142,7 +142,7 @@ def test_dancers_and_more():
           fl(1) == board.DANCE_AREA - 60 - 24 and fl(2) == fl(1) - board.DANCE_SLOT and fl(3) == fl(2) - board.DANCE_SLOT
           and fl(9) == -10
           and fl(0) == -10, [fl(n) for n in (0, 1, 2, 3)])
-    check("no party lights (Sam: distracting)", "df-lt" not in h and "bulb" not in h and "bulb" not in css
+    check("no party lights", "df-lt" not in h and "bulb" not in h and "bulb" not in css
           and not hasattr(board, "_dance_lights"))
     one = board.dance_html(view(1), {})
     check("one song: no count (nothing more to list)", 'class="df-ct"' not in one)
@@ -224,7 +224,7 @@ def test_cards():
           and "&#9662;" not in h and "duecrew:songapp:" not in h)
     ask = board.dance_html(dict(view(1), app=""), {})
     row = ask.split('<div class="lsn"', 1)[1].split("</div>", 1)[0] if '<div class="lsn"' in ask else ""
-    check("no app yet (Sam: never offered): the card's own row, Listen in Apple Music · Spotify · YouTube Music · Other,"
+    check("no app yet: the card's own row, Listen in Apple Music · Spotify · YouTube Music · Other,"
           " each picking and opening (songlisten:<uid>:<app>), no lone Listen",
           '<span class="lw">Listen in</span>' in row and ">Listen</button>" not in ask
           and [m for m in re.findall(r"songlisten:dre:([a-z]+)\|", row)] == ["apple", "spotify", "youtube", "other"]
@@ -238,7 +238,7 @@ def test_cards():
           and card("me").count('<span class="cr">Song and cover courtesy of Apple Music</span>') == 1
           and "border-top: 1px solid var(--dc-line)" in board.DANCE_CSS.split("#dc-dance .ft, #dc-song .ft {", 1)[1].split("}", 1)[0])
     ft = board.DANCE_CSS.split("#dc-dance .ft, #dc-song .ft {", 1)[1].split("}", 1)[0]
-    check("the badge stays on the right: the credit wraps instead (Sam), the foot never does",
+    check("the badge stays on the right: the credit wraps instead, the foot never does",
           "flex-wrap" not in ft and "#dc-dance .ft .bdg, #dc-song .ft .bdg { flex: none; margin-left: auto; }" in board.DANCE_CSS
           and "flex: 1 1 auto; min-width: 0;" in board.DANCE_CSS.split("#dc-dance .ft .cr, #dc-song .ft .cr {", 1)[1].split("}", 1)[0])
     check("the search: its own credit (Song search…) and the badge at its foot",
@@ -250,12 +250,12 @@ def test_cards():
           and badge.count(f"pycmd('duecrew:songapple:dre|{KEY}')") == 2 and ">Listen on Apple Music</a>" in badge
           and "this.parentNode.nextElementSibling.hidden=false" in badge and "filter" not in badge)
     mine = card("me")
-    check("called a study soundtrack (Sam), and mine says no more than that",
+    check("called a study soundtrack, and mine says no more than that",
           "&#9834; Dre&rsquo;s study soundtrack &middot; since 30 Oct" in card("dre")
           and '<span>&#9834; Your study soundtrack</span>' in mine and "Decks screens" not in h and "song of the moment" not in h.lower()
           and "'Your study soundtrack'" in board.DANCE_JS and "Decks screens" not in board.DANCE_JS)
     clocks = re.findall(r'--sv-b:([\d.]+)s;--sv-d:(-?[\d.]+)s', board.dance_html(view(6), {}))
-    check("each Pip blinks on its own clock, the DJ's too (Sam: they blinked together)",
+    check("each Pip blinks on its own clock, the DJ's too",
           len(clocks) == 7 and len(set(clocks)) == 7, clocks)
     check("my card: Change… (the search), Take it off (songclear), the badge (songapple:me)",
           "data-find" in mine and f"pycmd('duecrew:songclear|{KEY}')" in mine and "songprev" not in mine
@@ -289,7 +289,7 @@ def test_settings_and_profile():
           and "dancemotion" not in b and 'aria-pressed="true" data-f="songapp:ask"' in b)
     b2 = board._settings_board({"dance_floor": False, "dance": "still", "music_app": "youtube"})
     check("…off, YouTube Music: as saved", 'data-f="danceshow"' in b2 and 'aria-pressed="true" data-f="songapp:youtube"' in b2)
-    # 3.9.12 (SC agreed): how they dance is chosen on the floor (the song list's foot, my card's), not in Settings
+    # 3.9.12: how they dance is chosen on the floor (the song list's foot, my card's), not in Settings
     f = board.dance_html(view(4, motion="lively"), {})
     check("Dancing: Gentle · Lively · Still on the floor's own cards, the one in use plain, the others its commands",
           "Dancing: " in f and "<b>Lively</b>" in f and f"pycmd('duecrew:dancemotion:gentle|{KEY}')" in f
@@ -448,7 +448,7 @@ def test_commands_through_on_js():
 
 
 def test_one_button_and_the_ask_v3912():
-    """3.9.12 (Sam: the × "closes it permanently which i don't think people realize"): the floor's one button is
+    """3.9.12: the floor's one button is
     the fold; turning it off is a line at the foot of the song list and of my card; "Still this one?" at the booth."""
     h = board.dance_html(view(4), {})
     body = h.split("</style>")[-1]

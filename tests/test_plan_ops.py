@@ -205,7 +205,7 @@ def test_view():
 
 
 def test_no_suggestions():
-    """Sam's call (round five): nothing suggests what goes on a date; the
+    """the maintainer's call (round five): nothing suggests what goes on a date; the
     author puts every card there. Needs a look is no cards, or a week over."""
     d = doc()
     d["units"].append({"id": "u4", "name": "Heart failure book", "opens": "2026-10-24"})

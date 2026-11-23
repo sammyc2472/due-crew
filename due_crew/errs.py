@@ -1,8 +1,8 @@
-"""3.9.9, Know when it breaks (Sam's sign-off): each install counts its own
-failures by code, never by content, and a day's counts go to Sam with the
+"""3.9.9, Know when it breaks: each install counts its own
+failures by code, never by content, and a day's counts go to the maintainer with the
 first sync after that day is over (Anki's day), once. Both bugs of 3.9.8's
 week (a plan's Send that sent nothing, a good-luck card that never showed)
-were found only because Sam hit them himself.
+were found only because the maintainer hit them himself.
 
 A code is short, from [a-z0-9_.:-], at most 80 characters, and built only
 from our own names, never from data:
@@ -36,7 +36,7 @@ import threading
 import time
 import traceback
 
-# Privacy's "Send Sam what went wrong" for someone who never set it. Sam may
+# Privacy's "Send Sam what went wrong" for someone who never set it. The maintainer may
 # want it off by default: this line is the flip.
 SEND_DEFAULT = True
 
@@ -385,8 +385,7 @@ def count(code):
     never stops what it counts."""
     try:
         day = today()
-        # a computer off the network says so once a day a route, however often it tries (SC, 16 Nov: 141 of a day's
-        # counts were one sync's "offline"; "count once per day"): how many people, not how many tries
+        # a computer off the network says so once a day a route, however often it tries: how many people, not how many tries
         if isinstance(code, str) and code.endswith(":offline") and _now["on"] and _now["tally"].has(code, day):
             return
         if _now["on"] and _now["tally"].add(code, day) and _now["after"] is not None:

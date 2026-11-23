@@ -1,5 +1,4 @@
-"""3.8.2: Pip's closet (the Fun Round, round two; Sam: "costumes tied to
-achievements ... more more more"). Pure: no aqt.
+"""3.8.2: Pip's closet (the Fun Round, round two; ). Pure: no aqt.
 
 Things Pip earns by showing up, coming back, studying together, finishing a
 plan and caring for your own cards. Never for getting cards right (Again
@@ -14,7 +13,7 @@ face, on the body, in the hand, on the back. A thing replaces whatever was
 in its place, and a thing that reaches into another place too (the winter
 earmuffs come with a scarf) takes that place as well, so two things never
 sit on top of each other. A costume is the whole look while it's on: one at
-a time (a second replaces the first; Sam: "one should replace the other"),
+a time (a second replaces the first; ),
 your own things waiting under it to come back when it comes off, and
 putting any of them on takes the costume off. wear() is the one way a look
 changes; clean() makes any look (an old one, a crewmate's off the server)
@@ -80,7 +79,7 @@ _T = (
     ("flag", "hand", "Squads", _later("Squad flag"), _later("Started a squad"), ("founder", 1)),
     ("backpack", "back", "Plans", _later("Backpack"), _later("Your first plan"), ("plans", 1)),
     ("gradcap", "head", "Plans", _later("Grad cap"), _later("A plan, every set done"), ("plan_done", 1)),
-    # 3.9.6 (Sam's picks, the plan joys): a ribbon for the third plan done, a map and a kite for writing one
+    # 3.9.6: a ribbon for the third plan done, a map and a kite for writing one
     ("rosette", "body", "Plans", _later("Finisher’s ribbon"), _later("3 plans, every set done"), ("plan_done", 3),
      {"tip": _later("Every set of three plans done (the Grad cap is the first one’s)")}),
     ("map", "hand", "Plans", _later("Folded map"), _later("Someone followed a plan you made"), ("followed", 1)),
@@ -183,7 +182,7 @@ def shown(look):
     return [c] if c else clean(look)
 
 
-DOWN = (4, 12)  # a held thing set down: on the ground at Pip's right (Sam: it never just goes)
+DOWN = (4, 12)  # a held thing set down: on the ground at Pip's right
 
 
 def art(look, pose_holds=False):
@@ -384,7 +383,7 @@ def _date(v):
 
 
 def halloween(today, studied, have):
-    """Halloween week's line on the board (Sam's pick, round three), or None
+    """Halloween week's line on the board, or None
     outside 24 to 31 Oct. today: the Anki day (ISO); studied: the days I
     studied (ISO; the board's eight are the whole week); have: the closet.
     {days: this week's, things: [(key, days it takes, mine)], next: (key,

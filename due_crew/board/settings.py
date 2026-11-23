@@ -106,7 +106,7 @@ SETTINGS_CSS = """
     @media (prefers-reduced-motion: no-preference) { #due-crew .st-hit { animation: sthit 1.8s ease-out; } }
     @media (prefers-reduced-motion: reduce) { #due-crew .st-hit { outline: 2px solid var(--dc-accent); outline-offset: 1px; } }
 """.replace("__BUTTONS__", button_reset("#due-crew.dc-set button", "vertical-align: middle;"))
-# 3.9.9 (Sam: "reorganize settings to be intuitive and sensible"): four tabs by what a setting is about.
+# 3.9.9: four tabs by what a setting is about.
 # You: who I am, my dates, my people. Board: what's on the Decks screen and how it looks. Study: what
 # works while I study (Today, Magic search, reviewing, the Fifteen, keys). Privacy: what leaves this computer.
 SETTINGS_TABS = (("you", _later("You")), ("board", _later("Board")), ("study", _later("Study")), ("privacy", _later("Privacy")))
@@ -214,7 +214,7 @@ def _settings_board(cfg):
                                            cfg.get("theme", "auto"), _t("Theme")))
             + _st_row(_t("Accent"), f'<span class="st-sw" role="group" aria-label="{_t("Accent")}">{swatches}</span>')
             # 3.10.0 (words.py): Anki's language unless picked here; each named as its speakers write it. The note says who
-            # drafted them, and Suggest a wording is the feedback window, written in one's own language (SC, 13 Nov)
+            # drafted them, and Suggest a wording is the feedback window, written in one's own language
             + _st_row(_t("Language"), _st_seg("lang", ((_words.AUTO, _t("Match Anki")),) + tuple(_words.NAMES.items()),
                                               cfg.get("lang", _words.AUTO), _t("Language")),
                       f'{_t(_words.NOTE)} <a class="st-lk" href="#" {_st_click("setfeedback")}>{_t("Suggest a wording")}</a>')
@@ -243,12 +243,12 @@ def _settings_study(cfg, fsrs=None, reach=None, stops=()):
         _st_row(_t("New cards stopped in {deck}", deck=_html.escape(str(name))),
                 f'<a class="st-lk" href="#" onclick="{_pycmd("insaheadon:" + str(int(did)))}">{_t("Turn back on")}</a>')
         for did, name in stops)
-    # 3.9.3 (Sam's pick A): by each deck's leech count; 8 lapses after its question's Not these
+    # 3.9.3: by each deck's leech count; 8 lapses after its question's Not these
     extras = (_t("Suggestions: today&rsquo;s misses, new leeches. Recover leeches: each morning, as new cards, at 8 lapses") if reach == "eight"
               else _t("Suggestions: today&rsquo;s misses, new leeches. Recover leeches: each morning, as new cards, at each deck's leech count"))
     return (f'<div class="st-h">{_t("Today")}</div><div class="st-box">' + stopped
             + _st_row(_t("Today, Upcoming, Later"), _st_switch("due_show", g("due_show", True), _t("Today, Upcoming, Later")))
-            # 3.9.12 (SC agreed): Suggestions and Recover leeches are one row, each still its own switch
+            # 3.9.12: Suggestions and Recover leeches are one row, each still its own switch
             + _st_row(_t("Today&rsquo;s extras"),
                       f'<span class="st-two"><label>{_t("Suggestions")} ' + _st_switch("due_suggest", g("due_suggest", True), _t("Suggestions"))
                       + f'</label><label>{_t("Recover leeches")} ' + _st_switch("due_leeches", g("due_leeches", False), _t("Recover leeches")) + '</label></span>',
@@ -256,19 +256,19 @@ def _settings_study(cfg, fsrs=None, reach=None, stops=()):
             + f'</div><div class="st-h">{_t("Magic search")}</div><div class="st-box">'
             + _st_row(_t("Magic search"), _st_switch("magic_search", g("magic_search", True), _t("Magic search")),
                       _t("The field under your decks, and {keys} from any screen", keys=MAGIC_KBD))  # 3.9.7; 3.9.9: its field
-            # 3.9.1, two buttons (Sam's picks): every deck; FSRS off, allowed with a note
+            # 3.9.1, two buttons: every deck; FSRS off, allowed with a note
             + f'</div><div class="st-h">{_t("Reviewing")}</div><div class="st-box">'
             + _st_row(_t("Two buttons"), _st_switch("two_buttons", g("two_buttons", False), _t("Two buttons")),
                       _t("Again and Good. Hard and Easy hide; 2, 3 and 4 count as Good. Phones keep four.")
                       + (" " + _t("Works best with FSRS on.") if fsrs is False else ""))
-            # 3.10.1 (SC: "people want the ability to turn off the add a tip pip pop-up ... and ... X friend knows this"):
+            # 3.10.1:
             # the two things that come up by themselves on a card's answer, each its own switch; what someone left
             # for me (a tip, a question, a plan's note) always shows
             + _st_row(_t("Offer to add a tip"), _st_switch("tip_offer", g("tip_offer", True), _t("Offer to add a tip")),
                       _t("Your Pip, on a card you missed or found hard. Off, it&rsquo;s still under More while reviewing."))
             + _st_row(_t("Friends who know a card"), _st_switch("knows_show", g("knows_show", True), _t("Friends who know a card")),
                       _t("Their Pips, when you miss a card a friend has down. Tips and questions still come up."))
-            # 3.9.12 (SC's pick A): Anki's deck list as what there is to do, where Anki buries siblings
+            # 3.9.12: Anki's deck list as what there is to do, where Anki buries siblings
             + _st_row(_t("Deck counts leave out buried siblings"),
                       _st_switch("deck_counts", g("deck_counts", True), _t("Deck counts leave out buried siblings")),
                       _t("Anki&rsquo;s deck list counts every card of a note, then buries the siblings as you study. On, it shows what you&rsquo;ll do."))
@@ -280,7 +280,7 @@ def _settings_study(cfg, fsrs=None, reach=None, stops=()):
                       _t("Breathe with Pip, four counts a side, or stretch"))
             + _st_row(_t("Room chip"), _st_seg("room_chip_side", (("left", _t("Left")), ("right", _t("Right"))),
                                                cfg.get("room_chip_side", "right"), _t("Room chip")),
-                      _t("Its side of Anki&rsquo;s top bar"))  # back the day it left (SC's was on the left)
+                      _t("Its side of Anki&rsquo;s top bar"))  # back the day it left
             + f'</div><div class="st-h">{_t("Shortcuts")}</div><div class="st-box">'
             + _st_row(_t("Study what&rsquo;s next"), f'<kbd class="st-kbd">{STUDY_KBD}</kbd>', _t("From any Anki screen"))
             + _st_row(_t("Ask the squad about this card"), f'<kbd class="st-kbd">{ASK_KBD}</kbd>', _t("While reviewing"))
@@ -402,7 +402,7 @@ FIND_WORDS = {
 FIND_WINDOWS = (
     ("planyours", _later("Your plans"), "plan plans dates weeks schedule write edit author builder follow"),
     ("planstart", _later("New plan"), "new plan calendar syllabus block schedule file pdf word powerpoint slides import make deck"),
-    # 3.9.7: Magic search, QBank QIDs' way since its round 2 (Sam: "this is replacing QBank QID search")
+    # 3.9.7: Magic search, QBank QIDs' way since its round 2
     ("magic", _later("Magic search"), "find search cards topic tag resource filtered deck study now put on a day quiz exam away filter "
                               "qbank qids missed questions question ids bank practice block wrong incorrect unsuspend"),
 )

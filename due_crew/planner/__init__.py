@@ -7,7 +7,7 @@ setting.
 
 Labs was what stayed behind this computer's "labs" switch: the calendar
 window, session by session. It went in 3.9.9 (start_window.py, picker.py;
-Sam: "don't think it works well enough"); the key opens nothing now.
+); the key opens nothing now.
 
 Round five: every change is an op (ops.py, pure), waiting under the plan
 till it's sent when anyone follows it (draft.py, pure); view.py works out

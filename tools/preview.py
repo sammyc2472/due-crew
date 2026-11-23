@@ -223,12 +223,12 @@ PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of
              "ins": {"n": 53, "did": 10, "name": "KSA F3-3", "day": "2026-10-13"}}  # 3.8.0: the next exam's cards, from Insights
 PLANS = {"cards": [PLAN_CARD], "offers": []}
 _YOU = lambda tab, **kw: dict({"tab": tab, "plans": PLANS}, **kw)  # noqa: E731
-sections.append("<h3>3.8.0: You › Plans, a plan I follow (round five, Sam's pick A: its day's line, then seven small "
+sections.append("<h3>3.8.0: You › Plans, a plan I follow (round five: its day's line, then seven small "
                 "days, each its bar and what's left)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans")))
 _PX = {"cards": [dict(PLAN_CARD, exam_ask={"pid": "p1", "name": "MS2 Block 1", "day": "2026-10-23", "ename": "Block 1 exam", "was": ""})],
        "offers": []}
-sections.append("<h3>3.9.9: a plan's exam, asked once on its card (Sam's pick B)</h3>" + board.render(
+sections.append("<h3>3.9.9: a plan's exam, asked once on its card</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=_PX, due=_DV, you=_YOU("plans", plans=_PX))
     .replace("dc-pd-p1-", "dc-pdx-p1-").replace('id="du-', 'id="dux-'))
 # pick A: a day's click opens its assignments under the week, whole (today's here; the quiz day's next)
@@ -264,7 +264,7 @@ _SQ = {"cards": [dict(PLAN_CARD, tabs={"unread": 2, "summary": {
     "last": {"name": "Maya"}}})], "offers": []}
 sections.append("<h3>3.8.0: a plan I follow, in its squad (the line goes there); Due off</h3>" + board.render(
     DATA, {"period": "week", "due_show": False}, now_ts - 60, plans=_SQ, you=_YOU("plans", plans=_SQ)))
-# two plans followed: one at a time, their names a switch in the head (round five, Sam's pick 3)
+# two plans followed: one at a time, their names a switch in the head (round five, the maintainer's pick 3)
 _MD = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]}, "events": [],
        "units": [{"id": "m1", "name": "Micro · Gram positives", "opens": "2026-10-05", "n": 120},
                  {"id": "m2", "name": "Micro · Gram negatives", "opens": "2026-10-07", "n": 140},
@@ -348,7 +348,7 @@ _LCARD = dict(PLAN_CARD, id="pl", title="Path Book, high yield · Dre's plan", n
 sections.append("<h3>3.9.10: catching up (three days owed: Study or Ignore on each, today's set waiting, the week under it)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [_LCARD], "offers": []}))
     .replace("dc-pd-pe-", "dc-pd-pl-").replace('id="du-', 'id="due-line-'))
-# 3.9.6, the plan joys (Sam's picks, the "Joy on the plan card" mock): each moment as the board draws it,
+# 3.9.6, the plan joys: each moment as the board draws it,
 # mid-moment (motion.js plays it from --ago; still with Reduce motion) and the rest of its day
 from due_crew import sev as _SV  # noqa: E402
 
@@ -444,7 +444,7 @@ sections.append("<h3>3.8.1: Study for a quiz, three days out</h3>" + board.rende
         dict(_C3, prep={"name": "Cardio <quiz>", "day": "2026-10-09", "when": "Fri", "left": 2, "today": False},
              quiz={"id": "q", "name": "Cardio <quiz>", "day": "2026-10-09", "when": "Fri", "today": False, "units": ["a", "b"], "open": 412})],
         "offers": []})).replace('id="du-', 'id="duq-'))
-# 3.9.9 (Sam's pick G2): Magic search's field, under Anki's deck list and over its "Studied…" line (a stand-in for both)
+# 3.9.9: Magic search's field, under Anki's deck list and over its "Studied…" line (a stand-in for both)
 _ANKI_DECKS = ('<table style="width:440px;max-width:92%;margin:0 auto;border-collapse:collapse"><tr><th style="text-align:left">Deck</th><th>New</th>'
                '<th>Learn</th><th>Due</th></tr><tr><td style="text-align:left">Big Step 1</td><td>42</td><td>5</td><td>110</td></tr></table>')
 sections.append("<h3>3.9.9: Magic search's field under the deck list (Anki's list and line are stand-ins)</h3>" + _ANKI_DECKS
@@ -521,7 +521,7 @@ _PSQ = {"kind": "plan", "pid": "p1", "name": "MS2 Block 1 \u00b7 Dre's plan", "c
         "team": _TEAM, "team_state": "ok", "me": "me", "known": {"down": ["g1"], "have": ["g1"]}}
 sections.append("<h3>3.8.0: a plan's squad on the Squads tab</h3>" + board.render(
     DATA, {"period": "squads"}, now_ts - 60, squad_view=_PSQ))
-# 3.7.9: Insights, with the numbers of Sam's own snapshot (Wed 7 Oct)
+# 3.7.9: Insights, with the numbers of the maintainer's own snapshot (Wed 7 Oct)
 _INS = {"target": 90, "right": {"now": [1308, 1519], "before": [1590, 1836],
                                 "days": [84, 80, 88, 89, 85, 75, 94, 79, 82, 88, 91, 84, 94, 88][::-1]},
         "aim": {"day": "2026-10-13", "name": "KSA F3-3", "in": 6, "scoped": True}, "hero": list(range(53)), "behind": 0,
@@ -620,7 +620,7 @@ sections.append("<h3>3.8.0: You › Insights, the map opened on Cardio</h3>" + b
 sections.append("<h3>3.8.0: You › Insights, a deck with no plan (my exam date, its tags), Due off</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": True, "plan": None, "view": _DECK_INS})))
-# 3.9.5's last round, round three (Sam's): You › Pip Party, after Insights (testers for now): the games
+# 3.9.5's last round, round three: You › Pip Party, after Insights (testers for now): the games
 # up top, the map to pick on (Systems, Tags, Decks), find, which of their cards, the picks at the foot, Host
 _PG = lambda t, i, l, a: [{"id": "trivia", "label": "Trivia", "n": t, "need": 10, "first": a == "trivia"},  # noqa: E731
                           {"id": "imposter", "label": "Imposter", "n": i, "need": 1, "first": a == "imposter"},
@@ -693,7 +693,7 @@ _LEECH = {"n_gone": 14, "n_near": 9, "out": 2, "gone": [
                            "due": 2, "tip": [], "knows": [], "susp": False, "kept": True}]}
 from due_crew import team as _TM  # noqa: E402
 # each card carries the shared deck it first came from too; a week's name is the map's topics, never that
-# (Sam: "isn't helpful ... should be organized by topic"); this week's, started, none reviewed yet: too soon
+#; this week's, started, none reviewed yet: too soon
 _TAGS = {c: ["Big::#Systems::" + ("Cardio::Pharm" if c < 260 else "Cardio::Physiology" if c < 560 else "Renal::Physiology"
                                   if c < 760 else "Pulm::Pathology"), "Big::#Source_Decks::Deck_" + "ABCD"[c % 4]]
          for c in range(1080)}
@@ -842,7 +842,7 @@ def _bv(rows, new=False, show_up=False):
             "names": {"pat": ("Pat", "🐢"), "sam": ("Sammy", "😺"), "dre": ("Dre", "🦊"), "maya": ("Maya", "🐸"), "theo": ("Theo", "🐧"), "noah": ("Noah", "🦄")},
             "squad": "Orca crew", "squad_id": "sq1", "closest": _B.closest(_CARD, ev)}
 _LINE = [dict(r, play=dict(r["play"], rm=1, s=r["play"]["s"] | (0b1000 if r["user_id"] == "sam" else 0)))
-         for r in _ROWS if "play" in r]  # everyone updated; Sam also kept the same hour: the left column is a line
+         for r in _ROWS if "play" in r]  # everyone updated; the maintainer also kept the same hour: the left column is a line
 sections.append("<h3>3.6: squad bingo on the Squads tab (Monday)</h3>" + board.render(
     DATA, {"period": "squads"}, now_ts - 60, squad_view=dict(SQUAD_VIEW, bingo=_bv(_ROWS, new=True))))
 sections.append("<h3>3.6: squad bingo on the Squads tab (midweek)</h3>" + board.render(

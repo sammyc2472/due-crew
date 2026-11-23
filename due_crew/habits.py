@@ -25,8 +25,7 @@ One read, the last WEEKS weeks of revlog over every deck, as rows
   It shows only with 20 such sittings, a drop of 3 points or more, and the
   range's high end below zero.
 
-Slow but right is a finding, not a deck (3.9.5, Sam's FSRS rule: a deck
-only for what Anki's scheduler can't know): FSRS doesn't see answer time,
+Slow but right is a finding, not a deck: FSRS doesn't see answer time,
 so with an exam date set, the slow ones Anki won't show before it join the
 exam box's Study (team_flow.exam_deck); otherwise FSRS catches them at
 their next look.

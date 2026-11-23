@@ -165,7 +165,7 @@ function copyInvite(friendCode, btn) {
 
 let me = null;  // {uid, name} or null
 
-/** 3.8.22 (Sam: "all the places where there are emojis"): someone's Pip away from the board, by uid, as
+/** 3.8.22: someone's Pip away from the board, by uid, as
  *  board.squad_pip draws them: a crewmate's in their colour and look (crew: /board's friends, which bring
  *  only a mutual friend's), mine in my accent (look: mine, when the page has it), anyone else plain.
  *  Without sev.js, null: the emoji, as before. */
@@ -1021,7 +1021,7 @@ const Board = (() => {
         const t = dayOf(w, tomorrow) || dayOf(w, today), y = dayOf(w, yest);
         if (t && !showed(t) && (r.you || r.live || r.room)) { flags(t); r.notyet = !r.away; notyet.push(r); }  // me, or studying now: nothing counted yet
         else if (t && showed(t)) { Object.assign(r, metrics(t)); flags(t); r.showup = [r.reviews, r.time, r.retention, r.streak].every((v) => v === null); fresh.push(r); }
-        // yesterday's numbers hold a row (SC, 3.9.12); a day of nothing doesn't: the bench
+        // yesterday's numbers hold a row; a day of nothing doesn't: the bench
         else if (y && showed(y) && !r.you) { Object.assign(r, metrics(y)); flags(t || y); r.stale = true; stale.push(r); }
         else if (r.you) fresh.push(r);
         else { r.quiet = true; quiet.push(r); }
@@ -1449,7 +1449,7 @@ async function home() {
       pop.style.left = `${btn.offsetLeft}px`;
       e.currentTarget.after(pop);
       setTimeout(() => document.addEventListener("click", function off(ev) { if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener("click", off); } }), 0);
-    } }, label);  // 3.8.0 (Sam): no caret, as in Anki
+    } }, label);  // 3.8.0: no caret, as in Anki
     return btn;
   }
   function drawFoot() {

@@ -2,12 +2,11 @@
 gamenight in code): You › Pip Party on the board, which Tools › Due Crew ›
 Pip Party opens.
 
-Round three (Sam's): the games up top, the one the TV opens on picked;
+Round three: the games up top, the one the TV opens on picked;
 under them, what to play on. The map is Insights' own (a deck's Systems),
 or the tag tree, or the decks; a tap picks a tile, › opens it, a find
 names one; which of their cards; the picks at the foot, each one left out
-or dropped there. The tab is the one way in (Sam: no Party from Today or
-elsewhere). Nothing picked, the tiles on the map are the night, and the table
+or dropped there. The tab is the one way in. Nothing picked, the tiles on the map are the night, and the table
 votes among them. Host reads the cards here (main thread) and the cards
 around them (near), builds the pack off the main thread (gamenight.py,
 each question marked with its pick for the vote), opens a table on the API
@@ -36,7 +35,7 @@ from .app import _bg, _profile_files, cfg, client, save_cfg
 from .errs import oops
 
 # None: the tab is everyone's signed in (3.9.5's release); a tuple of uids
-# (the admin's, the Worker's ADMIN_UIDS secret) makes it theirs alone, as while Sam tested it
+# (the admin's, the Worker's ADMIN_UIDS secret) makes it theirs alone, as while the maintainer tested it
 TESTERS = None
 KEPT_MAX = 20
 SHOW_MAX = 12      # a level's tiles on the map; the rest are a find away

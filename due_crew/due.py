@@ -688,7 +688,7 @@ def study_next(plan_decks, due_now):
     decks of the plans I follow, in plan order; due_now: {did: cards Anki
     would show now} for each of those and every top deck (a deck's count
     takes in its subdecks', within its limits). Plans' decks first, then
-    the deck with the most due. 3.8.1 (Sam): no "today's misses" step: it
+    the deck with the most due. 3.8.1: no "today's misses" step: it
     built a filtered deck nobody asked for (a Fifteen starts the walk); the
     Today box's suggestion is the way to it, a click that says so."""
     for did in plan_decks:
@@ -704,7 +704,7 @@ def study_next(plan_decks, due_now):
 
 def misses_text(m):
     """Today's misses under a done Reviews row: "214 reviews, 23 missed", or
-    None. m: {n, reviews} from due_flow. 3.9.5 (Sam's FSRS rule): a line,
+    None. m: {n, reviews} from due_flow. 3.9.5: a line,
     not a deck: Anki's relearning steps bring a miss back, and FSRS sets
     the next look."""
     n = int((m or {}).get("n") or 0)

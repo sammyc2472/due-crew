@@ -89,7 +89,7 @@ def weekday_or_day_said(iso, today):
 def opens_ahead(units, applied, today, own=False, paused=False, sched=False):
     """3.9.5, Browse's Due column: a plan's dates still to open here on
     their day, [(day, unit)]: from today on, not applied or skipped here;
-    none at my own pace (no day to say: Sam's "let's pause on it"), none
+    none at my own pace (no day to say: ), none
     while paused, and none that opens in slices (an even date, a 3.2
     schedule: no one day a card opens)."""
     if own or paused:
@@ -103,8 +103,7 @@ def opens_ahead(units, applied, today, own=False, paused=False, sched=False):
 
 
 def opens_words(day, plan, today):
-    """What Browse's Due says for a suspended card a plan opens (Sam's pick
-    B): the day it opens, then the plan, "Thu 5 Nov · Heme 2"; the year too
+    """What Browse's Due says for a suspended card a plan opens: the day it opens, then the plan, "Thu 5 Nov · Heme 2"; the year too
     when it isn't this one."""
     year = str(day)[:4]
     return f"{day_said(day)}{'' if year == str(today)[:4] else ' ' + year} · {plan}"
@@ -692,8 +691,7 @@ def progress(idx, doc, swap=None, aside=frozenset()):
 
 
 def set_aside(idx, doc, swap=None, applied=None, held=()):
-    """3.9.6 (Sam: "if i've chosen to suspend something after the plan opens
-    it, don't want it to make me behind"): the new cards I suspended myself
+    """3.9.6: the new cards I suspended myself
     on a date that opened here (`applied`, not skipped), so they're never
     left on it, never behind, and count in none of its numbers. Not one the
     plan holds (`held`: Hold back, Put back), nor a leech (Anki's, already
@@ -781,7 +779,7 @@ def _missing(idx, u, of, n, swap=None, doc=None):
     (the builder's, from the tag tree: a card under two of a date's tags,
     a video's and a system's, counts twice); this copy counted the same way
     says how many are missing, then each card once as the date's tags here
-    hold them (3.9.3, Sam's pick: "14 of 28" when nothing was missing)."""
+    hold them."""
     deck = str((doc or {}).get("deck") or "")
     mine = (sum(len(idx.tag_cards(swapped(t, swap))) for t in u.get("tags") or [])
             + sum(len(idx.deck_cards(d, deck)) for d in u.get("decks") or []))
@@ -1952,8 +1950,7 @@ def behind_of(p, today):
             "days": max(1, (t - (_iso(since) or t)).days)}
 
 
-# 3.9.10, catching up (Sam, 12 Nov: "once someone is behind a certain amount, we automatically pause… the options
-# should be study or ignore", and "I don't want the dates moved"): from LINE_AT days behind (or one a week old),
+# 3.9.10, catching up: from LINE_AT days behind (or one a week old),
 # a new day waits in line instead of opening, and each day owed is a row: Study or Ignore. The plan's dates stay.
 LINE_AT, LINE_OLD = 3, 7
 
@@ -1994,7 +1991,7 @@ def line_view(p, waits, today):
     return {"rows": rows, "next": nxt, "days": len(rows), "left": sum(r["left"] for r in rows)}
 
 
-FIT_DAYS = (2, 14, 3)  # Behind's Fit it in…: over the days I pick, 2 to 14, three to start (Sam's pick)
+FIT_DAYS = (2, 14, 3)  # Behind's Fit it in…: over the days I pick, 2 to 14, three to start
 
 
 def behind_sheet(name, b, p, waiting, shift=0):
@@ -2098,7 +2095,7 @@ def exam_marks(doc, today):
 
 
 def exam_offer(plans, my_exam, today, asked=None, came=None):
-    """3.9.9 (Sam's pick B, "Exams and Limits"): the line a follower's plan
+    """3.9.9: the line a follower's plan
     card asks, once, about a plan's exam: {pid, name, day, ename, was}, or
     None. Each plan's soonest exam ahead, soonest first. My own exam ahead
     wins (nothing is asked) unless it came from that plan and the plan's
@@ -2137,7 +2134,7 @@ def link_code(text):
     return normalize_code(t)
 
 
-# ---- 3.9.6: the plan's joys (Sam's picks, the "Joy on the plan card" mock) ----
+# ---- 3.9.6: the plan's joys ----
 # A set done, a pop; halfway, three-quarters and the last set, a line each;
 # the finish line, a show over the Decks screen; caught up; day one. What
 # has played is kept in plans.json's "joy", this profile's and never sent;
@@ -2390,7 +2387,7 @@ def study_cards(idx, cids):
 
 
 def new_and_due(idx, cids):
-    """3.9.5 (Sam's FSRS rule: never reviews ahead of their date): of these,
+    """3.9.5: of these,
     the open new cards and the ones Anki has due today, in the deck's order
     (seen ones first, then new by their place)."""
     got = [c for c in cids if c in idx.cards and (idx.cards[c] == (0, 0) or c in idx.due_now)]
@@ -2398,9 +2395,7 @@ def new_and_due(idx, cids):
 
 
 def day_cards(idx, doc, day, today, applied=None, swap=None):
-    """3.9.6, a day's Study (Sam: "study all for the day ... the filtered
-    deck of just those new / review cards for the day ... not just for today
-    for past days too"): (cards, new, due) of what a day of the week asks
+    """3.9.6, a day's Study: (cards, new, due) of what a day of the week asks
     now, by its FSRS rule's (as a date's Study, new_and_due): the open new
     cards not seen yet of the sets it opened, and theirs Anki has due today;
     today also a set still running (opened before, due after) and every
@@ -2912,7 +2907,7 @@ def lesson_cards(idx, cids):
     """What a lesson's deck holds of these: its open new cards, and its
     learning ones Anki has due now (one due later would show early in a
     filtered deck), in the deck's order. Never a review: FSRS keeps its own
-    dates (Sam's FSRS rule)."""
+    dates."""
     got = [c for c in cids if c in idx.cards
            and (idx.cards[c] == (0, 0) or (idx.cards[c][1] == 1 and c in idx.due_now))]
     return sorted(got, key=lambda c: idx.order.get(c, (True, 0, c)))

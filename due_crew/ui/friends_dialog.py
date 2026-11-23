@@ -133,7 +133,7 @@ class FriendsDialog(QDialog):
 
         def job():
             code, people, knocks = self.client.friends_view()  # one request
-            # 3.8.22 (Sam): names alone; a person is their Pip everywhere else
+            # 3.8.22: names alone; a person is their Pip everywhere else
             return (code, [(fid, name, mutual) for fid, name, _emoji, mutual in people], knocks)
 
         def done(result, err):

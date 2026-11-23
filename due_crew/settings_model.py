@@ -39,7 +39,7 @@ BOARD_DEFAULTS = {"show_leaderboard": True, "show_stale": True, "sync_notificati
                   "deck_counts": True}  # 3.9.6: the dance floor
 
 
-# 3.9.12 (SC agreed): switches that left Settings. Each is put back to what it was by default, once,
+# 3.9.12: switches that left Settings. Each is put back to what it was by default, once,
 # so nobody is left in a look they can no longer change: compact rows, my row's highlight, the keys'
 # switch. (The room chip's side was one for an hour: it's where a thing is, not a look, and its row is back.) (The crew's name in shares lost its row too; a name someone set is kept.)
 RETIRED = {"compact": False, "highlight_me": True, "shortcuts": True}
@@ -88,7 +88,7 @@ def change(parts, cfg, today=None):
         # "My numbers" comes back
         return {"show_up": arg == "showup", "paused": arg == "paused"}
     if cmd == "setexam":
-        # 3.9.2 (Sam's pick C1-A): an exam that's passed is kept (exam_last) when another takes its
+        # 3.9.2: an exam that's passed is kept (exam_last) when another takes its
         # place, so the next one's scope can start after it; a new exam's scope starts from the default
         # (3.9.2's audit: set on the exam's own day, it's kept too; an upcoming exam moved keeps its scope)
         old = _day(cfg.get("exam_date"))

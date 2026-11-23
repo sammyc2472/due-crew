@@ -16,7 +16,7 @@ from .state import _pcfg, _psave, followed
 from .lessons import board_view
 
 
-# ---- 3.9.6: the plan's joys (plans.joy_step; Sam's picks, the "Joy on the plan card" mock) ----
+# ---- 3.9.6: the plan's joys (plans.joy_step; the maintainer's picks, the "Joy on the plan card" mock) ----
 # A set done pops on the path and Pip hops to it; halfway, three-quarters and
 # the last set are a line each with Share and ×; the finish line is a show
 # over the Decks screen, then a line with Share; Behind cleared says Caught

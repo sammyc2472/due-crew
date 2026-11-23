@@ -29,7 +29,7 @@ class MagicWindow(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setWindowTitle(_t("Magic search"))
         self.setModal(False)
-        # round 2 (Sam: "WAY too big and should change size according to content"): as wide
+        # round 2: as wide
         # as its how-to's two columns, as tall as what's in it (the page says, size)
         self.setMinimumSize(480, MIN_H)
         self.setProperty("dcOwnSize", True)
@@ -40,7 +40,7 @@ class MagicWindow(QDialog):
         except Exception:
             self.resize(WIDTH, START_H)
         # the heights asked for lately: a resize to one of them is ours, even when the window manager says so
-        # late (3.9.9, Sam's Mac: two asks in a row, as when it opens on a search already typed, and the first
+        # late (3.9.9, the maintainer's Mac: two asks in a row, as when it opens on a search already typed, and the first
         # one's late word looked like a drag; the window then kept its first size whatever it found)
         self._asks = [(0.0, self.height())]
         lay = QVBoxLayout(self)

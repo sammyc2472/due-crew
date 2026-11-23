@@ -608,8 +608,7 @@ START_WAYS = ((_later("Fifteen minutes, on my own"), "fifteen"), (_later("A room
 
 def start_menu():
     """3.9.10: ▶ Fifteen?'s arrow in the top bar: the two ways to start. A
-    room with my crew is what Open a room was in the board's foot (Sam: "Open
-    a room should live elsewhere": the top bar, where its timer lives)."""
+    room with my crew is what Open a room was in the board's foot."""
     from aqt.qt import QCursor, QMenu
     run = {"fifteen": start_fifteen, "room": open_room}
     menu = QMenu(mw)
@@ -713,7 +712,7 @@ def _sev_markup(pose, rest=False, stack=None, move=None):
 
 
 def pick(place):
-    """3.8.1 (Sam: "variety!"): a move for Pip at `place` (sev.MOVES), never
+    """3.8.1: a move for Pip at `place` (sev.MOVES), never
     the one it played there last time. Signed in, the last ones are kept
     with the session, so a restart doesn't repeat one either."""
     cl = client()
@@ -981,7 +980,7 @@ def nudge_sev():
 
 
 def milestone_sevs(milestones):
-    """3.8.1 (Sam's pick): a crewmate's big-streak banner has Pip hopping in
+    """3.8.1: a crewmate's big-streak banner has Pip hopping in
     its emoji's place, a move from the day done's mix (never the last one),
     once a banner; drawn again, it rests there. {uid: markup}, or None."""
     if not sev_on() or not milestones:
@@ -999,7 +998,7 @@ def milestone_sevs(milestones):
 
 
 def signed_out_sev():
-    """3.8.1 (Sam's pick): Pip waving on the signed-out card until you
+    """3.8.1: Pip waving on the signed-out card until you
     start, a hello from its mix (never the last one) the first time it's
     drawn while Anki's open; after that it rests there, and blinks."""
     if not sev_on():
@@ -1012,7 +1011,7 @@ def signed_out_sev():
 
 
 def board_sev(c, v):
-    """Pip beside the logo, for a moment (Sam): {svg, ago} when something
+    """Pip beside the logo, for a moment: {svg, ago} when something
     just happened (sev.moment), the first time the board draws it; ago is
     how long it's been out, so a redraw in its few seconds keeps its place.
     None the rest of the time, and after."""

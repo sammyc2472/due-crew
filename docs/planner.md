@@ -7,8 +7,7 @@ and a Python-native plan window", the design-spec artifact), for everyone
 signed in since 3.9.3, and rebuilt in round five, then made plain and
 quick (no AI look; one way to each thing; keys, Find, Month's drag,
 Latest first). Nothing
-suggests what goes on a date (Sam's call, after the picks: plain rules
-aren't trusted to choose cards, and it isn't AI): the author puts every
+suggests what goes on a date: the author puts every
 card on, from the deck beside the date or a search.
 
 ## Ways in
@@ -19,11 +18,11 @@ card on, from the deck beside the date or a search.
   plan; round five, where the card's Open and Plan ▾ and the head row's
   Open plans and New plan ▾ went: a follow's every setting is its
   Settings tab); with two or more plans, one at a time, their names a
-  switch beside it (Sam's pick 3); following none, the ways in end with *New plan…* and
+  switch beside it; following none, the ways in end with *New plan…* and
   *Your plans…*. The card is the plan's own: its day in a line ("24 to
   go today, and 54 behind since Monday", Catch up…), a quiz coming, one
   note, its squad; under its day's line, the week as seven small days
-  (Sam's pick A), each its bar and what's left, and a day's click opens
+, each its bar and what's left, and a day's click opens
   its assignments under the week, whole (topics, the authors' notes and
   lines, Browse, the ones left, Open now, Study, Move…, Skip it, Put it
   back, why it left cards shut), unfolding; the same click folds them.
@@ -56,7 +55,7 @@ card on, from the deck beside the date or a search.
 
 ## Round six: the plan maker as a page
 
-Sam's pick after "Plans end to end" (the HTML maker over Qt, full
+the maintainer's pick after "Plans end to end" (the HTML maker over Qt, full
 parity, older add-ons untouched; the calendar import waits): Your plans
 is a page in the board's look, in a window of Anki's. The Qt window
 went in 3.9.9 (it had stayed behind `"plan_window": "qt"`; what this file
@@ -108,7 +107,7 @@ Plans, Make a plan, Plan the way there) goes through `flow.open_plans` /
   `POST /plans/follow` with its code), today's set in my deck or its
   own deck. An author who follows their own plan isn't someone its
   changes wait for (`core.others`). No days off (a plan has no field
-  for them); no class calendar yet (Sam: not yet).
+  for them); no class calendar yet.
 - **The builder's site-only tools**, as ops (`ops.py`): a source's
   **Leave out cards also tagged** (the builder's Overlap "but not") and
   **Move to** (a set nearby, or another day); a deck row's **A set
@@ -124,7 +123,7 @@ sends has its handler, no innerHTML, each script parses);
 `tools/plan_preview.py` writes the window's pages from the fakes and
 `tools/plan_preview.js` screenshots them (light, dark, 760 px).
 
-**duecrew.com is the same page** (Sam's call). `site/public/planpage/`
+**duecrew.com is the same page**. `site/public/planpage/`
 holds `page/*.js` and `*.css` byte for byte: `tools/gen_plan_page.py`
 writes them (run it after the page changes; the suite fails while a copy
 is behind). `site/public/planface.js` is the site's face, webface's twin
@@ -161,8 +160,7 @@ Round five: one
 window, my plans picked on top (the ones I write first, then the ones I
 follow), **Undo** (a button with its menu) and **New plan…** beside it.
 Three tabs whoever I am: **Plan · Insights · Settings** (an author's
-Settings is the plan's own; a follower's, my follow). No Pip in the plan windows (Sam's
-pick 10). With no plans yet, the window is a welcome instead: what a plan
+Settings is the plan's own; a follower's, my follow). No Pip in the plan windows. With no plans yet, the window is a welcome instead: what a plan
 is, **New plan…** and **Follow a plan…**.
 
 Every change is an op (`ops.py`, below). With anyone following, or with
@@ -306,7 +304,7 @@ sent; a follower's on my dates.
   against the pace (the line down the column; over it, amber, and its
   busiest day) and **reviews a day** (a typical card's, as the week heads
   count them). Two measures on their own scales, never added: a study day
-  and a day aren't the same day (a first stacked bar summed them; Sam
+  and a day aren't the same day (a first stacked bar summed them; the maintainer
   asked for the pictures to be thought through). The busiest week is the
   one with the most cards in it, new and reviews.
 - **How much of the deck**: "1,284 of Big Step 1's 12,480 cards (10%)"
@@ -350,8 +348,7 @@ about the plan as a whole in one place:
   and **Posts…** (`send.PostsDialog`, `history_tab.UpdatesTab`: what the
   authors said, each send's line among it, and a post of one line, five a
   day a plan). How far followers are, or whose Anki has the last send,
-  isn't shown (Sam's call, round five: it added nothing; what followers
-  do together is the plan's squad on the board's Squads tab). Co-authors
+  isn't shown. Co-authors
   (Ask one of my crew…, each says yes first; Hand it to them; Take them
   off; a co-author's Leave this plan); Library (the owner's).
 - **Your follow** (3.9.6, after the last check): an author who follows it
@@ -445,9 +442,7 @@ as a question count (a tag whose last part is that number, under a bank's
 here", never guessed at. With two banks, the one with the most of them;
 *Question bank* asks which only when it's close (the runner-up has half as
 many or more, `qids.close`: one stray number in another bank isn't a
-question), and stays once I've picked one. This paste only: nothing is kept, nothing is sent (3.9.3,
-Sam: All my misses and its `qids.json` went, and so did What they have in
-common: what's not sticking is Insights' to say, from my answers).
+question), and stays once I've picked one. This paste only: nothing is kept, nothing is sent.
 
 - What they are here, in one line ("5 questions · 14 cards · 10
   suspended", leeches left suspended said too) with **Browse** after it;
@@ -697,10 +692,10 @@ no Pip anywhere in them, the calendar window in labs; QBank QIDs is tests/test_m
 and `check_planner` in `tools/real_anki.py` (12,000 question tags, Bring
 back and Anki's undo of it, the picker's timings).
 
-## Next (with Sam, or once the API is connected)
+## Next (with the maintainer, or once the API is connected)
 
 From round three: a follower's own resources (videos, book, a bank) and
 Watched it at my own pace; Waiting and Tell followers; the Browse sidebar
 and column; a merge on a stale save. Claude connected in the stand-in's
-place (the same requests, a key Sam holds, each answer checked against
+place (the same requests, a key the maintainer holds, each answer checked against
 its shape and the lists it numbers); matching objectives to cards.

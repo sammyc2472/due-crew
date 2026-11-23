@@ -1,4 +1,4 @@
-// 3.9.9 (Sam's pick B): an event marked the exam. The plan keeps the mark
+// 3.9.9: an event marked the exam. The plan keeps the mark
 // (kind: "exam", nothing else) and a follower's board offers it as theirs.
 import { describe, expect, it } from "vitest";
 import { person } from "./helpers";

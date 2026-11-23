@@ -22,7 +22,7 @@ describe("3.5.0: one-time invites", () => {
     expect(r.body).toEqual({ uid: "sam", name: "Sam", emoji: "", mutual: true, knocked: false });
     const edges = await db().prepare("SELECT owner, friend FROM friends ORDER BY owner").all();
     expect(edges.results).toEqual([{ owner: "maya", friend: "sam" }, { owner: "sam", friend: "maya" }]);
-    // once only: after that it adds, and Sam adds back (a link in a group chat)
+    // once only: after that it adds, and the maintainer adds back (a link in a group chat)
     const late = await kai.call("POST", `/invites/${code}/redeem`);
     expect(late.body).toMatchObject({ uid: "sam", mutual: false, knocked: true });
     expect(await db().prepare("SELECT COUNT(*) AS n FROM friends WHERE owner = 'sam' AND friend = 'kai'").first<number>("n")).toBe(0);

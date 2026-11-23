@@ -1,5 +1,4 @@
-"""3.9.11, hooks (Sam's yes to the mock "Tips Become Hooks": "build that
-whole implementation you've proposed"): the line that made a card click.
+"""3.9.11, hooks: the line that made a card click.
 
 A hook is my own words on a note's guid, never the card's text: one a
 card, a note's length. It shows, folded till Show (a one-by-one card's
@@ -147,7 +146,7 @@ def hidden(guid, uid):
     return f"{guid}|{uid}" in _data()["hide"]
 
 
-# 3.9.12 (SC: "i like 1-4"): what else offers the way to add a tip, besides Again today or yesterday (Hard counts
+# 3.9.12: what else offers the way to add a tip, besides Again today or yesterday (Hard counts
 # as Again does): an answer that took well over my usual, and a leech or a card close to being one. (A crewmate's
 # ask has had its own Tip button since 3.9.0: cards.chip_view's "asked".)
 SLOW_TIMES = 2         # this many times my usual answer...
@@ -198,8 +197,7 @@ def note_asked(guid, day):
 def view(hook, stuck, offer, has_turned, can_ask):
     """What the chip says of my hook on the card up now: (view or None,
     asked: whether this was the "what made it click" line). stuck: I'm
-    stuck on it (my hook shows, folded till Show: Sam, "especially for one
-    by ones we don't want to spoil the correct answer"); offer: I've missed
+    stuck on it (my hook shows, folded till Show: ); offer: I've missed
     it today or yesterday, or pressed Hard, took long over it, or it's a leech or nearly (3.9.12; the quiet way to add one, beside Edit
     in the bar, never over the card). Raw words: the chip draws them as text."""
     if hook:

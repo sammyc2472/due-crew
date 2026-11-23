@@ -139,8 +139,7 @@ def _settings_cmd(cmd, parts):
 
 
 def _pick_exam_day(cmd):
-    """3.9.5 (Sam: "removing an exam date and then clicking add exam date
-    makes anki quit"): Insights' Add exam date (exampick) and its scope's
+    """3.9.5: Insights' Add exam date (exampick) and its scope's
     Change (scopepick) pick the day in a Qt calendar, then change it as
     Settings does (setexam, setscope)."""
     from ..settings_model import change

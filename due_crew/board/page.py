@@ -224,7 +224,7 @@ def keep_me_in_view_js(scripts=True):
     """ + (DUE_JS + MOTION_JS + FIND_JS + VEIL_WATCH_JS + KEYS_JS + PARTY_JS + _sev.REST_JS if scripts else FIND_AFTER) + MOTION_DRAWN
 
 
-# 3.9.1 (Sam: "when cheering, the full background doesn't grey out"): a
+# 3.9.1: a
 # window over the board dims the board's page; the glue dims the top and
 # bottom bars to match (app.veil) while one is up. This tells it when: a
 # window comes, or the last one goes (a closing one gives up its id as it

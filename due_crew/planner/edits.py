@@ -581,7 +581,7 @@ def _event(doc, eid):
 
 
 def mark_exam(doc, eid, on=True):
-    """3.9.9 (Sam's pick B): an event marked the exam ({"kind": "exam"}); a
+    """3.9.9: an event marked the exam ({"kind": "exam"}); a
     follower's board asks them once whether it's their exam. Off, it's a
     named day again. A plan can have more than one (a block's exams)."""
     doc = copy.deepcopy(doc)
@@ -1185,7 +1185,7 @@ CLASS_SHOWN = 4  # sets Insights lists as where the class fell behind
 
 
 def class_lines(doc, progress, today):
-    """3.9.9 (the plans review's mock 5; Sam: "yes"): Insights' lines for an
+    """3.9.9 (the plans review's mock 5; ): Insights' lines for an
     author on where the plan's squad fell behind: each set that ended two
     days ago or more with people still not through it, the worst first,
     CLASS_SHOWN at most. By the counts' own rule (3 in its squad, 2 besides
