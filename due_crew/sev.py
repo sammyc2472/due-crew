@@ -1,6 +1,6 @@
 # Due Crew's logo and Pip: Copyright (c) 2026 Sammy Caplan, all rights reserved (see LICENSE).
 """Pip, the square from the logo's seven days (3.8.1, the "Pip Design" page:
-Block, Sam's picks: no belt, big round eyes, stubby arms, cheeks only when
+Block, the maintainer's picks: no belt, big round eyes, stubby arms, cheeks only when
 a cheer lands). Pure: no aqt.
 
 One drawing for every pose, and one motion sheet (CSS). The board draws Pip
@@ -18,7 +18,7 @@ By the logo it's a moment: it comes when something happens and goes
 (`moment`). Still is the frame: each moment's resting markup is the frame that says it
 standing still, and the motion lives under prefers-reduced-motion:
 no-preference, the computer's Reduce motion. Anki's own is on unless
-switched off, so it isn't asked (Sam's call). A moment that happens once (a
+switched off, so it isn't asked. A moment that happens once (a
 hop, a cheer) plays once; drawn again the same day it rests (`rest`).
 Transforms and opacity only. Colours come from the page: --sv-a (the
 accent), --sv-line, --sv-amb, --sv-mut, with a fallback each.
@@ -202,7 +202,7 @@ def _fx(kinds, stack=3):
             front += (f'<g class="sv-star">{_star(t[0], t[1] - 12, 6.5, AMB)}</g>'
                       + _spark(t[0] - 13, t[1] - 16, 2.6, "s1") + _spark(t[0] + 13, t[1] - 9, 2.2, "s2"))
         elif k == "confetti":
-            # the week's squares fly, Thursday's grey (Sam's pick)
+            # the week's squares fly, Thursday's grey
             for i in range(7):
                 a = (-160 + i * 23.3) * math.pi / 180
                 d = 28 + (i % 2) * 6
@@ -255,7 +255,7 @@ def _figure(p, blush, look=None, worn=None):
 def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack=None, look=None, worn=None):
     """Pip in `pose` (POSES), moving as `moment` (its own by default). rest:
     a moment that happens once has played already; it rests (and blinks).
-    cheeks: blushing, which only a cheer does (Sam's pick) unless asked.
+    cheeks: blushing, which only a cheer does unless asked.
     stack: squares on its head, one a fifteen (three at most). look (3.8.2):
     what it has on from the closet (closet.clean rules it); worn: a look
     already drawn, (back, front, hand), in place of `look` (site_kit).
@@ -368,8 +368,7 @@ def stack_reach(n, size):
 
 # 3.8.1: in a study room each member is their Pip (room_model.seats); 3.9.0
 # the peek's Pips, a bingo square's stamps, a plan card's squad line. Side by
-# side they never blink together, nor one after another in turn (Sam: "still
-# looks kinda creepy"): each blinks on its own clock, a cycle of its own
+# side they never blink together, nor one after another in turn: each blinks on its own clock, a cycle of its own
 # (--sv-b) and its own place in it (--sv-d, a negative delay), so they drift
 # past each other and no order shows for long.
 BLINK = 4.6  # s: a Pip's blink cycle on its own (sv-blink, below)
@@ -391,7 +390,7 @@ def blink_css(i):
     return f"--sv-b:{cycle}s;--sv-d:{delay}s"
 
 
-# 3.8.1 (Sam): by the logo Pip is a moment, not a fixture. It comes when
+# 3.8.1: by the logo Pip is a moment, not a fixture. It comes when
 # something just happened, plays it, and goes; the rest of the time the
 # logo is alone. LOGO_SECONDS: how long it stays.
 LOGO_SECONDS = 5
@@ -413,7 +412,7 @@ def moment(cheered=False, back=False, exam_eve=False, day_done=False):
     return None
 
 
-# 3.8.1 (Sam: "variety!"): each place Pip goes has its mix of moves, the
+# 3.8.1: each place Pip goes has its mix of moves, the
 # place's own first, as (pose, moment). Each time it comes it plays a
 # different one, never the same twice in a row (pick: at random, not the
 # last; nth: in turn). Where it stays a while (a fifteen, a break, a room's
@@ -506,7 +505,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv .lab { opacity: .35; }
 .sv .lab.l1 { opacity: 1; }
 /* 3.9.0: moved in the drawing's own units, a plain body's share (45.5 tall: 22% is 10), never a share of
-   the body's box, which what Pip has on makes taller (Sam: a pumpkin and an umbrella sank it) */
+   the body's box, which what Pip has on makes taller (a pumpkin and an umbrella sank it) */
 .sv.m-peek .sv-body, .sv.m-knock .sv-body, .sv.m-bounce .sv-body { transform: translateY(10px); }
 .sv.m-peek .sv-shadow, .sv.m-in .sv-shadow, .sv.m-knock .sv-shadow, .sv.m-bounce .sv-shadow,
 .sv.m-popup .sv-shadow { display: none; }
@@ -521,7 +520,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv .cl-flag { transform-origin: 0% 50%; }
 .sv .cl-wl { transform-origin: 100% 40%; }
 .sv .cl-wr { transform-origin: 0% 40%; }
-/* 3.9.1 (the efficiency run; Sam's pick, "Pip at rest" A): each loop plays
+/* 3.9.1 (the efficiency run; "Pip at rest" A): each loop plays
    about twelve seconds once Pip's drawn, then Pip rests (a loop that never
    ended kept Anki drawing 60 frames a second, on every screen); pointing at
    Pip plays it on. The break's breathing and stretch go on for the break:

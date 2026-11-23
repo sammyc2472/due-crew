@@ -307,7 +307,7 @@ def test_qids():
 
 
 def test_nothing_kept():
-    """3.9.3 (Sam): the window reads the paste in it, nothing more: no
+    """3.9.3: the window reads the paste in it, nothing more: no
     misses kept on this computer, no All my misses, no In common (what's not
     sticking is Insights')."""
     from due_crew.planner import flow
@@ -1045,7 +1045,7 @@ def test_rules_of_the_road():
     hallmarks = [(f, m) for f, t in ui_files.items()
                  for m in re.findall(r'(?:link|tool|plain|QPushButton|menu_button|addAction)\(\s*f?"(\+ [^"]*|[^"]*[◆▾↗][^"]*)"', t)]
     hallmarks = [(f, m) for f, m in hallmarks if not m.startswith("{'▾' if")]  # a week's fold, as a tree's
-    check("road: no AI look in the plan windows (Sam, after the site mock): no '+ A …' links, no ◆, no ▾ or ↗ in words, "
+    check("road: no AI look in the plan windows: no '+ A …' links, no ◆, no ▾ or ↗ in words, "
           "no tinted banners or accent stripes, no capitals for a change's kind",
           not hallmarks, hallmarks)
     check("road: Insights asks the server nothing", not re.search(r"\bremote\b|_call\(", src["insights.py"]))
@@ -1614,7 +1614,7 @@ def test_settings_edits_v393():
     check("progress (3.9.5): an author on the team makes the three; half is of the followers sharing",
           [(u["id"], done) for u, done, _d in E.behind(doc, two, "2026-11-16")] == [("b", 0), ("c", 0)]
           and E.behind(doc, dict(two, sharing=0), "2026-11-16") == [], E.behind(doc, two, "2026-11-16"))
-    check("progress (3.9.5, Sam): and two sharing besides me; one besides me, none",
+    check("progress: and two sharing besides me; one besides me, none",
           E.behind(doc, dict(two, others=1), "2026-11-16") == [] and len(E.behind(doc, dict(two, others=2), "2026-11-16")) == 2)
 
 
@@ -1665,8 +1665,8 @@ def test_settings_remote_v393():
     check("settings: Copy for next year: every date 52 weeks on, named for next year",
           copied[0] == "saved" and E.first_day(new["doc"]) == E._later(first, 364) and named[1]["name"] == "MS2 Block 2b (next year)"
           and [u["opens"] for u in new["doc"]["units"]] == [E._later(u["opens"], 364) for u in raw["doc"]["units"]], new["doc"]["units"])
-    # round five, Sam's call: followers' progress wasn't read in Anki (their squad is where followers meet).
-    # 3.9.9, Sam's yes to the plans review's mock 5: an author's Insights reads the squad's counts by set,
+    # round five, the maintainer's call: followers' progress wasn't read in Anki (their squad is where followers meet).
+    # 3.9.9, the maintainer's yes to the plans review's mock 5: an author's Insights reads the squad's counts by set,
     # never names, never one follower's, on the route the site's builder has used since 3.7
     check("followers' progress in Anki is the squad's counts by set for an author's Insights, nothing more",
           hasattr(R, "progress") and "class_lines" in dir(E))
@@ -2344,7 +2344,7 @@ def srv_port_free():
 # ---- round five: the Insights tab (insights.py) ----
 
 def test_insights_tab():
-    """Round five (Sam, before the click-test): Insights between Plan and
+    """Round five: Insights between Plan and
     Settings: what each week asks, how much of the deck the plan holds and
     of each of its parts, what each quiz or exam tests, its biggest dates,
     cards on two dates, leeches."""
@@ -2405,7 +2405,7 @@ def test_insights_tab():
           and I.workload_words(doc, [dict(w, over=True), dict(w, n=5, over=True)], {})[1]
           == "Over the pace: weeks 3 and 5" and I.workload(doc, {}, "2026-11-11") == []
           and I.busiest([dict(w, cards=0)]) is None and I.busiest([w, dict(w, n=4, cards=300)])["n"] == 3)
-    # Sam: "the same organization problem we had for the bento": the deck split as the topic map splits it
+    # : the deck split as the topic map splits it
     # (team.subjects_by), not by its #/^ parts. A big shared deck: systems under ^, the same topics under
     # each # resource, a yield rating on every card, a bank's question ids, Anki's own tags.
     tags_of, cid = {}, 0
@@ -2641,8 +2641,8 @@ def test_fill_apart_and_the_next_free_day():
 
 CEILING_CONSTS = {"sets": "UNITS_MAX", "events": "EVENTS_MAX", "reviews": "REVIEWS_MAX", "tags": "TAGS_MAX",
                   "cards": "CARDS_MAX", "ids": "IDS_MAX", "size": "DOC_MAX", "total": "PLAN_BYTES_MAX"}
-# what Sam signed off on (the mock), word for word
-SAM_WORDS = {
+# what the maintainer signed off on (the mock), word for word
+OUR_WORDS = {
     "sets": "A plan holds up to 200 sets. This makes 214.",
     "events": "A plan holds up to 200 events. This makes 203.",
     "reviews": "A plan holds up to 60 review days. This makes 61.",
@@ -2704,7 +2704,7 @@ def _ceiling_doc(sets=3, events=0, reviews=0, tags=0, cards=0, name="Set"):
 def test_save_ceilings_twins_v399():
     """3.9.9: the ceilings are kept in one place a side, build.CEILINGS and
     Ceilings.MAX in builder.js, each the Worker's (plans.ts, read from the file),
-    as the fake's; a refusal's words (remote.LIMIT_WORDS) are Sam's, word for
+    as the fake's; a refusal's words (remote.LIMIT_WORDS) are the maintainer's, word for
     word, and Ceilings.said's; a plan's counts and Review and send's lines are
     the same on both sides, run in node."""
     import shutil
@@ -2726,8 +2726,8 @@ def test_save_ceilings_twins_v399():
           "UNITS_MAX = B.CEILINGS[\"sets\"]" in open(os.path.join(REPO, "due_crew", "planner", "edits.py")).read()
           and "UNITS_MAX = CEILINGS[\"sets\"]" in open(os.path.join(REPO, "due_crew", "planner", "build.py")).read(), "")
     said = [R.limit_words(a) for a in CEILING_ANSWERS]
-    check("ceilings: each refusal in Sam's words, the numbers the answer's", said[:7] == [SAM_WORDS[k] for k in
-          ("sets", "events", "reviews", "tags", "cards", "size", "total")] and R.SLOW_WAITS == SAM_WORDS["slow_down"], said[:7])
+    check("ceilings: each refusal in our words, the numbers the answer's", said[:7] == [OUR_WORDS[k] for k in
+          ("sets", "events", "reviews", "tags", "cards", "size", "total")] and R.SLOW_WAITS == OUR_WORDS["slow_down"], said[:7])
     check("ceilings: MB never reads as its ceiling when it isn't (a byte past is 1.6, a byte under 23.9)",
           "This makes 1.6 MB." in said[7] and "They're at 23.9 MB." in said[8] and "up to 24 MB" in said[8], said[7:9])
     check("ceilings: an answer without a limit (an older Worker), with ids, or with numbers that aren't, keeps the old line",
@@ -2735,7 +2735,7 @@ def test_save_ceilings_twins_v399():
           and R.said({"error": "bad_plan", "limit": "ids", "have": 50001, "max": 50000}) == R.SAVE_WORDS["bad_plan"]
           and R.said({"error": "too_big"}) == R.SAVE_WORDS["too_big"] and R.said({"error": "plans_full"}) == R.SAVE_WORDS["plans_full"], said[9:])
     check("ceilings: the day's saves say the changes wait only where they do (a send's); at once, as before",
-          R.said({"error": "slow_down"}, waits=True) == SAM_WORDS["slow_down"]
+          R.said({"error": "slow_down"}, waits=True) == OUR_WORDS["slow_down"]
           and R.said({"error": "slow_down"}) == "That's a lot of saves today. Try again tomorrow."
           and "remote.save(cl, pid, version, doc, summary, post, waits=True)" in open(os.path.join(REPO, "due_crew", "planner", "flow.py")).read(), "")
 
@@ -2787,7 +2787,7 @@ console.log(JSON.stringify({{ MAX: Ceilings.MAX, SAVES: Ceilings.SAVES_A_DAY, WO
     check("ceilings: Review and send's lines the same (Ceilings.near, remote.near)", js["near"] == lines, (js["near"], lines))
     check("ceilings: MB the same, to the byte either side of a ceiling", js["mb"] == [R.mb(n, c) for n, c in mbs], (js["mb"], [R.mb(n, c) for n, c in mbs]))
     check("ceilings: the builder's own check before a save says a refusal's words, with its count",
-          js["past"] == [SAM_WORDS["sets"], None], js["past"])
+          js["past"] == [OUR_WORDS["sets"], None], js["past"])
 
 
 def test_the_fake_says_which_ceiling_v399():
@@ -2845,15 +2845,15 @@ def test_the_fake_says_which_ceiling_v399():
     check("the fake: plans_full with what the account's plans hold now and the ceiling",
           (status, data) == (409, {"error": "plans_full", "limit": "total", "have": held, "max": 24 * MB}), (status, data, held))
     outcome, words = R.save(cl, pid, store.plans[pid]["version"], grows, "x")
-    check("the fake: …and the add-on says it in Sam's words", (outcome, words) == ("refused", SAM_WORDS["total"]), (outcome, words))
+    check("the fake: …and the add-on says it in our words", (outcome, words) == ("refused", OUR_WORDS["total"]), (outcome, words))
     del store.plans["pfill"]
     outcome, words = R.save(cl, pid, store.plans[pid]["version"], {"deck": "Step 1", "units": [unit(i) for i in range(214)]}, "x")
-    check("the fake: a save past a ceiling, said with the numbers", (outcome, words) == ("refused", SAM_WORDS["sets"]), words)
+    check("the fake: a save past a ceiling, said with the numbers", (outcome, words) == ("refused", OUR_WORDS["sets"]), words)
     store.plan_saves[("dre", datetime.date.today().isoformat())] = store.PLAN_SAVES_A_DAY
     at_once = R.save(cl, pid, store.plans[pid]["version"], {"deck": "Step 1", "units": [unit(0)]}, "x")
     sending = R.save(cl, pid, store.plans[pid]["version"], {"deck": "Step 1", "units": [unit(0)]}, "x", post="Hi", waits=True)
     check("the fake: past the day's saves, slow_down (a 429); a send's changes wait, said; one at once, as before",
-          at_once == ("refused", "That's a lot of saves today. Try again tomorrow.") and sending == ("refused", SAM_WORDS["slow_down"]),
+          at_once == ("refused", "That's a lot of saves today. Try again tomorrow.") and sending == ("refused", OUR_WORDS["slow_down"]),
           (at_once, sending))
 
 

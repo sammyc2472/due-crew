@@ -138,7 +138,7 @@
     if (most && D.seats.length > most) { f.appendChild(el('small', 'color:' + c.mut + ';font-size:11px;', '+' + (D.seats.length - most))); }
     return f;
   }
-  // 3.8.21 (Sam: "no pips here either!"): with Pip on, a crew room's people are their Pips
+  // 3.8.21: with Pip on, a crew room's people are their Pips
   // wherever its faces were (the chip, the gutter, the break, the card); Pip off, the initials.
   // A face of size px is a seat of size / sev.SLOT[0]: the slot its Pip fills is the face's size
   // In a column (stack), their hats clear the line above and a crowd wraps
@@ -164,7 +164,7 @@
     if (fresh) { return p.round > 1 ? 'again' : 'ready'; }
     return vk('focus', p.round);
   }
-  // 3.8.1 (Sam: "variety!"): a place's moves take turns, a round each (room_model.FIFTEEN_VARY)
+  // 3.8.1: a place's moves take turns, a round each (room_model.FIFTEEN_VARY)
   function vk(k, n) {
     var v = D.vary && D.vary[k];
     return v && v.length ? v[(((n + (D.vseed || 0)) % v.length) + v.length) % v.length] : k;
@@ -392,7 +392,7 @@
     var hd = el('div', 'display:flex;justify-content:space-between;align-items:center;cursor:grab;user-select:none;'),
         x = el('span', 'cursor:pointer;color:' + c.mut + ';font-size:18px;', '×');
     hd.title = W('Drag to move');
-    // the logo's squares head every room's card; a fifteen's Pip sits by its clock (Sam: the spacing)
+    // the logo's squares head every room's card; a fifteen's Pip sits by its clock
     var sv5 = FIF && D.sev ? sev('focus', 44) : null;
     hd.appendChild(squares(c, 70)); hd.appendChild(x);
     var AT = 'dcRoomCardAt';

@@ -11,7 +11,7 @@ var dcMagic = (function () {
     var msg = 'dcmagic:' + JSON.stringify(Object.assign({ cmd: cmd }, args || {}));
     if (preview) { (window.dcMagicSent = window.dcMagicSent || []).push(msg); return; }
     if (window.pycmd && !waiting.length) { window.pycmd(msg); return; }
-    // 3.9.9 (Sam: opened on a search already typed, the window stayed at its first size): Anki's bridge
+    // 3.9.9: Anki's bridge
     // comes up a moment after the page, and what was said before it (the page's height) was dropped
     waiting.push(msg);
     if (waiting.length === 1) flush();
@@ -136,7 +136,7 @@ var dcMagic = (function () {
   }
   function setText(t) { els.q.value = t; fit(); send('type', { text: t }); setTimeout(function () { els.q.focus(); }, 0); }
 
-  // Sam: "should change size according to content": the window is as tall as what's in it
+  // : the window is as tall as what's in it
   // (the how-to's card when it's up), the glue holding it to the screen (ui/magic_window.py)
   var told = 0, asked = 0;
   function tall() {
@@ -221,7 +221,7 @@ var dcMagic = (function () {
     });
   }
 
-  // one row a typed topic (Sam: "combine things with similar names so long as the tag goes all the way to the end"):
+  // one row a typed topic:
   // its tick, its cards, its tags' count opening its tree; Also under it, the near names a tap takes in
   function drawTopics() {
     clear(els.topics);
@@ -254,8 +254,7 @@ var dcMagic = (function () {
     seen = fresh;
   }
 
-  // a topic's tags under where each is from, each to its last part (Sam: "the tag tree to go all the way to the
-  // last tag"): a resource's tick takes all its tags in or out, each tag's tick just that one
+  // a topic's tags under where each is from, each to its last part: a resource's tick takes all its tags in or out, each tag's tick just that one
   function drawTree(tp) {
     var box = h('div', { cls: 'tags' });
     tp.tree.forEach(function (g, gi) {
@@ -278,7 +277,7 @@ var dcMagic = (function () {
     return box;
   }
 
-  // the filters, one quiet line under the box, always there (Sam: "should show more of the time")
+  // the filters, one quiet line under the box, always there
   function drawFilters() {
     clear(els.filters);
     els.filters.className = 'only';
@@ -376,7 +375,7 @@ var dcMagic = (function () {
     xs.forEach(function (x) { els.found.appendChild(h('div', { cls: 'xl', text: x })); });
   }
 
-  // Sam's four: Study now, Schedule ahead, Make a new filtered deck, Unsuspend; the one that fits filled
+  // the maintainer's four: Study now, Schedule ahead, Make a new filtered deck, Unsuspend; the one that fits filled
   function drawTiles() {
     clear(els.tiles);
     var T = V.tiles;

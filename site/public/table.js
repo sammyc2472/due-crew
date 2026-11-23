@@ -45,7 +45,7 @@ const frag = (...kids) => h("div", { class: "stack" }, ...kids);
 const btn = (label, fn, cls) => h("button", { type: "button", class: "btn" + (cls ? " " + cls : ""), onclick: fn }, label);
 const warn = (e) => console.warn("pip party:", e && (e.code || e.message || e));
 // what this sitting has played (the TV's, till it closes), by name: a game draws what's new first, and a
-// list starts over only once all of it has been had (3.9.6, Sam: Imposter gave a topic again three rounds on)
+// list starts over only once all of it has been had
 const Seen = {
   had: {},
   of(kind) { return this.had[kind] || (this.had[kind] = new Set()); },

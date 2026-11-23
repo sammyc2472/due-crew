@@ -19,8 +19,7 @@ from .. import words as _words
 from ..words import later as _later, t as _t
 
 
-# 3.9.6, song of the moment (Sam's sign-off on the mock's dance floor, with his
-# notes: "make it less jumpy", one bubble at a time). The Decks screen's
+# 3.9.6, song of the moment. The Decks screen's
 # bottom-right corner: my Pip the DJ at its booth, my song on the decks; each
 # mutual crewmate who picked a song dancing beside it as their Pip (their colour
 # and look, as on their row), the song in a bubble over their head. A tap opens
@@ -32,7 +31,7 @@ DANCE_NW, DANCE_NH = 252, 196  # px: folded (a narrow window): the booth, one da
 DANCE_NARROW = 900  # px: the window's width under which it folds
 DANCE_BOARD = 1448  # px: under this the floor's corner reaches the board's (640 wide, centred): room after it
 DANCE_MAX = 6  # dancers; past it five, and "+N" in the sixth's place (never on top of one)
-DANCE_SLOT = 66  # px: a dancer's place, counted from the booth (Sam: start by the DJ, then toward the middle);
+DANCE_SLOT = 66  # px: a dancer's place, counted from the booth;
 #   the back row sits half a place along, higher
 DANCE_PIP, DANCE_PIP_BACK, DANCE_DJ = 80, 70, 96  # px: the drawings (slot()'s size): front row, back row, the DJ
 DANCE_REST = 12  # s: dancing when the board draws, then resting (Pip's loops); pointing plays it on
@@ -133,7 +132,7 @@ __BUTTONS__
 #dc-dance .woof { transform-box: fill-box; transform-origin: 50% 50%; }
 #dc-dance .spin { transform-box: view-box; transform-origin: 0 0; opacity: 0; }
 #dc-dance.dm-lively.go .spin { opacity: 1; }
-/* 3.9.12 (Sam: the × "closes it permanently which i don't think people realize"): the fold is the floor's one button */
+/* 3.9.12: the fold is the floor's one button */
 #dc-dance .df-fd { position: absolute; right: 0; top: 42px; pointer-events: auto; width: 22px; height: 22px; border-radius: 50%;
   display: grid; place-items: center; color: var(--dc-muted); background: var(--dc-bg); border: 1px solid var(--dc-line);
   opacity: 0; transition: opacity .2s; }
@@ -192,7 +191,7 @@ __BUTTONS__
 /* a card's foot: Apple's credit and its badge, set apart from Listen */
 #dc-dance .ft, #dc-song .ft { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   border-top: 1px solid var(--dc-line); padding-top: 8px; }
-/* the credit wraps; the badge keeps its place on the right (Sam) */
+/* the credit wraps; the badge keeps its place on the right */
 #dc-dance .ft .cr, #dc-song .ft .cr { flex: 1 1 auto; min-width: 0; font-size: 11px; line-height: 1.35; color: var(--dc-muted); }
 #dc-dance .ft .bdg, #dc-song .ft .bdg { flex: none; margin-left: auto; }
 /* till I've picked my music app: the apps themselves, a tap picks one and opens the song there */
@@ -361,7 +360,7 @@ def _dance_badge(who):
 
 def _dance_listen(who, view):
     """Listen in my music app, by its name ("Listen in Spotify"; another app: the title and artist, copied).
-    Till I've said which app (Sam, after the click test: "I was never offered"), the card's own row of them:
+    Till I've said which app, the card's own row of them:
     "Listen in" Apple Music · Spotify · YouTube Music · Other, a tap picking it for this computer and opening
     the song there (songlisten:<uid>:<app>). Settings changes it."""
     app = view.get("app") if view.get("app") in dict(_songs.APPS) else ""
@@ -403,7 +402,7 @@ def _dance_card(who, song, view, name=""):
 
 def _dance_off(view=None):
     """3.9.12: the foot of the song list and of my own card: how the Pips dance (Gentle · Lively · Still: it was
-    a row in Settings; SC agreed it belongs on the floor), and "Turn off the dance floor"."""
+    a row in Settings; the maintainer agreed it belongs on the floor), and "Turn off the dance floor"."""
     now = (view or {}).get("motion") or "gentle"
     ways = " &middot; ".join(
         f'<b>{t}</b>' if k == now else f'<a href="#" onclick="{_pycmd("dancemotion:" + k)}">{t}</a>'
@@ -455,7 +454,7 @@ def _dance_dancer(i, p, view, place):
     x = (i - 3) * DANCE_SLOT + DANCE_SLOT // 2 if back else i * DANCE_SLOT
     said = _t("{name}’s song: {title} by {artist}", name=name, title=s["t"], artist=s["a"])
     # the drawing, the name and the bubble spill out of the place (a hat, a long title); the button is laid over it
-    # each Pip blinks on its own clock (Sam: "they're blinking at the same time"; sev.blink, as a room's seats)
+    # each Pip blinks on its own clock
     return (f'<span class="{cls}" style="--x:{x};--i:{i};--fa-l:{light};--fa-d:{dark};{_sev.blink_css(i)}">'
             f'<span class="bub" data-open="{e(p["uid"])}"><span>{mark}{e(s["t"])}</span></span>'
             f'<span class="hp"><span class="pp">{fig}</span><span class="nm">{e(name)}</span></span>'
@@ -498,8 +497,8 @@ def dance_html(view, cfg):
     <template> in the board (and the room it needs after the board, while the two would meet), which dance_js
     puts on the page as #dc-dance. Up to DANCE_MAX dancers, newest first, the first beside the booth and the
     rest toward the middle (the checkered floor under just them), then "+N" (the whole list) in the last
-    one's place; on a narrow window, the booth, one dancer and a count. No lights (Sam: distracting).
-    Folded (Sam's "collapse": the view's folded, the page's own fold at once, dancefold), a chip in the
+    one's place; on a narrow window, the booth, one dancer and a count. No lights.
+    Folded, a chip in the
     corner: a record, how many songs, a star when one's new; turning it off is a line at the foot of the song list and of my card (dancehide, 3.9.12). Every word in it is theirs or Apple's: escaped here, and
     only cleaned songs (songs.clean) are drawn. Each click a keyed command, or a card's, the list's, the
     fold's or the search's opening (dance_js)."""

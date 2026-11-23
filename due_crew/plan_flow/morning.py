@@ -732,7 +732,7 @@ CHECK_DAYS = 3  # a checkpoint missed by more than this many mornings isn't buil
 def checks_due(doc, st, sched, today):
     """Checkpoints and (3.3) review days that are today on my dates (or up
     to CHECK_DAYS ago) and not built here yet: [(key, name, [units], n)].
-    3.9.5 (Sam's FSRS rule): a review day only before a quiz (an event
+    3.9.5: a review day only before a quiz (an event
     within P.QUIZ_DAYS after it); otherwise it'd be reviews ahead of their
     date with no date to aim at, and FSRS has those."""
     day = S.d(today)
@@ -781,7 +781,7 @@ def study_date(pid, uid):
     """3.3, C4: Study on a date (the plan's week, and a plan's date in Due):
     a Due Crew deck of the date's cards, Anki rescheduling them as it would
     (_filtered: one undo step of Anki's own), then Anki's Study screen on
-    it. 3.9.5 (Sam's FSRS rule): its new cards and the ones due today
+    it. 3.9.5: its new cards and the ones due today
     (P.new_and_due), never reviews ahead of their date; a quiz's Study keeps
     those (study_quiz). A search run here; nothing is sent. Today's lesson,
     B: the lesson's own deck (built first if it needs it). A card another
@@ -822,10 +822,7 @@ def study_date(pid, uid):
 
 
 def study_day(pid, day):
-    """3.9.6, a day's Study in You › Plans' week (Sam: "study all for the
-    day and it pops out the filtered deck of just those new / review cards
-    for the day ... not just for today for past days too ... when you've
-    clicked on one of the days"): one Due Crew deck of what the day asks now
+    """3.9.6, a day's Study in You › Plans' week: one Due Crew deck of what the day asks now
     (P.day_cards: its sets' new cards not seen yet and theirs due today;
     today, every set's due today too; never a review ahead of its date),
     "Due Crew::<plan> · Today" or "· Mon 2 Nov", emptied the morning after
@@ -999,7 +996,7 @@ def untils():
     return {int(k): str(v) for k, v in (_pcfg().get("until") or {}).items() if str(k).isdigit() and v}
 
 
-RETIRED = ("Today's misses", "Slow but right")  # 3.9.5 (Sam's FSRS rule): decks Due Crew no longer makes
+RETIRED = ("Today's misses", "Slow but right")  # 3.9.5: decks Due Crew no longer makes
 
 
 def tidy_decks(col):

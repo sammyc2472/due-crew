@@ -1,7 +1,7 @@
 # Due Crew — project context
 
-Consent-based friends leaderboard add-on for Anki. Sam is the sole
-maintainer. The repo is the source of truth; there is no build step for the
+Consent-based friends leaderboard add-on for Anki, with one maintainer.
+The repo is the source of truth; there is no build step for the
 add-on.
 
 ## Layout
@@ -21,7 +21,7 @@ add-on.
   served at `https://api.duecrew.com` (a dev one at `api-dev.duecrew.com`).
   Consent, shapes, sign-in by emailed code, and sessions all live here;
   `worker/README.md` has the API, `migrations/` the schema.
-  `docs/cloudflare-setup.md` is the one-time setup (Sam's). The 2.x
+  `docs/cloudflare-setup.md` is the one-time setup. The 2.x
   backend (Firebase) is gone since 3.8.0.
   `worker/` and `site/` are PolyForm Shield 1.0.0 (their LICENSE.md) since
   29 Sep 2026: readable and runnable, not for a competing service. The
@@ -85,7 +85,7 @@ add-on.
   nothing new on the server. Its tests: `tests/test_planner.py`,
   `tests/test_plan_ops.py`.
 - `poc/course_mac/` — Course on a Mac, a separate add-on proof of concept
-  (Sam's; not part of Due Crew and never talks to its server): a
+: a
   block's calendar read, each lecture's cards found by Apple's on-device model
   (a Swift helper built on the Mac, or the `fm` command) or plain rules, ticked
   and opened; Copy as plan text is its one bridge to the builder. Its own
@@ -136,7 +136,7 @@ version (`docs/history.md` is its index). Read a feature's entry there before ch
 - Card text never leaves the computer: flags, asks, knows, plan picks,
   plan tags and plan squad questions carry a note guid and card number, and
   each reader's Anki reads its own copy. The one exception is Pip Party
-  (3.9.5, Sam's yes): Rounds' black card, hands and plays, and Links'
+: Rounds' black card, hands and plays, and Links'
   board when a scope's topics run short (both with answers from the cards
   around the scope, `gamenight_flow.near`), pass through a table to phones
   in the room, never kept; Trivia's words stay on the TV (phones get shapes).
@@ -182,7 +182,7 @@ version (`docs/history.md` is its index). Read a feature's entry there before ch
   3.9.5: How you study; Pip Party's kept picks (`game_night.json`).
   3.9.9: `errs.json` (beside `wrap.json`) is the exception: what went wrong
   in this install by code (`errs.py`: `save:`, `py:`, `cmd:`, `req:`; never a
-  message, card text, a name or an id), sent to Sam as counts behind
+  message, card text, a name or an id), sent to the maintainer as counts behind
   Privacy's "Send Sam what went wrong" (`send_errs`, an account key, on by
   `errs.SEND_DEFAULT`), kept on the server only added up by day, version and
   code, no uid (`field_errs`, 30 days). A caught exception is printed with
@@ -228,7 +228,7 @@ version (`docs/history.md` is its index). Read a feature's entry there before ch
    gate — no zip goes out on a red run. Then tag and
    `gh release create vX.Y.Z due_crew.ankiaddon`; the tag deploys the
    Worker.
-5. Sam updates AnkiWeb by hand: listing 2035408484, update Branch 1 with the
+5. The maintainer updates AnkiWeb by hand: listing 2035408484, update Branch 1 with the
    new file, re-paste README if it changed. The listing can lag releases.
 
 `tools/gate.sh` runs the whole gate here, one line a check (`--quick`: pyflakes and the suites;
@@ -282,7 +282,7 @@ clean `main` does the migrations, the API, then the site, then
   video series or game (trademarks): "a big shared deck", "Big Step 1";
   Pip Party's games say what kind of game they are in our own words.
   Music apps are named only where Listen can't work without them (its
-  chooser, their link hosts; Sam, 3.9.6), never a logo; Apple's covers only
+  chooser, their link hosts; 3.9.6), never a logo; Apple's covers only
   beside Apple's own badge and a "… courtesy of Apple Music" line; no previews
   (Apple's terms: streamed only, and Anki can't).
 - Threading: collection access, config writes, and cache commits on the main
@@ -357,7 +357,7 @@ clean `main` does the migrations, the API, then the site, then
   What a person or a request adds on the server has a ceiling.
 - Never log emails, codes or tokens (the Worker, and the client's prints).
 - Process: propose features as mockups on the design-spec artifact first
-  (ask Sam for the link if needed), build after sign-off. Ask Sam before
+  (ask the maintainer for the link if needed), build after sign-off. Ask the maintainer before
   changing anything users see.
 - Before a release, `tools/real_anki.py` runs the plan code on Anki's own
   engine with an AnKing-sized collection (searches, suspend and undo,
@@ -365,4 +365,4 @@ clean `main` does the migrations, the API, then the site, then
 - Code changes are compile- and logic-tested here; anything under
   `due_crew/ui/` also gets `tools/dialogs.py` (offscreen PyQt6 render of
   every dialog, see tests/README.md); flows still deserve a click-test in
-  a live Anki, which only Sam can do.
+  a live Anki, which only the maintainer can do.

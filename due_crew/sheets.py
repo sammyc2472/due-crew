@@ -1,5 +1,4 @@
-"""3.9.1 (Sam: "the modal for status update is still native, make sure all
-modals are in our style"): the board's own sheets. A question before a step
+"""3.9.1: the board's own sheets. A question before a step
 (confirm), one line (ask_text) or one of a few (ask_item), drawn on the
 Decks screen in the Cheer window's look (board.sheet_js) when the board is
 up; off it (the review screen, Browse, a menu while studying) the Qt ones in

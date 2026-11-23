@@ -1,4 +1,4 @@
-"""3.10.2, a plan's deck is shared with my crew (SC, 17 Nov 2026). Pure.
+"""3.10.2, a plan's deck is shared with my crew. Pure.
 
 Who knows a card, friends' tips and Crew › Decks all read the decks I share,
 and almost nobody had shared one: a plan on a deck didn't count. Now running a

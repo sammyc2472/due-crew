@@ -167,7 +167,7 @@ CHEER_WINDOW_JS = r"""
         em.appendChild(b);
     });
     // other: a drawer of emoji (emoji_drawer.py) in the window's own look, since a page can't open the
-    // computer's picker (Sam: "doesn't pop up with the emoji drawer"); its search box takes a typed or pasted one too
+    // computer's picker; its search box takes a typed or pasted one too
     var other = el('button', 'ot', 'other');
     other.textContent = say('other');
     other.type = 'button';
@@ -178,7 +178,7 @@ CHEER_WINDOW_JS = r"""
         if (V.native) { native(); } else if (drawer.style.display === 'none') { openDrawer(); } else { shut(); }
     });
     em.appendChild(other);
-    // on a Mac or Windows, other opens the computer's own picker (Sam: "want the other option to just open
+    // on a Mac or Windows, other opens the computer's own picker (the maintainer: "want the other option to just open
     // the native drawer?"): a box takes other's place, focused, and what's picked there is picked;
     // if the computer can't (Linux, or asking failed), the drawer opens instead (dcCheerNoNative)
     var pickIn = el('input', 'ot pk');
@@ -187,7 +187,7 @@ CHEER_WINDOW_JS = r"""
     pickIn.maxLength = 16;
     pickIn.setAttribute('aria-label', say('Your emoji'));
     em.appendChild(pickIn);
-    // 3.9.2 (Sam: "the custom picker doesn't accept the custom emoji choices"): the computer's picker can't
+    // 3.9.2: the computer's picker can't
     // type into this page, so Anki lays its own box over this one (native_emoji.catch), and hands the pick here
     function native() {
         other.style.display = 'none'; pickIn.style.display = ''; pickIn.value = ''; pickIn.blur();
@@ -302,7 +302,7 @@ CHEER_WINDOW_JS = r"""
     pick(emoji);
 
     // Draw · Sign (3.9.1): a drawing, or words their Pip holds up; both optional, so both start shut and
-    // the window is just the emoji and the note (Sam: "they don't always need to send a doodle / sign");
+    // the window is just the emoji and the note;
     // a press opens one, a second press on it shuts it, and only what's open is sent
     var mode = '', sgw = el('div', 'sgw'), sg = el('div', 'sg');
     sgw.appendChild(el('span', 'hint', say('Add')));
@@ -430,7 +430,7 @@ CHEER_WINDOW_JS = r"""
         if (m === 'sign') { signIn.focus(); }
         caption();
     }
-    // 3.9.1 (Sam): with a drawing or a sign, the note goes under it, "from" me, as a caption
+    // 3.9.1: with a drawing or a sign, the note goes under it, "from" me, as a caption
     var note = null;
     function caption() {
         if (!note) { return; }
@@ -506,8 +506,7 @@ def _cheer_words():
 
 
 def cheer_overlay_js(view):
-    """3.9.1 (Sam: "make the cheers and doodles modals in the design language
-    of our add on"): the Cheer window, drawn on the Decks screen in the
+    """3.9.1: the Cheer window, drawn on the Decks screen in the
     board's own look (its tokens, so Settings › Theme and Accent hold), in
     place of the Qt window. view: {uid, name, emojis (the quick picks), pip
     (card_sev's markup, or None with Pip off), pen (my accent's light shade,
@@ -516,7 +515,7 @@ def cheer_overlay_js(view):
     every field again (cheer_allowed, clean_note, clean_doodle) and that the
     uid is a crewmate. The name and emoji go in as text, never markup.
     Also: "other"'s drawer (emoji_drawer), and every accent for the pad
-    (Sam: "make all of our colors available in the doodles feature"), in
+, in
     DOODLE_INKS's order, mine first."""
     pen = view.get("pen") if _re.fullmatch(r"#[0-9a-fA-F]{6}", str(view.get("pen") or "")) else accent_pair(None)[0]
     inks = [[accent_pair(n)[0], n.capitalize()] for n in DOODLE_INKS]
@@ -532,7 +531,7 @@ CHEER_PIP = 92  # 3.8.22: a crewmate's Pip popping in with their cheer
 
 
 def cheer_pips(cheers, entries, cfg, most=3):
-    """3.8.22, cheers with Pips (Sam's pick, round three): who sent the
+    """3.8.22, cheers with Pips: who sent the
     cheers that just landed, as their Pips, each once, in the order they
     came, three at most: [{svg, a: [light, dark], emoji, name, note, poses}].
     A cheer lands only from someone I added: a mutual friend comes in their
@@ -575,7 +574,7 @@ def and_more(names, most=3):
 
 
 def finish_js(view):
-    """3.9.6, the finish line (Sam's pick): a plan's last set's last card
+    """3.9.6, the finish line: a plan's last set's last card
     seen, its show over the whole Decks screen (show.js's DCShow.finish):
     the path fills as Pip hops along it, breaks the tape, a grad cap lands
     on it; seven seconds, its banner three more, a click or Esc ends it.
@@ -720,7 +719,7 @@ def flurry_js(emojis, banner_text, back=None, notes=None, season=None, pips=None
             var words = art.querySelector('.dd-sign');
             if (words) { words.style.cssText += ';font-size:' + Math.round(h * 0.22) + 'px;line-height:1.15;text-align:center;padding:4px 10px;overflow-wrap:anywhere;'; }
             if (caption) {
-                // 3.9.1 (Sam): the note it came with under it, and who it's from, as on the fridge
+                // 3.9.1: the note it came with under it, and who it's from, as on the fridge
                 var cap = document.createElement('div');
                 cap.style.cssText = 'padding:0 8px 6px;font-size:11px;line-height:1.3;';
                 if (dd.note) {

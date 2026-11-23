@@ -649,11 +649,10 @@ const COUNTED = `f.share = 1 AND t.uid IS NOT NULL AND ${STILL_IN}`;
 /** A date's counts show from this many in the squad, on the server too
  *  (the site's Progress has said so since 3.6): fewer, and a count is a person.
  *  Who's in it toward the three (IN_SQUAD, `t` a plan_team row): a follower
- *  whose progress counts, and (Sam, 3.9.5: "count the author too if they're
- *  on the team") an author or co-author on the team, whose own progress
+ *  whose progress counts, and an author or co-author on the team, whose own progress
  *  isn't in the counts unless they follow it too. Once each. */
 export const COUNTS_MIN = 3;
-/** 3.9.5 (Sam's pick, after the second review): and whoever reads a date's
+/** 3.9.5: and whoever reads a date's
  *  counts, an author or a follower, finds two people's progress in them
  *  besides their own, so taking mine away never leaves one person's. */
 export const BESIDES_MIN = 2;

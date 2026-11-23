@@ -286,7 +286,7 @@ export function cheer(v: unknown) {
 // and then x, y, x, y in whole points. The pen: bit 0 thick; pen >> 1 its
 // colour, a number, never a colour of its own: 0 my accent (which a mutual
 // friend already has), 1 black, 2 to 7 one of the board's six accents
-// (shapes.DOODLE_INKS, Sam: "make all of our colors available").
+// (shapes.DOODLE_INKS, ).
 export const DOODLE_PEN_MAX = 15;
 export const DOODLE_W = 300;
 export const DOODLE_H = 170;

@@ -16,7 +16,7 @@ from .insights import _ins_day
 
 def _plans_html(plans, people=None, cfg=None):
     """3.3: the plans, a card each; 3.5.0: with none, the ways in. Round
-    five (Sam's pick 3): two or more, one at a time, their names a switch
+    five: two or more, one at a time, their names a switch
     in the card's head (_plan_switch) with one Your plans…; the one shown
     is the plan Browse › Show on my plan jumped to, else this computer's
     pick (`plan_pick`), else the first."""
@@ -218,8 +218,7 @@ def _plan_card_html(card, people=None, cfg=None, head=None):
     plan's card, Your plans… its one button (its weeks and dates, Insights,
     my settings for it, where Plan ▾ and Open went), its day in a line
     (_plan_status), the week as seven small days whose click opens that
-    day's dates whole under it (Sam's pick A: "when a day is clicked, the
-    full assignments for that day open in that plans tab"), what it says
+    day's dates whole under it, what it says
     about now (_plan_now: a quiz coming, cards at risk), one note at most,
     and the crew. head: the switch between plans in place of its name
     (_plan_switch). Plans, end to end (frame 16): the whole plan as a path
@@ -320,7 +319,7 @@ def _plan_path(card):
                 n[st] += 1
                 j += 1
             if j - i > 1:
-                # Sam's pick A (a long plan): a run of sets that don't need me folds into one, with its count under it
+                # the maintainer's pick A (a long plan): a run of sets that don't need me folds into one, with its count under it
                 run, last = ls[i:j], j == len(ls)
                 first, end = str(run[0].get("name") or "?"), str(run[-1].get("name") or "?")
                 said = _t(PATH_FOLD[st], n=j - i)
@@ -357,7 +356,7 @@ def _plan_path(card):
             f'<div class="ppl"><span>{_ins_dname(p.get("first"), long=True)}</span><span>{right}</span></div>')
 
 
-PATH_FOLD_PAST = 16  # Sam's pick: a plan longer than this folds the sets that don't need me
+PATH_FOLD_PAST = 16  # the maintainer's pick: a plan longer than this folds the sets that don't need me
 PATH_FOLD = {"done": _later("{n} done"), "ahead": _later("{n} to come"), "skip": _later("{n} skipped")}
 # the path said to a screen reader: how many sets in each state
 PATH_SAID = (("done", _later("{n} done")), ("behind", _later("{n} behind")), ("catch", _later("{n} catching up")),
@@ -365,8 +364,7 @@ PATH_SAID = (("done", _later("{n} done")), ("behind", _later("{n} behind")), ("c
 
 
 def _path_keep(ls, p, joy=None):
-    """Which sets a long path shows one by one (Sam's pick A, past
-    PATH_FOLD_PAST sets), or None to show them all: every set behind (or
+    """Which sets a long path shows one by one, or None to show them all: every set behind (or
     catching up), the two before today's, today's, the next four, and any a
     joy plays on (its pop, caught up, a milestone's sparkle); runs of the
     rest fold, done, to come or skipped, each one piece with its count."""
@@ -454,7 +452,7 @@ def _joy_caught(card):
 
 
 def _exam_ask(card, pid):
-    """3.9.9 (Sam's pick B, "Exams and Limits"): the plan's exam, asked once:
+    """3.9.9: the plan's exam, asked once:
     Make it mine (my exam, the crew's countdown, the good-luck card) or Not
     now. Moved since I made it mine: Move mine, or keep my day. The exam's
     name is the author's: escaped here (plans.exam_offer)."""
@@ -503,8 +501,7 @@ def _plan_behind(card, pid):
 
 
 def _plan_line(card, pid):
-    """3.9.10, catching up (Sam's: "the options should be study or
-    ignore"), in Behind's place: each day owed a row, oldest first, with
+    """3.9.10, catching up, in Behind's place: each day owed a row, oldest first, with
     Study (its deck; a day that waited opens first) and Ignore (the
     follow's skip; the week has Undo skip); today's set, waiting, under
     them. The week stays below. Names are the author's: escaped here."""
@@ -559,7 +556,7 @@ def _plan_now(card, pid):
         cards = (f'<a class="tp" href="#" title="{_t("Browse them")}" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
                  f'{_P.tn("{n} card", "{n} cards", n)}</a>')
         out += (f'<div class="pn"><span>{_t("{cards} Anki won&rsquo;t show you before {when}", cards=cards, when=when)}</span>'
-                # 3.9.5 (Sam's FSRS rule): a deck only before a date
+                # 3.9.5: a deck only before a date
                 + (f'<span class="acts"><a href="#" title="{_t("A filtered deck of them, the most missed first")}" '
                    f'onclick="{_pycmd(f"insstudy:{did}:h")}">{_t("Study {n}", n=f"{n:,}")}</a></span>'
                    if ins.get("name") else "") + '</div>')
@@ -645,8 +642,7 @@ def _own_html(ow, pid):
 def _squad_line(pid, tabs, people=None, cfg=None):
     """3.8.0, the Plan tab's line about the plan's squad: faces, how many
     showed up, and the way there (the newest question from someone else
-    when there is one). "" when I'm not in it. 3.8.22 (Sam: "under squad we
-    haven't switched to pips"): who showed up are their Pips, as on the
+    when there is one). "" when I'm not in it. 3.8.22: who showed up are their Pips, as on the
     Squads tab (squad_pip: mine and a crewmate's in colour and look, anyone
     else plain), from the uids beside their emojis (who); Pip off, or a
     server without them, the emojis. people: {uid: crew entry}, mine too."""

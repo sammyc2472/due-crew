@@ -383,7 +383,7 @@ def test_after_the_last_check_v396():
     check("web: …once: with an end, another after it changes nothing of the end", STORE.plans[pid]["doc"].get("end") == day(9))
     w.click("new_event", name="Midterm", day=day(0))
     check("web: and one before the last set never does", STORE.plans[pid]["doc"].get("end") == day(9))
-    # 3.9.9 (Sam's pick B): This is the exam, on the event's panel; a follower's board asks once
+    # 3.9.9: This is the exam, on the event's panel; a follower's board asks once
     eid = next(e["id"] for e in STORE.plans[pid]["doc"]["events"] if e["name"] == "Path exam")
     w.click("pick", key=["event", eid])
     check("web: an event's panel says whether it's the exam (not yet)", w.last()["panel"]["exam"] is False, w.last()["panel"].get("exam"))
@@ -464,7 +464,7 @@ def test_changes_wait_when_someone_follows():
     sh = w.last("sheet")
     check("web: Review and send: each change in words, a line for followers filled in", sh and sh["kind"] == "send" and sh["rows"]
           and sh["why"] and sh["yes"] == "Send to 1", sh)
-    w.press(sh, why="Renamed it")  # the sheet's own Send, as the page sends it (Sam, 7 Nov: it sent nothing)
+    w.press(sh, why="Renamed it")  # the sheet's own Send, as the page sends it
     check("web: Send saves it, with the line as a post", next(u for u in STORE.plans[pid]["doc"]["units"] if u["id"] == "u1")["name"]
           == "Cell injury and death" and not w.draft, STORE.plans[pid]["doc"]["units"])
     w.click("rename", uid="u1", name="Cells")
@@ -721,7 +721,7 @@ def test_add_to_my_calendar():
     w.click("calendar")
     name, text = w._saved_file
     ymd = lambda n: day(n).replace("-", "")  # noqa: E731
-    check("web: Add to my calendar: an .ics file named for the plan, straight to the calendar app (Sam's pick, no save window)",
+    check("web: Add to my calendar: an .ics file named for the plan, straight to the calendar app",
           name == "Path Book high yield.ics"
           and text.startswith("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n") and text.endswith("END:VCALENDAR\r\n")
           and "Opened in your calendar app" in w._status, (name, w._status))
@@ -970,8 +970,7 @@ def test_the_review_round_v396():
 
 
 def test_the_page_draws_its_own_days_v396():
-    """3.9.6 (Sam's click test: Anki quit as a set was put on just after a
-    day was picked): no date box in the window is the computer's own (on a
+    """3.9.6: no date box in the window is the computer's own (on a
     Mac its popup is native, inside Anki's process, and Liquid Glass); every
     day is picked on the page's calendar, which opens over a sheet."""
     page = os.path.join(REPO, "due_crew", "planner", "page")
@@ -1148,7 +1147,7 @@ process.stdout.write(JSON.stringify(out));
 
 
 def test_every_control_pressed():
-    """Sam, 7 Nov: Review and send's Send closed its sheet and sent nothing
+    """the maintainer, 7 Nov: Review and send's Send closed its sheet and sent nothing
     (the sheet had a yes and no cmd); the test had called "send" itself. So
     the page is pressed here as a person presses it: every state the window
     draws (an author's plan, a set, a quiz, a review day, the deck beside it,
@@ -1365,7 +1364,7 @@ def test_every_control_pressed():
         check("press: every message the page sent reaches its handler in that state (none dropped, none New plan doesn't take)", not dropped, dropped[:5])
         check("press: no handler took the wrong arguments", not wrong, wrong[:5])
         check("press: every click did something (a key may not, where it isn't for that state)", not idle, idle[:8])
-        check("press: every sheet's yes sends the sheet's own cmd (Sam, 7 Nov: Send to N sent nothing)", not mute and len(drew) == len(sheets), mute[:5])
+        check("press: every sheet's yes sends the sheet's own cmd", not mute and len(drew) == len(sheets), mute[:5])
         check("press: a sheet's yes never draws the same sheet again (duecrew.com's Add to the plan did, every press)", not loops, loops[:5])
         import ast
         can = set()  # every sheet the two can draw, by its cmd: an ask(…, cmd), or a dict with a yes and a cmd
@@ -1420,7 +1419,7 @@ def _near_plan(me, sets=185, cards=0, tags_each=0):
 
 
 def test_review_and_send_says_a_ceiling_near_v399():
-    """3.9.9 (Sam's sign-off): Review and send says each ceiling the plan as it
+    """3.9.9: Review and send says each ceiling the plan as it
     would be sent is past 90% of, a line each in the sheet's amber, before the
     Worker would refuse it: "Picked cards and IDs: 47,900 of 50,000.", "Size:
     1.4 of 1.5 MB."; nothing at 90% or under. The page draws them, and the

@@ -7,8 +7,7 @@ with a number or a name in it takes them by name: `t("{n} days", n=3)`;
 one that changes with a count is `tn("{n} day", "{n} days", n)`.
 
 The languages are files: `lang/<code>.json`, {English: theirs}. They were
-drafted by AI (SC, 13 Nov 2026: said plainly where the language is picked,
-with a way to send a better wording in one's own language): NOTE below.
+drafted by AI: NOTE below.
 
 Which one: Anki's own language unless Settings › Board › Language says
 otherwise (`pick`); the glue calls `use` at a profile's open and when the

@@ -1,4 +1,4 @@
-"""Magic search (3.9.7, Sam's "say what you want to study"): one box that
+"""Magic search: one box that
 reads what's typed into what to find (a deck's own tags, Anki's filters, a
 bank's QIDs, IDs, a search) and what's coming up (a quiz, an exam, an
 away spell, a plan's dates as text). Rules, not AI: every word is matched
@@ -7,7 +7,7 @@ to the deck's tags on this computer and nothing leaves it.
 Pure: the text, the deck's tags (Tree), today and the plans in; a reading
 out, and the Anki search for it. magic_flow is the glue.
 
-How topic words land (the mock's rules, Sam's picks):
+How topic words land (the mock's rules, the maintainer's picks):
 - a word hits a tag's part when it's the same, the same once a plural is
   off, a prefix of 4+ letters, one letter off at 5+, or the initials of
   a run of the part's words ("hf" is Heart Failure inside
@@ -15,8 +15,7 @@ How topic words land (the mock's rules, Sam's picks):
 - a tag is found when every word hits one of its parts and one of them
   hits its last part; tags are grouped by that last part's name (one chip
   a topic, its many tags inside), and a parent covers its children;
-- only a topic the words name whole is ticked (Sam: "only what you
-  named"); the rest are offered beside it;
+- only a topic the words name whole is ticked; the rest are offered beside it;
 - "and", ",", "or", "&" split topics; "but not", "except", "without",
   "not" leave one out; words no tag has search the cards' text."""
 
@@ -68,7 +67,7 @@ ROW = ("new", "seen", "susp", "learn", "due", "tom", "m1", "m7", "leech", "flag"
 
 _SEARCHY = re.compile(r"(?:^|[\s(])-?(?:tag|deck|nid|cid|note|card|is|flag|prop|added|rated|introduced|"
                       r"edited|preset):", re.I)  # Anki's own words; "anemia or platelets" is ours (two topics)
-# 3.9.9 (Sam: "build quotes mean text"): words in quotes are the cards' own words, a tag by that name or not
+# 3.9.9: words in quotes are the cards' own words, a tag by that name or not
 _QUOTED = re.compile(r'"([^"\n]{1,80})"|\u201c([^\u201d\n]{1,80})\u201d')
 QUOTED_MAX = 4
 _LONG = re.compile(r"(?<![0-9])[0-9]{10,13}(?![0-9])")
@@ -531,7 +530,7 @@ class Tree:
 
 
 def ticks(gs):
-    """Which of a topic's chips are ticked (Sam: only what you named): the
+    """Which of a topic's chips are ticked: the
     best tier there is, 3 (the words name it) or else 2 (its name begins
     with them, or a one-word name the word begins: the big ones, a quarter
     of the biggest's cards or more) or else 1 (a letter off); none when
@@ -601,8 +600,7 @@ def _run(a, b):
 
 
 def spread(low, today):
-    """3.9.9 (Sam: "spread things out across a period of time and it didn't
-    work"): the days the words ask for, and the words without them.
+    """3.9.9: the days the words ask for, and the words without them.
     ({days: [iso], per: cards a day or None, said}, low). Over, across or
     for (the next) 5 days, 2 weeks, a week; this week, next week; from
     Monday to Friday; by or before Friday; on Friday, tomorrow, Dec 12;
@@ -966,14 +964,14 @@ def read(text, tree, today, decks=(), plans=(), loose_words=False):
     if out["quoted"]:
         t = _QUOTED.sub(" ", t)
     longs, shorts = _LONG.findall(t), _SHORT.findall(t)
-    # Sam: "AND statements and OR statements on tags": AND in capitals, as Anki writes it, is both (∩);
+    # : AND in capitals, as Anki writes it, is both (∩);
     # "and" and "or" in words are another topic, each one's cards
     t = re.sub(r"(?<![A-Za-z0-9])AND(?![A-Za-z0-9])", " \u2229 ", t)
     low = " " + re.sub(r"[\u2018\u2019\u02bc]", "'", t.lower()) + " "
     low = re.sub(r"\s+", " ", low)
     if longs or shorts:
         rest, said = _resources(_SHORT.sub(" ", _LONG.sub(" ", low)), tree)
-        # round 2 (Sam: "this is replacing QBank QID search"): a block's results pasted the way its bank
+        # round 2: a block's results pasted the way its bank
         # copies them ("Block 3 · 12 Oct / Missed: 10234, 10911 · 65%") are QIDs when two or more of the
         # numbers, and a third of them, are this deck's questions: the words around them aren't a topic
         nums = {x.lstrip("0") or "0" for x in shorts}
@@ -1284,8 +1282,7 @@ def root_name(part):
 def tag_row(path, roots=False):
     """A tag as its topic's tree shows it: {res, path}: where it's from (the
     first #part under its root, "M&M", else its root, "Heme lectures"; none
-    for a one-part tag) and every part after that to the last one (Sam: "the
-    tag tree to go all the way to the last tag"). roots: the topic's tags are
+    for a one-part tag) and every part after that to the last one. roots: the topic's tags are
     under more than one root, so the root says which ("Step 1 › Cardio ›
     Heart Failure")."""
     parts = str(path).split(SEP)
@@ -1376,7 +1373,7 @@ def spaced(name):
     return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", str(name))
 
 
-# ---- the how-to (Sam: "awesome and comprehensive and clear"): the Decks screen's first-time card and the window's ? ----
+# ---- the how-to: the Decks screen's first-time card and the window's ? ----
 
 HOWTO = {
     "lede": "Say what you want to study, or what\u2019s coming up, the way you\u2019d say it. It reads your deck\u2019s "

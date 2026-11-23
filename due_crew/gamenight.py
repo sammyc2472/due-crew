@@ -5,7 +5,7 @@ from the collection and works out the picks). The TV is a window in Anki
 (ui/game_night_tv.py) that the add-on hands this pack; it never goes to
 duecrew.com. What reaches phones through the table is the games'
 business (site/public/table.js): Trivia sends none of a card's words,
-Rounds sends each hand its answers (Sam's yes), Links' board short answers
+Rounds sends each hand its answers, Links' board short answers
 when the topics run short, and the rest send topic names, which plans
 already send.
 
@@ -63,8 +63,7 @@ NEEDS = {"trivia": ("qs", 10), "rounds": ("blacks", 1), "links": ("words", 25), 
          "draw": ("prompts", 1), "between": ("prompts", 1)}
 SKIP_TAGS = ("leech", "marked")
 # the six, as the lobby, the window and You › Pip Party name them
-# what's on the menu (Sam, after a night on his own cards: "focus on the
-# ones that we know work"): Trivia, Imposter and Links. Rounds, Draw it and
+# what's on the menu: Trivia, Imposter and Links. Rounds, Draw it and
 # Somewhere between are off it, their code kept (table.js's ORDER is this)
 GAMES = (("trivia", "Trivia"), ("imposter", "Imposter"), ("links", "Links"))
 # Rounds' written cards (3.9.5's last round): about one black card in four,

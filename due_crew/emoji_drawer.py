@@ -1,6 +1,4 @@
-"""3.9.1: the emoji drawer behind the Cheer window's "other" (Sam: "the
-other button in the emoji for cheers selector doesn't pop up with the emoji
-drawer"). The window is a page on the Decks screen, which can't open the
+"""3.9.1: the emoji drawer behind the Cheer window's "other". The window is a page on the Decks screen, which can't open the
 computer's own emoji picker, so it carries its own: these, by group, each
 with the words a search finds it by. Every one passes clean_emoji (the
 suite checks), so any pick can be sent. Pure data; the drawing is

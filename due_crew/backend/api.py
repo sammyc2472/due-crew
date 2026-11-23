@@ -90,12 +90,12 @@ def _with_kept_docs(plans, kept):
 
 
 # Answers that are how a request says "nothing yet", not something going wrong (the field log, 15 Nov: GET /settings
-# 404 is every new account's first pull, before its first save): not counted for Sam
+# 404 is every new account's first pull, before its first save): not counted for the maintainer
 EXPECTED = {("GET", "/settings", 404)}
 
 
 # said when an invite matches nobody: old, used up, or mistyped (the field log, 14 Nov: one person tried one eight
-# times; SC: "clarify this message"): what to do next, not only what went wrong
+# times; ): what to do next, not only what went wrong
 NO_INVITE = "That invite doesn't work any more. Ask them for a new one, or for their code."
 
 class Saved:
@@ -224,7 +224,7 @@ class ApiClient:
                      or isinstance(e, requests.exceptions.ConnectTimeout))
             if retry and again:
                 return self._call(method, path, body, auth, retry=False)
-            # 3.9.9: counted for Sam by its route (never its ids or codes)
+            # 3.9.9: counted for the maintainer by its route (never its ids or codes)
             _errs.count(_errs.req_code(path, "timeout" if isinstance(e, requests.exceptions.Timeout) else "offline"))
             # from None: requests' own message carries the whole URL (a
             # friend, plan or squad code), and a chained traceback prints it
@@ -635,7 +635,7 @@ class ApiClient:
             # 3.7.1: a year of my history, riding this sync (the server merges it)
             body["log"] = {"days": {**log_back[0], **(log or {})}}
         if errs and self.session.get("errs_ok") is True:
-            body["errs"] = errs  # 3.9.9: what went wrong here, by code, for Sam
+            body["errs"] = errs  # 3.9.9: what went wrong here, by code, for the maintainer
         status, data = self._sync_once(body, errs_sent)
         if status == 400 and data.get("error") == "bad_errs" and "errs" in body:
             # 3.9.9: counts this Worker won't take go no further (sent again, they'd be refused again)

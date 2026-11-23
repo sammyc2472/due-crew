@@ -559,7 +559,7 @@ def test_browse_from_the_board_380():
         F.save_cfg = lambda c: kept.append(dict(c))
         mw.col = col
         dc._on_js(False, as_board("duecrew:planleft:pB:a"), DeckBrowser())
-        check("left: a date's cards I haven't seen; one suspended on it after it opened is set aside (3.9.6, Sam), and a seen leech isn't left",
+        check("left: a date's cards I haven't seen; one suspended on it after it opened is set aside, and a seen leech isn't left",
               shown[-1][0] == [1], shown)
         dc._on_js(False, as_board("duecrew:planleft:pB:a-b"), DeckBrowser())
         check("left: a day's two dates together; a seen card isn't left", 8 not in shown[-1][0] and 1 in shown[-1][0], shown)
@@ -686,7 +686,7 @@ def test_plans_matching_v31():
     check("follow: found of the author's count when the plan has one, else cards found",
           rows[0] == ("Heart failure", "2 of 3", False) and rows[1] == ("Arrhythmia", "1 card", False)
           and rows[2] == ("Cloze two", "1 of 1", False), str(rows))
-    # 3.9.3 (Sam's pick): a card under two of a date's tags counts once, and what's missing is counted alike
+    # 3.9.3: a card under two of a date's tags counts once, and what's missing is counted alike
     two = dict(u["hf"], tags=list(u["hf"]["tags"]) * 2, n=6)  # the author's builder added the same 2 (3 there) twice
     rows2 = FD.match_rows(idx, {"deck": "Step 1", "units": [two]})
     same = dict(u["hf"], tags=list(u["hf"]["tags"]) * 2, n=4)
@@ -853,7 +853,7 @@ def test_plans_glue_v31():
         dre = new_client(store, "dre", "Dre")
         dre.team_join(pid)
         board_plan = maya.fetch_board(labels, with_decks=True)["plans"][0]
-        check("crew (3.9.5, Sam): the author on the team makes three, but my own taken away leaves one person's: none",
+        check("crew: the author on the team makes three, but my own taken away leaves one person's: none",
               store._in_squad(pid) == 3 and board_plan["crewDone"] is None, str(board_plan))
         dre.team_leave(pid)
         lee = new_client(store, "lee", "Lee")
@@ -1846,7 +1846,7 @@ def test_morning_waits_for_decks_v380():
 
 
 def test_asks_and_tips_v390():
-    """3.9.0 (Sam's picks, "Asks and tips"): 1, an ask still goes to everyone
+    """3.9.0: 1, an ask still goes to everyone
     in the crew with the card, and the dialog says so first (W1); 2, a tip's,
     an ask's or a plan note's words are folded until Show, on the card and in
     the bar, so nothing gives away what a one-by-one card still hides (who
@@ -1879,7 +1879,7 @@ def test_asks_and_tips_v390():
         K._card, K.client, K.flag = saved[1:4]
         _state.clear()
         _state.update(saved[4])
-    check("ask: it says it goes to everyone with the card, then who has it down (Sam's pick, W1)",
+    check("ask: it says it goes to everyone with the card, then who has it down",
           [g[1] for g in got] == ["Goes to everyone in your crew who has this card. Dre has it down. One line, optional.",
                                   "Goes to everyone in your crew who has this card. Dre and Mo have it down. One line, optional.",
                                   "Goes to everyone in your crew who has this card. One line, optional."]
@@ -1905,11 +1905,11 @@ def test_asks_and_tips_v390():
           and "if (D.title && !folded) { words.title = D.title; } else { words.removeAttribute('title'); }" in fj
           and "if (peek && !still && !D.open && bub.animate)" in fj and "pad.style.height = (box.offsetHeight + 12) + 'px'" in fj
           and "send(D.fold && !folded ? 'knowsbar:open' : 'knowsbar')" in fj)
-    check("tip: a note, not a speech bubble (SC, 3.9.12; Sam, 3.9.0: too alike): a wash of its writer's colour (mine with Pip off), "
+    check("tip: a note, not a speech bubble: a wash of its writer's colour (mine with Pip off), "
           "a folded corner, Tip over its words; a crewmate's or my own; who knows it, the plain bubble",
           "var note = !!peek && (D.kind === 'tip' || D.kind === 'hook');" in fj and "color-mix(in srgb, ' + tint + ' 13%, ' + c.bg + ')" in fj
           and "var tint = note ? (withPip ? peek.pips[0].a[night ? 1 : 0] : acc) : '';" in fj and "linear-gradient(225deg, transparent 50%, ' + tint + ' 50%)" in fj
-          # the folded corner is cut off the note, and the shadow follows the cut (SC: nothing behind the fold)
+          # the folded corner is cut off the note, and the shadow follows the cut
           and "clip-path:polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);" in fj and "filter:drop-shadow(" in fj and "box-shadow:none;" in fj
           and "text-transform:uppercase;color:' + tint + ';', 'Tip')" in fj and "+ card + edge);" in fj and tip["kind"] == "tip" and knows["kind"] == "knows")
     check("tip: its writer's Pip waves while the note is folded and holds it out once it's opened (Show, or drawn again opened)",
@@ -2516,7 +2516,7 @@ def test_older_server_v32():
 
 
 def test_knows_due_v390():
-    """3.9.0 (Sam's pick, "Open calls" A): the day's first sync asks who
+    """3.9.0: the day's first sync asks who
     knows the cards due today too, and that answer is kept for the day, so
     a card I miss for the first time shows the chip the next time it comes
     up, without a sync; only once I'm stuck on it. An older Worker gets the
@@ -2589,7 +2589,7 @@ def test_knows_due_v390():
               "a card nobody I can name knows, nothing; yesterday's answer, only the way to add a tip",
               shown[0] is None and shown[1] and shown[1]["kind"] == "knows" and shown[1]["text"].endswith("Dre knows this")
               and shown[2] is None and len(store.log) == n
-              # 3.9.12 (SC: "lets loosen"): with nothing else to say, a card missed today offers a tip, lapses or none
+              # 3.9.12: with nothing else to say, a card missed today offers a tip, lapses or none
               and shown[3]["kind"] == "hookadd" and card.lapses == 0, shown)
         lapsed = types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000001"), ord=0, id=99, lapses=2)
         check("stuck now: lapsed twice, or missed today", K.stuck_now(col, lapsed, col.sched.day_cutoff)
@@ -2617,7 +2617,7 @@ def test_knows_due_v390():
 
 
 def test_knows_peek_v390():
-    """3.9.0 (Sam's pick, "Open calls" C): with Pip on, who knows the card
+    """3.9.0: with Pip on, who knows the card
     peeks up from the bottom of the review screen, waving, a lightbulb over
     their head: "I know this one", Ask Dre, Not now. The bar's chip and every
     other kind of card stay as they were; nothing moves with Reduce motion."""
@@ -2634,17 +2634,17 @@ def test_knows_peek_v390():
     names4 = dict(names, jo=("Jo", ""), al=("Al", ""))
     three = K.chip_view({"knows": ["dre", "mo", "jo"], "tips": []}, [], names4, pips=dict(pips, jo=pips["mo"], al=pips["mo"]))
     four = K.chip_view({"knows": ["dre", "mo", "jo", "al"], "tips": []}, [], names4, pips=dict(pips, jo=pips["mo"], al=pips["mo"]))
-    check("peek (Sam's 2D): up to three Pips, the words name them; more than three, the rest counted",
+    check("peek: up to three Pips, the words name them; more than three, the rest counted",
           three["peek"]["uids"] == ["dre", "mo", "jo"] and three["peek"]["head"] == "Dre, Mo and Jo know this"
           and four["peek"]["uids"] == ["dre", "mo", "jo"] and four["peek"]["head"] == "Dre, Mo, Jo and 1 more know this"
           and four["peek"]["act"] == "Ask", (three["peek"], four["peek"]))
-    check("peek: one who knows it speaks for themselves; more, the words say who; asked, it says so; no Pip, the same bubble saying who (Sam: always this version)",
+    check("peek: one who knows it speaks for themselves; more, the words say who; asked, it says so; no Pip, the same bubble saying who",
           one["peek"] == {"uids": ["dre"], "head": "I know this one", "act": "Ask Dre"}
           and two["peek"] == {"uids": ["dre", "mo"], "head": "Dre and Mo know this", "act": "Ask"}
           and mine["peek"]["act"] == "Asked" and plain["peek"] == {"uids": [], "head": "Dre knows this", "act": "Ask"}
           and one["text"] == "Dre knows this" and one["act"] == "Ask", (one.get("peek"), two.get("peek")))
     tip = K.chip_view({"knows": ["dre"], "tips": [{"from": "dre", "text": "think loops"}]}, [], names, pips=pips)
-    check("peek: a tip peeks in with its tipper's Pip (Sam's note on \"Asks and tips\"); an ask keeps its card",
+    check("peek: a tip peeks in with its tipper's Pip; an ask keeps its card",
           tip["peek"] == {"uids": ["dre"], "head": "Dre: think loops", "act": "This helped"} and tip["fold"] == "Dre left a tip"
           and "peek" not in K.chip_view(None, [], names, asks=[("dre", 1, "why?")], pips=pips), tip.get("peek"))
     shown, saved = [], (K._bottom, K._review_web, K._show, K.client, dict(_state))
@@ -2670,7 +2670,7 @@ def test_knows_peek_v390():
         K._bottom, K._review_web, K._show, K.client, K.pips_by_uid = saved2[:5]
         _state.clear()
         _state.update(saved2[5])
-    check("peek, Pip off: the same bubble in the same place, without the Pip (Sam: \"always this version, just without the pip\")",
+    check("peek, Pip off: the same bubble in the same place, without the Pip ",
           shown2[0]["peek"] == {"head": "Dre knows this", "act": "Ask", "pips": []}
           and "pip" not in shown2[0], shown2[0].get("peek"))
     shown3, saved3 = [], (K._bottom, K._review_web, K._show, K.client, dict(_state))
@@ -2687,7 +2687,7 @@ def test_knows_peek_v390():
     sam.session["cards"] = {"guid000001": {"knows": ["dre"], "tips": []}}
     ds = [x.get("d") for x in shown3[0]["peek"]["pips"]]
     js3 = K.float_js(shown3[0])
-    check("peek, three side by side: each its own place in the blink, as a room's seats (Sam: they blinked as one)",
+    check("peek, three side by side: each its own place in the blink, as a room's seats",
           ds == [sev.blink(i)[1] for i in range(3)] and [x.get("b") for x in shown3[0]["peek"]["pips"]] == [sev.blink(i)[0] for i in range(3)]
           and "'--sv-b:' + (+peek.pips[i].b || 4.6) + 's;--sv-d:' + (+peek.pips[i].d || 0) + 's;'" in js3
           and "sv-blink var(--sv-b, 4.6s) var(--sv-d, 0s)" in sev.CSS, ds)
@@ -2702,7 +2702,7 @@ def test_knows_peek_v390():
           and "translateY(105%)" in js and "var words = el('div'" in js
           and "peek ? peek.head : D.text" in js and "prefers-reduced-motion: reduce" in js and "if (peek && !still" in js
           and "window.dcKnowsOff(!D)" in js and "off(true)" in js and "knowsbar" in js)
-    check("peek: always shown, as agreed (Sam: the pill \"is not the new version we agreed on\"): no corner check, never "
+    check("peek: always shown, as agreed: no corner check, never "
           "the bar's chip; room under the card, gone with it",
           "if (peek) {" in js and js.index("if (peek) {\n    // 3.9.0") < js.index("window.addEventListener('scroll'")
           and "dc-knows-pad" in js and "if (pad) { pad.remove(); }" in js and "oldPad.remove()" in js)
@@ -2794,7 +2794,7 @@ def test_session_card_v32():
     due = F.checks_due(plan["doc"], st, plan["sched"], _day(0))
     check("checkpoint: due on its morning", [k for k, _n, _us, _c in due] == ["rn"])
     rdoc = dict(plan["doc"], reviews=[{"day": _day(0), "from": "rn", "to": "rn"}])
-    check("review day: 3.9.5 (Sam's FSRS rule), none built without a quiz after it: reviews ahead of their date",
+    check("review day: 3.9.5, none built without a quiz after it: reviews ahead of their date",
           [k for k, _n, _us, _c in F.checks_due(rdoc, st, plan["sched"], _day(0))] == ["rn"])
     rdoc = dict(rdoc, events=[{"id": "q1", "day": _day(3), "name": "Quiz"}])
     rdue = F.checks_due(rdoc, st, plan["sched"], _day(0))

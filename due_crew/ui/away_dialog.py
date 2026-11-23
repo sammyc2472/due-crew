@@ -2,7 +2,7 @@
 more days on which I studied nothing in Anki. Asked before anything opens:
 Open them · Push my dates back N days (my follow's shift, one request) ·
 Not today (nothing opens; tomorrow morning asks again). Plan names are the
-author's: plain text only. Pip waves from its corner (Sam's pick), still,
+author's: plain text only. Pip waves from its corner, still,
 unless Settings › Pip is off."""
 
 import datetime

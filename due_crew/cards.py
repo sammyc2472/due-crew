@@ -15,7 +15,7 @@ Again on today. The chip shows only on the answer side of a stuck card, and
 only when someone knows it or left a tip; on every other card, nothing.
 Nothing is drawn inside the card.
 
-3.9.0 (Sam's pick, "Open calls" A): the day's first sync also sends the
+3.9.0: the day's first sync also sends the
 cards due today in the decks I share (DUE_MAX of them, the most overdue
 first), and the same reply says who knows each. That answer is kept for the
 day, beside the stuck cards', so a card I miss for the first time shows the
@@ -227,11 +227,11 @@ def names_by_uid():
 
 CHIP_PIP = 24  # 3.8.22: a crewmate's Pip on the review screen's chip, its slot the chip's line
 PEEK_PIP = 76  # 3.9.0: who knows it, peeking up from the bottom of the card
-PEEK_MAX = 3  # 3.9.0 (Sam's "2D"): up to three who know it, side by side
+PEEK_MAX = 3  # 3.9.0: up to three who know it, side by side
 
 
 def pips_by_uid(c=None, only=None):
-    """3.8.22 (Sam: "all the places where there are emojis"): each
+    """3.8.22: each
     crewmate's Pip for the review screen's chip, where their emoji was:
     {uid: {svg, a: [light, dark]}}, in their colour and look (a mutual
     friend's, which only the crew brings); {} with Pip off. Our own markup:
@@ -323,13 +323,11 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None, hidden=No
     3.5.0, K1: a tip shows its own words in the bar, with This helped.
     `short` is what the bar says when the words don't fit beside Edit.
     pips (3.8.22, pips_by_uid): who asked, or knows it, leads with their Pip
-    in place of their emoji. 3.9.0 (Sam's pick, "Open calls" C): who knows
-    it also has `peek`, what the corner says (Sam's "2D": no lightbulb, up to
-    three Pips side by side): one knower's Pip speaks for them ("I know this
+    in place of their emoji. 3.9.0: who knows
+    it also has `peek`, what the corner says: one knower's Pip speaks for them ("I know this
     one", Ask Dre), more say who ("Dre, Mo and Jo know this", "... and 2
     more"), Ask; `uids`, whose Pips (on_answer draws them). With Pip off the
-    same bubble without them (Sam: "always this version, just without the
-    pip")."""
+    same bubble without them."""
     pips = pips or {}
 
     def who_of(uid):
@@ -364,7 +362,7 @@ def chip_view(info, local_tips, names, asks=(), mine=False, pips=None, hidden=No
         if first["from"]:
             view["act"] = _t("\u2713 Helped") if first["helped"] else _t("This helped")
             view["actcmd"] = f"knowshelped:{first['from']}"
-        # 3.9.0 (Sam's note on "Asks and tips"): the tipper's Pip peeks in with it, as who knows it
+        # 3.9.0: the tipper's Pip peeks in with it, as who knows it
         # does (the same bubble without it, Pip off); its words folded till Show
         own = first["from"] in pips
         view["fold"] = ("" if own else "\U0001F4A1 ") + _t("{who} left a tip", who=who)
@@ -431,11 +429,11 @@ _CHIP_JS = """(function () {
   var s = document.createElement('span'); s.id = 'dc-knows';
   s.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:' + (D.pip ? '3px 10px 3px 6px' : '2px 10px') +
     ';border-radius:99px;border:1px solid ' + D.accent + ';font:11.5px -apple-system,Segoe UI,sans-serif;white-space:nowrap;vertical-align:middle;cursor:pointer;';
-  pip(s, D, night, 'margin:8px 2px 0 1px;');  // 3.8.22: who it is, as their Pip (Sam, 16 Oct: room for all of it, head to feet)
+  pip(s, D, night, 'margin:8px 2px 0 1px;');  // 3.8.22: who it is, as their Pip
   var t = document.createElement('span'); t.id = 'dc-knows-t'; s.appendChild(t);
   if (D.kind === 'tip') { t.setAttribute('data-tip', '1'); }
   t.style.cssText = 'display:inline-block;max-width:24vw;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;';
-  // 3.9.0 (Sam's pick, "Asks and tips" 2): folded as on the card, its words on a click
+  // 3.9.0: folded as on the card, its words on a click
   var folded = !!(D.fold && !D.open);
   function said() {
     while (t.nextSibling) { s.removeChild(t.nextSibling); }
@@ -515,12 +513,12 @@ _FLOAT_JS = """(function () {
   var acc = night ? D.accent[1] : D.accent[0];
   var c = night ? {bg: '#2c2c2c', ink: '#e8e8e8', mut: '#9c9c9c', line: '#3d403b'} : {bg: '#ffffff', ink: '#222222', mut: '#777777', line: '#e2e2da'};
   function el(tag, css, text) { var e = document.createElement(tag); e.style.cssText = css; if (text != null) { e.textContent = text; } return e; }
-  // 3.9.0 (Sam's picks, "Open calls" C, then "2D"): who knows it, their Pips peeking up from the bottom,
+  // 3.9.0: who knows it, their Pips peeking up from the bottom,
   // side by side (three at most), no light bulb drawn; with Pip off the same bubble in the same place, without them
   var peek = D.peek || null, withPip = !!(peek && peek.pips && peek.pips.length);
   var font = 'font:12.5px/1.35 -apple-system,Segoe UI,sans-serif;text-align:left;';
   var card = 'border:1px solid ' + c.line + ';background:' + c.bg + ';color:' + c.ink + ';box-shadow:0 6px 18px rgba(0,0,0,.22);';
-  // 3.9.12 (SC: "add a tip come up with your pip on the bottom left like how the friends who know it pop up
+  // 3.9.12 (the maintainer: "add a tip come up with your pip on the bottom left like how the friends who know it pop up
   // on the right"): what's mine (my tip, the way to add one) peeks in from the left with my own Pip
   var left = !!(peek && peek.side === 'left');
   var box = peek ? el('div', 'position:fixed;' + (left ? 'left' : 'right') + ':16px;bottom:' + (withPip ? '0' : '14px') + ';display:flex;' +
@@ -528,7 +526,7 @@ _FLOAT_JS = """(function () {
     : el('div', 'position:fixed;right:12px;bottom:12px;max-width:260px;box-sizing:border-box;display:grid;gap:6px;padding:9px 12px;' +
       'border-radius:12px;' + card + font + 'z-index:60;');
   box.id = 'dc-knows-card';
-  // 3.9.0 (Sam's pick, "Asks and tips" 2): a tip's, an ask's or a plan note's words wait for Show, so
+  // 3.9.0: a tip's, an ask's or a plan note's words wait for Show, so
   // nothing gives away what a one-by-one card still hides; who knows it never folds (it names people)
   var folded = !!(D.fold && !D.open);
   var words = el('div', 'font-weight:600;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;', '');
@@ -572,18 +570,18 @@ _FLOAT_JS = """(function () {
     }
     if (pad) { pad.style.height = (box.offsetHeight + 12) + 'px'; } else { check(); }
   }
-  // 3.9.12 (SC): a tip someone left is a note, a crewmate's or my own ("same for when you leave a tip for yourself")
+  // 3.9.12: a tip someone left is a note, a crewmate's or my own ("same for when you leave a tip for yourself")
   var note = !!peek && (D.kind === 'tip' || D.kind === 'hook');
   said();
   var fig = null, bub = null;
   if (peek) {
-    // 3.9.0 (Sam: a tip "looks too similar" to who knows it): a tip's bubble wears its tipper's colour
+    // 3.9.0: a tip's bubble wears its tipper's colour
     // round its edge, their Pip's (mine with Pip off); who knows it keeps the plain line
-    // 3.9.12 (SC: "more than just the message ... let's go with it's a sticky note"): a crewmate's tip is a note, not a
+    // 3.9.12: a crewmate's tip is a note, not a
     // speech bubble: a wash of their colour, a folded corner, a small Tip over its words; their Pip waves while it's
     // folded and holds the note out once it's opened (open(), above)
     var tint = note ? (withPip ? peek.pips[0].a[night ? 1 : 0] : acc) : '';
-    // the corner is folded over, so it's cut off the note (SC: "we shouldn't see the white rounded rectangle behind it
+    // the corner is folded over, so it's cut off the note (the maintainer: "we shouldn't see the white rounded rectangle behind it
     // because it is folded"): the note is clipped to its shape and its shadow is its holder's, which follows the cut
     var edge = note ? 'position:relative;border:1px solid ' + tint + ';background:color-mix(in srgb, ' + tint + ' 13%, ' + c.bg + ');box-shadow:none;' +
       'clip-path:polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);' : '';
@@ -655,7 +653,7 @@ _FLOAT_JS = """(function () {
   function check() { if (!gone && !free()) { off(); send(D.fold && !folded ? 'knowsbar:open' : 'knowsbar'); } }
   window.dcKnowsOff = off;
   if (peek) {
-    // 3.9.0 (Sam, 16 Oct: the pill "is not the new version we agreed on"): the peek always shows, as in
+    // 3.9.0: the peek always shows, as in
     // the mock, never the bar's chip; room under the card so its last lines scroll clear of it
     pad = el('div', 'height:' + (box.offsetHeight + 12) + 'px;');
     pad.id = 'dc-knows-pad';
@@ -813,12 +811,12 @@ def on_answer(card, opened=False):
             from .sev import blink
             uids = peek.pop("uids", None) or []
             drawn = [{"svg": peek_pip(u), "a": pips[u]["a"]} for u in uids if u in pips]
-            if view.get("kind") == "tip":  # 3.9.12 (SC): waving while the note is folded, the note in hand once it's opened
+            if view.get("kind") == "tip":  # 3.9.12: waving while the note is folded, the note in hand once it's opened
                 for p, u in zip(drawn, [u for u in uids if u in pips]):
                     p["held"] = peek_pip(u, "again")
             if uids == [ME]:  # 3.9.12: what's mine peeks in with my own Pip, in my colour and look
                 drawn = [p for p in [my_peek_pip()] if p]
-            # each blinking on its own clock, as a room's seats (Sam: side by side they blinked as one)
+            # each blinking on its own clock, as a room's seats
             peek["pips"] = [dict(p, b=blink(i)[0], d=blink(i)[1]) for i, p in enumerate(p for p in drawn if p["svg"])]
             view["peek"] = peek
     except Exception:
@@ -889,7 +887,7 @@ def _with_hook(view, card, guid):
         stuck = stuck and not has_turned
         has_turned = has_turned and not hook
         day = log_today(col)
-        # 3.9.12 (SC: "lets loosen", then "i like 1-4"): any card I pressed Again or Hard on today or yesterday,
+        # 3.9.12: any card I pressed Again or Hard on today or yesterday,
         # learning ones too (it was two lapses as a review card first, which a card still being learned never
         # has); one that took well over my usual; a leech, or nearly one
         offer = not hook and (bool(col.db.scalar(
@@ -901,7 +899,7 @@ def _with_hook(view, card, guid):
             hooks.note_asked(guid, day)
         if got is None or (view is not None and got.get("kind") != "hook"):
             return view  # who knows it (or a plan's note) gives way to my hook alone, never to an offer
-        # 3.9.12 (SC): mine peeks in from the bottom left with my own Pip, as who knows it does from the right
+        # 3.9.12: mine peeks in from the bottom left with my own Pip, as who knows it does from the right
         got = dict(got)
         got.pop("bar", None)
         got["peek"] = {"uids": [ME], "head": got["text"], "act": got.get("act") or _t("Add a tip"), "side": "left"}
@@ -1034,7 +1032,7 @@ def ask(card=None):
         lead = ""
     from .together import _today
     asked = next((f for f in clean_tricky(client().session.get("tricky"), _today()) if f["guid"] == guid), None)
-    # 3.9.0 (Sam's pick, "Asks and tips" 1): it says who it goes to first, as it goes to
+    # 3.9.0: it says who it goes to first, as it goes to
     # everyone in the crew with the card, not only who has it down
     line, ok = ask_text(mw, _t("Ask your crew about this card"),
                         _t("Goes to everyone in your crew who has this card.") + lead + " "

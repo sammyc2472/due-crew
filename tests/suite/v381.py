@@ -232,7 +232,7 @@ def test_study_for_a_quiz_v381():
 
 
 def test_plan_tags_round_two_v381():
-    """3.8.1, plan tags round two (Sam's picks on the mock): a date can keep a
+    """3.8.1, plan tags round two: a date can keep a
     video's tag to the cards one of the plan's own tags holds (a cut, named
     for both, in the video's row); a plan tag can name single cards (Anki's
     tag goes on their notes; Due Crew reads just those cards); an SLG that
@@ -792,7 +792,7 @@ def test_plan_words_v381():
 
 
 def test_builder_tags_keep_up_v381():
-    """3.8.1, Sam's pick "Keep the builder's tag list current": a deck's tag
+    """3.8.1, the maintainer's pick "Keep the builder's tag list current": a deck's tag
     tree reached duecrew.com's builder only through Make a plan from a deck.
     Now, at the day's first refresh, each deck a plan I write runs on is
     read (once an Anki day) and its tree goes up only when it differs from
@@ -1662,7 +1662,7 @@ def test_study_this_date_v381():
     idx = P.DeckIndex(col, 10)
     check("study: a date's open cards, new and review, due or not; never a suspended or buried one",
           P.study_cards(idx, {1, 2, 3, 8, 99}) == [1, 8])
-    check("study: 3.9.5 (Sam's FSRS rule), its new cards and the ones due today, seen ones first",
+    check("study: 3.9.5, its new cards and the ones due today, seen ones first",
           P.new_and_due(idx, {1, 2, 3, 8, 99}) == [8, 1])
     col.db.conn.execute("UPDATE cards SET due = ? WHERE id = 8", (col.sched.today + 5,))
     check("…never a review ahead of its date", P.new_and_due(P.DeckIndex(col, 10), {1, 2, 3, 8, 99}) == [1])
@@ -1694,7 +1694,7 @@ def test_study_this_date_v381():
         check("study: 3.9.5, a Due Crew deck of the date's new cards and the ones due today, as they come in the deck, "
               "and Anki's Study screen on it", built == [("Due Crew::Heart failure", [1, 2], 6)] and sel == [99] and moved == ["overview"], (built, sel, moved))
         check("study: a date with nothing new or due builds nothing, and says so", len(built) == 1 and "Nothing new or due in it." in g.toasts[-1])
-        # 3.9.5 (Sam's): a topic of a date on Today, as a super deck of its own
+        # 3.9.5: a topic of a date on Today, as a super deck of its own
         F._filtered, browsed = fake_filtered, []
         saved_b = F._browse
         F._browse = lambda cids, q=None, empty="": browsed.append(sorted(cids))
@@ -1897,7 +1897,7 @@ def test_plan_tags_builder_v381():
 
 
 def test_builder_review_bugs_v381():
-    """The plan builder's review (Sam's picks): Fill to a date stops there and
+    """The plan builder's review: Fill to a date stops there and
     says what didn't fit; /plans/new draws before it can fail and says why;
     a replaced doc brings its pace; Edit the whole plan keeps a renamed or
     moved date's id and reads a name as a name; a plan tag's x names its
@@ -1983,7 +1983,7 @@ def test_builder_review_bugs_v381():
 
 
 def test_builder_review_wording_v381():
-    """The builder's words (Sam's picks): followers are asked at their next
+    """The builder's words: followers are asked at their next
     refresh; Fill, not Lay it out; the Text tab's line is true; my squads
     vs the plan's squad; a neutral example beside the med one; the review
     day says what it makes; the empty tree names the deck; most of the
@@ -2022,7 +2022,7 @@ def test_builder_review_wording_v381():
 
 
 def test_builder_undo_follow_asof_v381():
-    """Sam's picks: Undo in the builder, a step at a time, never across a
+    """the maintainer's picks: Undo in the builder, a step at a time, never across a
     save or a reload; Follow on a plan's link page, one request; "Tags as
     of" the day the author's Anki sent them."""
     site = os.path.join(REPO, "site", "public")
@@ -2051,7 +2051,7 @@ def test_builder_undo_follow_asof_v381():
 
 
 def test_plans_round_three_site_v381():
-    """Plans, round three, on duecrew.com (Sam signed off): co-authors say yes
+    """Plans, round three, on duecrew.com: co-authors say yes
     first and a plan can be handed over (Settings, and Home's invite lines);
     where to get the deck; notes for followers on a tag or a card (Note, the
     ⓘ, Notes on cards, note | lines in the text, both prompts); a date's
@@ -2138,7 +2138,7 @@ def test_plans_round_three_site_v381():
 
 
 def test_plans_round_three_builder_v381():
-    """Plans, round three, in the builder (Sam signed off): a date after its
+    """Plans, round three, in the builder: a date after its
     event is reinforcement ("after Heme quiz"); a tag's extras split, with
     them or without; Edit the whole plan keeps a renamed tag (its dates
     follow) and the save says what changed as revisions; first steps on an
@@ -2176,8 +2176,8 @@ def test_plans_round_three_builder_v381():
           and "out.push(`added ${nNotes2(rAdded)}`)" in builder)
     check("r3 builder: a date that only followed a renamed tag hasn't changed; dates compare in any key order",
           "!same(follow(b.get(u.id)), u)" in builder and "Object.keys(v).sort()" in builder)
-    # Sam's pick: first steps on an empty plan
-    fs = builder[builder.index("// 3.8.1 (Sam's pick): first steps"):builder.index("const main = h(\"div\", { class: \"main2\" },")]
+    # the maintainer's pick: first steps on an empty plan
+    fs = builder[builder.index("// 3.8.1: first steps"):builder.index("const main = h(\"div\", { class: \"main2\" },")]
     check("r3 builder: first steps while the plan as saved has no dates, gone once it's saved with them",
           "author && view !== \"print\" && !(plan.doc.units || []).length" in fs and "firstSteps, paceBox," in builder)
     check("r3 builder: Tick what to cover · Fill to <end> · Save · Share the code, the step now bold, done ones ticked",
@@ -2185,7 +2185,7 @@ def test_plans_round_three_builder_v381():
 
 
 def test_plan_tags_insights_v381():
-    """3.8.1 (Sam's pick): a plan's own tags stay out of Insights' own
+    """3.8.1: a plan's own tags stay out of Insights' own
     choices (its topics, the map's first pick); the map's "by" gets one
     named way a plan, each SLG a tile, with the ones no card carries."""
     from due_crew import team as T, board
@@ -2453,7 +2453,7 @@ def test_plan_tags_glue_v380():
 
 
 def test_own_pace_v380():
-    """3.8.0, at my own pace (Sam's picks on the Your Own Pace mock): a follow
+    """3.8.0, at my own pace: a follow
     says how its cards open: on the plan's dates (as before), when I'm ready
     (nothing opens by itself; You › Plans' Open opens the next date, first in
     Anki's line, one undo step), or the next once I've seen the last. No
@@ -2770,8 +2770,7 @@ def test_why_not_showing_glue_v380():
 
 
 def test_card_set_links_one_look_v380():
-    """3.8.0 (Sam: "the linked card sets appear differently on plan vs
-    today/upcoming... pick one style and stick with it"): a link that
+    """3.8.0: a link that
     opens a set of cards (a.tp) is the board's green everywhere, with no
     per-screen look of its own; Today writes a group as Plans does."""
     rules = re.findall(r"#due-crew[^{}]*a\.tp[^{}]*\{[^}]*\}", board._css({}))
@@ -3280,7 +3279,7 @@ def test_fifteen_flow_v381():
 
 
 def test_sev_by_the_logo_is_a_moment_v381():
-    """Sam: Pip isn't always by the logo. It comes when something just
+    """the maintainer: Pip isn't always by the logo. It comes when something just
     happened, the first time the board draws it, and goes after a few
     seconds; a redraw meanwhile keeps its place; then the logo's alone."""
     from due_crew import rooms as R, sev
@@ -3314,7 +3313,7 @@ def test_sev_by_the_logo_is_a_moment_v381():
             _state["labels"] = [f"2026-10-{d}"]
             clock["t"] += 100
             seen.append(mv(R.board_sev({}, {"done": True})["svg"]))
-        check("Sam, variety: each day done a move from the mix, never the same twice in a row",
+        check("variety: each day done a move from the mix, never the same twice in a row",
               all(a != b for a, b in zip(seen, seen[1:])) and set(seen) == set(sev.moves("hop")), seen)
         R.cfg = lambda: {"sev": False}
         _state.pop("sev_shown", None)
@@ -3326,7 +3325,7 @@ def test_sev_by_the_logo_is_a_moment_v381():
 
 
 def test_top_bar_is_our_page_v381():
-    """Sam: clicking ▶ Fifteen? did nothing. Anki tags the top bar's
+    """the maintainer: clicking ▶ Fifteen? did nothing. Anki tags the top bar's
     messages with a TopToolbar (Toolbar.draw's wrapper), and only Toolbar
     counted as ours: the top bar got a card page's rules, and room15 (not
     one of the widgets' own) was dropped. The chip's phase tick too."""
@@ -3355,7 +3354,7 @@ def test_top_bar_is_our_page_v381():
 
 
 def test_crew_room_sevs_wear_their_accents_v381():
-    """3.8.1 (Sam's pick): in a crew room each member is their Pip, in their
+    """3.8.1: in a crew room each member is their Pip, in their
     own accent, and they started at different moments, so the blinks never
     line up: the room's card and the Decks screen's lobby. Pip off, or a
     fifteen: the initials, as before. The accent rides GET /board, a mutual
@@ -3407,7 +3406,7 @@ def test_crew_room_sevs_wear_their_accents_v381():
           [(s["b"], s["d"]) for s in on["seats"]] == [sev.blink(i) for i in range(3)]
           and "sv-blink var(--sv-b, 4.6s) var(--sv-d, 0s)" in sev.CSS and sev.BLINK == 4.6)
     clocks = [sev.blink(i) for i in range(8)]
-    check("…each on its own clock (3.9.0, Sam: in turn \"still looks kinda creepy\"): cycles of 3.4 to 6.4 s, no two alike, "
+    check("…each on its own clock: cycles of 3.4 to 6.4 s, no two alike, "
           "places in them apart; the same every time it's drawn",
           all(3.4 <= c <= 6.4 and -c <= d <= 0 for c, d in clocks) and len({c for c, _d in clocks}) == 8
           and all(abs(a[0] - b[0]) >= 0.3 for a, b in zip(clocks, clocks[1:])) and clocks == [sev.blink(i) for i in range(8)]
@@ -3484,7 +3483,7 @@ def test_fifteen_board_v381():
     check("the session's line: fifteens, minutes, cards, the same however it ended",
           "3 fifteens &middot; 45 m &middot; 1,212 cards.</span>" in line and "counts" not in line and "room15x" in line)
     one = board.room_html({"fifteen_done": {"n": 1, "minutes": 11, "cards": 56, "sev": sev.svg("stack", stack=1)}})
-    check("Sam: its box fits what Pip stacks (room for one square, or three), its words left, no fixed gap above",
+    check("its box fits what Pip stacks (room for one square, or three), its words left, no fixed gap above",
           [sev.stack_reach(n, 44) for n in (1, 2, 3, 8)] == [(7, 3), (13, 3), (19, 3), (19, 3)]
           and 'style="padding:7px 0 3px"' in one and 'style="padding:19px 0 3px"' in line
           and "dc-sess" in one and "padding-top: 26px" not in board.SEV_CSS and ".dc-sess { text-align: left; }" in board.SEV_CSS)
@@ -3534,7 +3533,7 @@ def test_fifteen_board_v381():
 
 
 def test_week_card_sev_v381():
-    """3.8.1, the week card (Sam's pick, "Pip hops across the week"): a
+    """3.8.1, the week card: a
     dotted arc from each day studied to the next, a long one over days
     off, none over days to come, and Pip standing on the last day studied
     in the card's accent; no Pip with nothing studied or Pip off, and on
@@ -3731,7 +3730,7 @@ def test_week_card_sev_v381():
 
 
 def test_welcome_back_sev_v381():
-    """Sam liked Welcome back with Pip: Pip waves from the window's corner
+    """the maintainer liked Welcome back with Pip: Pip waves from the window's corner
     (still: a Qt window can't play the board's motion), unless Settings ›
     Pip is off. tools/dialogs.py draws it and checks the pixel; here, the
     switch reaches the window, and the drawing is sev.py's still one."""
@@ -3762,7 +3761,7 @@ def test_welcome_back_sev_v381():
 
 
 def test_sev_moves_v381():
-    """Sam's picks (Pip's Places): every move in the mix at every place Pip
+    """the maintainer's picks (Pip's Places): every move in the mix at every place Pip
     already is, a different one each time (never the same twice in a row);
     where it stays a while, one small thing now and then. And two new
     places: the signed-out card, and a crewmate's big streak."""
@@ -3772,7 +3771,7 @@ def test_sev_moves_v381():
     still, motion = sev.CSS.split("@media", 1)
     mom = lambda h: re.search(r'class="sv m-([a-z]+)', h).group(1)  # noqa: E731
     rests = lambda h: " rest" in h.split('"')[1]  # noqa: E731
-    check("Sam's picks, all in the mix, each place's own move first (the one it played before)",
+    check("the picks, all in the mix, each place's own move first (the one it played before)",
           {k: sev.moves(k) for k in sev.MOVES} == {
               "hop": ("hop", "twirl", "shuffle", "jump"), "cheer": ("cheer", "hug", "giftspin"),
               "hello": ("in", "walkin", "popup"), "exam": ("exam", "pep"), "focus": ("focus", "nod", "think", "tap"),
@@ -3802,7 +3801,7 @@ def test_sev_moves_v381():
           and ".sv.rest .sv-footL, .sv.rest .sv-footR { transform: none; }" in after and "animation" not in after
           and "translateY(10px)" in after)
     check("a body moves in the drawing's own units, never a share of its box, which what Pip has on makes taller "
-          "(3.9.0, Sam: a pumpkin and an umbrella sank the peek)",
+          "",
           not re.search(r"translateY\(-?[0-9.]+%\)", sev.CSS), re.findall(r"translateY\(-?[0-9.]+%\)", sev.CSS))
 
     rnd = random.Random(7)
@@ -3882,7 +3881,7 @@ def test_sev_moves_v381():
         _state.pop("sev_hello", None)
         a, b = R.signed_out_sev(), R.signed_out_sev()
         card = board.signed_out_card({}, sev=a)
-        check("signed out (Sam's pick): Pip waves, a hello from its mix, once; drawn again it rests there",
+        check("signed out: Pip waves, a hello from its mix, once; drawn again it rests there",
               mom(a) in sev.moves("hello") and not rests(a) and mom(b) == mom(a) and rests(b))
         check("…beside the words on the card, with its colours and motion sheet",
               card.index('class="dc-hi"') < card.index("Your friends’") and "sv-blink" in card
@@ -3899,7 +3898,7 @@ def test_sev_moves_v381():
         _state.pop("sev_banner", None)
         big = [("dre", "Dre <b>", 100), ("ana", "Ana", 365)]
         one, two = R.milestone_sevs(big), R.milestone_sevs(big)
-        check("a crewmate's big streak (Sam's pick): Pip hops in the emoji's place, from the day done's mix, once a banner",
+        check("a crewmate's big streak: Pip hops in the emoji's place, from the day done's mix, once a banner",
               set(one) == {"dre", "ana"} and all(mom(one[u]) in sev.moves("hop") for u in one) and mom(one["dre"]) != mom(one["ana"])
               and not any(rests(x) for x in one.values()) and all(rests(two[u]) and mom(two[u]) == mom(one[u]) for u in two)
               and 'aria-label="Pip: a big streak"' in one["dre"] and "Dre" not in one["dre"])
@@ -3979,7 +3978,7 @@ def test_closet_core_v382():
           CA.ART["cape"][1][:40] in dressed.split("sv-armL")[0] and CA.ART["headphones"][0][:40] in dressed
           and CA.ART["mug"][0][:30] in arm.split("</g></g></g>")[0] and "rotate(150)" in arm)
     busy = sev.svg("focus", look=["mug"])
-    check("a busy pose's hands hold their own thing; the closet's is set down beside it, never gone (Sam: a fifteen took the mug)",
+    check("a busy pose's hands hold their own thing; the closet's is set down beside it, never gone",
           CA.ART["mug"][0][:30] in busy.split('class="sv-armL"')[0] and 'class="cl-down" transform="translate(4 12)"' in busy
           and CA.ART["mug"][0][:30] not in busy.split('class="sv-armR">', 1)[1].split("</g></g>")[0]
           and 'cl-down' in sev.svg("away", look=["umbrella"]) and 'cl-down' not in sev.svg("idle", look=["mug"])
@@ -4097,7 +4096,7 @@ def test_closet_board_v382():
           and CA.ART["cap"][0][:30] not in RM.start_data(("#2e7d32", "#7cc47f"), "right", True)["sev"]["idle"])
     check("Settings › Fifteen and Pip: the closet, a click away", ("duecrew:closet|" + KK + "'") in board._settings_board({}))
     col_page = board.closet_html({"tab": "Yours", "have": {}, "look": []}, {"accent": "blue"})
-    check("3.9.0 (Sam): the closet has the colour too, every accent, the one on pressed, as Settings' Board tab has it",
+    check("3.9.0: the closet has the colour too, every accent, the one on pressed, as Settings' Board tab has it",
           all(f"duecrew:set:accent:{k}" in col_page for k in board.ACCENTS) and 'aria-label="Blue" aria-pressed="true"' in col_page
           and "Pip and your board" in col_page and board._accent_swatches({"accent": "blue"}) in board._settings_board({"accent": "blue"}))
     # the clicks, as the board sends them
@@ -4128,7 +4127,7 @@ def test_closet_board_v382():
         worn = list(mine["sev_look"])
         send("closetwear:dino")
         back = list(mine["sev_look"])
-        send("set:accent:purple")  # 3.9.0 (Sam): the colour, from the closet
+        send("set:accent:purple")  # 3.9.0: the colour, from the closet
         coloured = (mine.get("accent"), dc._state["closet_open"] is not None)
         send("closettab:99")
         send("closetoff")
@@ -4155,8 +4154,7 @@ def test_closet_board_v382():
 
 
 def test_squad_pips_v3821():
-    """3.8.21 (Sam: "squads page still has the old emojis and not the new
-    pips"): the Squads tab's people are Pips, as Crew's are: mine in my colour
+    """3.8.21: the Squads tab's people are Pips, as Crew's are: mine in my colour
     and look, a crewmate's in theirs (a mutual friend's, which only the crew
     brings), anyone else plain in the default colour, since a squadmate
     shares a name and an emoji, nothing more. A plan's squad too, its faces

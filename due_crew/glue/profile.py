@@ -78,7 +78,7 @@ def _on_profile_open():
     except Exception:
         oops()
     try:
-        errs_flow.open_profile()  # 3.9.9: this profile's counts for Sam
+        errs_flow.open_profile()  # 3.9.9: this profile's counts for the maintainer
         from .. import team_flow as _tf
         _tf.ASYNC = True  # 3.9.9: the board's Insights is worked out a part at a time (insights_soon)
         _tf.warm_soon()  # and ahead of its first ask, once the morning is through
@@ -123,8 +123,8 @@ SHOWN = ("Settings…", "Pip’s closet…", "Scrapbook…")  # the Tools entrie
 
 
 def _then_show(fn):
-    """3.10.3 (Lorry, 23 Nov: Tools › Pip's closet "doesn't really navigate there", under a deck list longer
-    than the window): what opens in the board's place from the Tools menu is brought into view."""
+    """3.10.3: what opens in the board's place from the Tools menu is brought into view (under a deck list
+    longer than the window it opened out of sight)."""
     def go():
         fn()
         from aqt.qt import QTimer

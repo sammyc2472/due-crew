@@ -1,14 +1,11 @@
 """3.9.1, doodle cheers: the fridge. The drawings and signs my crew sends
-stay pinned around the Decks screen, like magnets on a fridge (Sam: "could
-the fridge just be the periphery of the decks window, like dragged around
-the anki window?"), each with the note it came with under it and who sent
+stay pinned around the Decks screen, like magnets on a fridge, each with the note it came with under it and who sent
 it, till I take it down. The last KEEP; each where I dragged it, a new
 one in the gutter beside the board. A spot (p) is [side, dx, y]: which
 side of the board, its distance in px from that edge of the board, and
 px from the window's top, so it stays put beside the board as the window
 changes size; when the window's too small for it, it waits in the corner
-and comes back when there's room (Sam: "they should remain in their
-place for if window expanded again"). It's mine: kept
+and comes back when there's room. It's mine: kept
 in wrap.json on this computer, never sent. Pure; the glue is
 closet_flow's, the drawing board.fridge_html and fridge_js."""
 
@@ -17,8 +14,7 @@ import marshal
 
 from .backend.shapes import clean_doodle, clean_note
 
-# 3.9.12 (SC: "They shouldn't leave when a 13th arrives. if it gets too crowded, the user can choose to remove
-# extras"): it was 12, what fits around a board on a laptop's screen, and a 13th pushed the oldest into the scrapbook.
+# 3.9.12: it was 12, what fits around a board on a laptop's screen, and a 13th pushed the oldest into the scrapbook.
 # Now only I take one down; this is the file's ceiling, far past what anyone pins
 KEEP = 100
 

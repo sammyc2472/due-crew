@@ -1,4 +1,4 @@
-"""3.9.2, Leeches (Sam's picks, S1-A, S2-A): the cards Anki stopped showing
+"""3.9.2, Leeches: the cards Anki stopped showing
 me (a leech, suspended) and the ones one miss from it, in a deck, as a view
 in Insights' place. One button a card, sorted by danger: a crewmate's hook
 when someone has it down (else Ask them), else Bring back; Learn it fresh,
@@ -155,7 +155,7 @@ def _near(col, deck, out=()):
 
 
 def _kept(col, deck, out=()):
-    """3.9.2 (Sam's pick): the leeches Anki tagged and kept showing me, in a
+    """3.9.2: the leeches Anki tagged and kept showing me, in a
     deck whose leech action is Tag Only (Anki's default since 23.10), at
     its leech count or past it (so a tag a shared deck shipped isn't one)."""
     rows = col.db.all(f"SELECT c.id, c.lapses, CASE WHEN c.odid THEN c.odid ELSE c.did END FROM cards c "

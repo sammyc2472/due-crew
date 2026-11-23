@@ -1,6 +1,6 @@
 # Cloudflare setup for 3.0 (once)
 
-What Sam does by hand before the Worker can go live. Everything else
+What the maintainer does by hand before the Worker can go live. Everything else
 (code, tests, the deploy job) is in the repo. Run the `wrangler` commands
 from `worker/`, after `npm ci` there.
 
@@ -47,7 +47,7 @@ month included):
    allowed to send only from `codes@duecrew.com`; then deploy.
 
 **The addresses** (Oct 2026): the app sends from `codes@duecrew.com`
-(Email Service, its records on `cf-bounce.duecrew.com`, locked). Sam's
+(Email Service, its records on `cf-bounce.duecrew.com`, locked). The maintainer's
 mailbox is `sam@duecrew.com`, at a mail provider whose records sit at the
 root (MX, SPF, DKIM, added by the provider's one-time Cloudflare
 authorization), with `codes@duecrew.com` as a second address there so an
@@ -118,7 +118,7 @@ attach a custom domain over one.
 - Security → Bots: leave **Bot Fight Mode off**. It challenges requests
   that don't come from a browser, and the add-on's requests don't.
 - SSL/TLS: Full (strict), and Always Use HTTPS on.
-- Mail to duecrew.com goes to Sam's mail provider (§3, the addresses), so
+- Mail to duecrew.com goes to the maintainer's mail provider (§3, the addresses), so
   Email Routing stays off.
 - The free Workers plan covers a crew of this size: 100,000 requests a
   day, and D1's free tier (5 million reads, 100,000 writes a day). The $5

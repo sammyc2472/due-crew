@@ -296,7 +296,7 @@ class WebFace(NewPlan, PlanCore):
                              "ai": bool(j == 0 and c["op"].get("by") == "ai")})
         n, f = len(self.draft), self.followers()
         # cmd: the page's Send sends the sheet's own cmd (page/plan.js submit); without it Send closed the
-        # sheet and nothing went (Sam, 7 Nov: "stuck at review and send")
+        # sheet and nothing went
         return {"kind": "send", "title": (f"Send {n:,} change{'s' if n != 1 else ''} to {f:,} following" if f
                                           else f"Save {n:,} change{'s' if n != 1 else ''}"),
                 "rows": rows, "why": O.send_line(changes), "max": O.WHY_MAX, "yes": f"Send to {f:,}" if f else "Save",
@@ -480,7 +480,7 @@ class WebFace(NewPlan, PlanCore):
 
     def to_calendar(self, name, text):
         """The plan's .ics into the person's calendar (the shell's: Downloads,
-        then opened with the computer's calendar app; Sam's pick, no save
+        then opened with the computer's calendar app; the maintainer's pick, no save
         window). True once it's opened, None saved but not opened (the shell
         says where), False not saved (the shell says why)."""
         self._saved_file = (name, text)
@@ -936,7 +936,7 @@ class WebFace(NewPlan, PlanCore):
 
     def c_paste(self, text):
         """Plan lines pasted: the text's Add, shown before they go on. (A course
-        calendar isn't read here yet: Sam, "not quite sure our calendar import is working".)"""
+        calendar isn't read here yet: )"""
         from . import text as T
         text = str(text or "")
         if not text.strip() or self.doc is None:

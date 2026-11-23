@@ -212,8 +212,7 @@ var dcPlan = (function () {
     return out;
   }
   function toolbar(p) {
-    /* 3.9.6 (Sam: "the earliest first / today / expand all / those filters kinda don't make too much
-       sense and are confusing in with the other stuff"): the bar is how you look (List, Week, Month),
+    /* 3.9.6: the bar is how you look (List, Week, Month),
        what to show (Find; Needs a look, when something does) and what to do (Add, the one filled);
        getting around (Today, Unfold all) lives in the view it moves. Earliest first is gone: the list
        runs by date, Today takes you to now. */
@@ -415,8 +414,7 @@ var dcPlan = (function () {
   /* the picked one, beside the plan */
   function focusName() { var n = root.querySelector("[data-keep=name]"); if (n) { n.focus(); n.select(); } }
   /* 3.9.6: a day, picked on a calendar the page draws. Never the computer's own date popup: on a Mac
-     the web view opens it as a native popup inside Anki's own process, drawn in Liquid Glass (Sam's
-     click test: Anki quit as a set was put on just after one). The box is a button that holds the day
+     the web view opens it as a native popup inside Anki's own process, drawn in Liquid Glass. The box is a button that holds the day
      as its value ("" for none); opts: {disabled, title, clear (a Clear on the calendar), placeholder}. */
   function okDay(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) && !isNaN(d(v).getTime()); }
   function dayWords(v) {

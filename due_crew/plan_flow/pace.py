@@ -253,7 +253,7 @@ def own_view(plan, st, prog, today):
         o, s2, _tot = (prog.get(lu["id"]) or [0, 0, 0])[:3]
         if int(o) > int(s2):
             back = {"name": str(lu.get("name") or "?"), "n": int(o) - int(s2)}
-    # 3.9.10 (Sam: the own-pace card "to match"): what I opened and haven't finished, a row each, Study or Ignore;
+    # 3.9.10: what I opened and haven't finished, a row each, Study or Ignore;
     # the lines measuring me against the author's dates (where the plan is, my pace, the finish) are gone
     opened = []
     for u in P.units(doc):

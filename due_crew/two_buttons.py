@@ -1,4 +1,4 @@
-"""3.9.1, two buttons (Sam's picks from the mock "Two Buttons"): review with
+"""3.9.1, two buttons: review with
 Again and Good alone. Hard and Easy hide on the review screen, and the keys
 2, 3 and 4 all count as Good (1 is Again; Space and Enter are Good already).
 Every deck, FSRS on or off. It's a person's way of reviewing, so it's an

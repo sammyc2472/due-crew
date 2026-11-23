@@ -36,7 +36,7 @@
   (`POST /squads/{id}/join {code}`, the code required since 3.6.2, with
   `MIN_CLIENT` 3.1.0) is the only way in. That is what keeps Remove
   removed (the 2.3–2.5 bug: a row sync re-created the member).
-- Cutover from 2.x: no data is migrated. Sam imports the Firebase accounts
+- Cutover from 2.x: no data is migrated. The maintainer imports the Firebase accounts
   (`tools/import_users.py`), so a first 3.0 sign-in lands on the old uid.
   That client's first sync then brings back what this computer knew
   (`ApiClient.restore_from_2x`): its code (when `session.friend_code` has
@@ -156,10 +156,10 @@
   local data only (`together.my_asks_view`).
 - 3.2 the site: signed in, `/` goes to `/home` (`GET /board?keep=1`,
   which leaves the cheers for Anki); `/log`; `/admin` for the admin.
-- 3.2.1 the admin's notice: the admin is Sam's account (`ADMINS`
+- 3.2.1 the admin's notice: the admin is the maintainer's account (`ADMINS`
   in wrangler.toml, plus the optional `ADMIN_UIDS` secret; since Nov 2026
   the secret alone, so the uid isn't in the repo). From `/admin`
-  Sam posts one line (a link optional, only to add-ons older than a
+  the maintainer posts one line (a link optional, only to add-ons older than a
   version optional, for N days); `GET /board` carries the newest live one
   for the asking add-on's version (`notices`, migration 0005), and the
   board shows it on top of every tab until it's dismissed (by id, in
@@ -181,7 +181,7 @@
   add-on no longer asks for a schedule, and a 3.2 `sched` still runs. The
   add-on's board has a Plans tab (the cards left Decks). The tree goes up nested (`plans.nest`, up to 1.5 MB, question
   ids last), so deep tags reach the builder.
-- 3.3 hold back (Sam's call): a deck imported with every card active
+- 3.3 hold back: a deck imported with every card active
   can't wait for its days, so Follow offers (checked) "Hold back N cards
   of later dates until their day": the never-studied new cards of dates
   not yet open, suspended once in one undo step and kept in `held`;
@@ -498,7 +498,7 @@
   never changes, so add-ons and the bridge are untouched, and the old
   code opens nothing (peek, join, restore). Everything done there goes
   in `admin_actions` (the audit log, a year; names looked up on read,
-  never an email or a code). README's privacy line says Sam can look up
+  never an email or a code). README's privacy line says the maintainer can look up
   an account and its squads when someone writes in.
 - Due (mock "My List", L1–L15): the day's to-do in a box above the
   board on every tab (`due.py` pure, `due_flow.py` the glue,
@@ -657,7 +657,7 @@
   locked; today and before, not seen) and one bar under its date
   (`board._abar`, the week's biggest is full width); a date's details
   `board._load_words`. No new requests; the site still reads progress.
-- 3.7.9 Insights (mock "Insights", rounds 1-17, drawn on Sam's own
+- 3.7.9 Insights (mock "Insights", rounds 1-17, drawn on the maintainer's own
   collection with read-only snapshots): mine alone, Anki only, worked out
   when the tab opens (`team_flow._work_out`, kept 10 minutes, about 0.2 s
   on a 35,000-card deck), never sent. Text only where it's counted or is

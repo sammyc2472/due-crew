@@ -1,4 +1,4 @@
--- 3.9.9, Know when it breaks (Sam's sign-off): what went wrong in the add-on,
+-- 3.9.9, Know when it breaks: what went wrong in the add-on,
 -- by code, never by content (save:bad_plan, py:plan_flow:maybe_morning:keyerror,
 -- req:plans.:id:400). Each install counts its own and sends a day's counts
 -- once, with the first sync after that day ends (its Anki day). Kept here only

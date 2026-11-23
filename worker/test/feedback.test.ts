@@ -60,7 +60,7 @@ describe("feedback (3.6.5, P6)", () => {
     expect((await db().prepare("SELECT COUNT(*) AS n FROM feedback").first<any>()).n).toBe(3);
   });
 
-  it("reply: mailed from Due Crew to the sender with what they wrote quoted, an answer to Sam's mailbox; marked replied and done", async () => {
+  it("reply: mailed from Due Crew to the sender with what they wrote quoted, an answer to the maintainer's mailbox; marked replied and done", async () => {
     const sam = await person("sam", "Sam");
     const maya = await person("maya", "Maya");
     await maya.call("POST", "/feedback", { text: "Bingo counted wrong\nfor me" });

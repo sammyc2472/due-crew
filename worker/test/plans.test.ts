@@ -357,7 +357,7 @@ describe("limits the audit asked for", () => {
     expect((await crew[0].call("GET", "/board?decks=1")).body.plans[0]).not.toHaveProperty("crewDone");
   });
 
-  it("3.9.5 (Sam): an author on the team counts toward the three; the counts are the followers'", async () => {
+  it("3.9.5: an author on the team counts toward the three; the counts are the followers'", async () => {
     const { dre, plan } = await authored();
     expect((await dre.call("POST", `/plans/${plan.id}/team`)).status).toBe(200);
     const crew = [await person("maya"), await person("kai")];
@@ -369,7 +369,7 @@ describe("limits the audit asked for", () => {
     expect((await dre.call("GET", `/plans/${plan.id}/progress`)).body)
       .toEqual({ followers: 2, sharing: 2, inSquad: 3, others: 2, units: { hf: { opened: 2, done: 2 }, arr: { opened: 2, done: 0 } } });
     await anHourOn();
-    // two besides me (Sam, after the second review): Maya's own taken away leaves Kai's alone, so no crew counts
+    // two besides me: Maya's own taken away leaves Kai's alone, so no crew counts
     const seen = (await crew[0].call("GET", "/board?decks=1")).body.plans[0];
     expect(seen).toMatchObject({ followers: 2 });
     expect(seen).not.toHaveProperty("crewDone");
@@ -385,7 +385,7 @@ describe("limits the audit asked for", () => {
     expect(both.units.hf).toEqual({ opened: 3, done: 3 });
   });
 
-  it("3.9.5 (Sam): two besides me, for the authors and the crew alike", async () => {
+  it("3.9.5: two besides me, for the authors and the crew alike", async () => {
     const { dre, plan } = await authored();
     const [ana, maya, kai, lee] = [await person("ana"), await person("maya"), await person("kai"), await person("lee")];
     // a co-author on the team with the owner makes three with one follower: the counts would be hers alone

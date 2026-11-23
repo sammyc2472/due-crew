@@ -129,8 +129,7 @@ def see_what_went():
 
 
 # ---- 3.9.9: what gets used, said once ----
-# A line at the board's foot (board.draw._use_line; Sam, of the sheet it was first: "a bit dramatic a
-# pop-up... a little note somewhere"), there until Got it or its Privacy link is pressed. Nothing is
+# A line at the board's foot (board.draw._use_line), there until Got it or its Privacy link is pressed. Nothing is
 # counted before that.
 
 TOLD = "use_told"

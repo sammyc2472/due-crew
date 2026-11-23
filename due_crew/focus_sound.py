@@ -1,5 +1,4 @@
-"""3.10.3, the Fifteen's sound (KV, 19 Nov 2026: "could we please get the white noise back? ... one button
-for a timer & focusing noise"; SC: "an option on the drop down caret on Fifteen"). Room sounds went in 3.9.8;
+"""3.10.3, the Fifteen's sound: one button for a timer and a focusing sound, asked for back. Room sounds went in 3.9.8;
 this is the part that was used: Fire (a recording, CC0: sounds/CREDITS.md) and Brown noise (made by
 sounds.js), picked from the arrow beside Fifteen? in the top bar, played by the top bar's page while a
 fifteen or a room runs, through its breaks. No chip speaker, no volume, no rain or waves. Pure.

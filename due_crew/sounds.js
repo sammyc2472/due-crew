@@ -1,5 +1,4 @@
-// 3.9.1, room sounds (Sam's picks: made from noise only, a speaker on the
-// chip, each person their own): brown noise, rain, fire and waves, made by
+// 3.9.1, room sounds: brown noise, rain, fire and waves, made by
 // Web Audio from noise. No sound files, no timers: what happens now and then
 // (a drop, a crackle, a wave) is either drawn once into a buffer that loops
 // (two loops of different lengths, so the pattern never comes round) or
@@ -10,7 +9,7 @@
 // through review. window.dcSounds = {kinds, labels, play, stop, setVolume,
 // playing, build}; build(ctx, kind, out) draws one sound into any context, an
 // OfflineAudioContext too.
-// Since Sam's "the background noises aren't the best": rain, fire and waves
+// Since : rain, fire and waves
 // are recordings when the add-on has them (sounds/*.ogg, CC0: see
 // sounds/CREDITS.md), each a seamless loop played sample-exact by an
 // AudioBufferSourceNode; brown noise stays made, as brown noise is. Only the

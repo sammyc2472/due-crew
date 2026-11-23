@@ -15,8 +15,7 @@ from .cheers import DOODLE_INK, _doodle_art
 from .dance import DANCE_JS
 
 
-# 3.9.1: the fridge, around the Decks screen (Sam: "could the fridge just be the
-# periphery of the decks window, like dragged around the anki window?")
+# 3.9.1: the fridge, around the Decks screen
 FRIDGE_W = 124  # px: a doodle on the window, on its paper
 FRIDGE_PIP = 30  # px: the Pip by a sender's name on the fridge (a crew row's size; its body is 18)
 FRIDGE_UNDO = 8  # s: "In your scrapbook · Undo" in a doodle's place (closet_flow.UNDO_SECS)
@@ -51,13 +50,13 @@ FRIDGE_CSS = """
     #dc-fridge .fw { display: flex; align-items: center; justify-content: center; gap: 3px; margin-top: 3px; color: var(--fz-muted);
       white-space: nowrap; min-width: 0; }
     #dc-fridge .fw b { color: var(--fz-ink); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-    /* 3.9.2 (Sam: "pips get cutoff on the polaroids"): Pip's head, hat and what it holds reach past its slot,
+    /* 3.9.2: Pip's head, hat and what it holds reach past its slot,
        so the line never clips (only the name does) and gives the head room under the photo */
     #dc-fridge .fw .sv-slot { --sv-a: var(--fz-pip); flex: none; margin: 9px 2px 0 4px; }
     #dc-fridge .fx { position: absolute; top: 0; right: 3px; display: block; opacity: 0; color: var(--fz-muted); text-decoration: none; font-size: 15px; line-height: 1; }
     /* 3.9.2's QoL pass: hidden by opacity, not display, so Tab reaches it (and shows it) */
     #dc-fridge .fz:hover .fx, #dc-fridge .fz:focus-within .fx, #dc-fridge .fx:focus { opacity: 1; }
-    /* 3.9.1 (Sam's pick, "Pip at rest" C): still until pointed at, as crew rows */
+    /* 3.9.1: still until pointed at, as crew rows */
     #dc-fridge .fz:not(:hover) .sv, #dc-fridge .fz:not(:hover) .sv * { animation: none !important; }
     /* 3.9.1: where one was just taken down, its Undo for a few seconds, then gone (--fg: how long it's been up) */
     #dc-fridge .fz.fgone { transform: none; cursor: default; text-align: center; font-size: 11.5px; padding: 8px 2px; white-space: nowrap;
@@ -69,7 +68,7 @@ FRIDGE_CSS = """
 """ % (FRIDGE_W, FRIDGE_UNDO)
 
 
-# 3.9.2 (Sam: "also need dark mode for polaroids"): a Polaroid's colours as
+# 3.9.2: a Polaroid's colours as
 # tokens on each one, light or dark as Settings › Theme says. At night the
 # frame and the photo go dark, and a doodle's ink with them: black reads
 # light, each colour its own night shade (the board's), and Pip and Undo
@@ -90,11 +89,8 @@ def _fridge_theme(cfg):
 
 def fridge_html(items, people, cfg, gone=None):
     """3.9.1: the doodles my crew sent (fridge.clean's), pinned around the
-    Decks screen, newest first: each a Polaroid (Sam's pick from "Pinned
-    Doodles": the doodle in a white frame, taped up with a strip in their
-    colour), the note it came with on the frame's wide bottom edge, then
-    their Pip and name (no "from": Sam, "so there's more room for the
-    Pip") and the day, and a × to take it down. Where I dragged one (its p:
+    Decks screen, newest first: each a Polaroid, the note it came with on the frame's wide bottom edge, then
+    their Pip and name (no "from": ) and the day, and a × to take it down. Where I dragged one (its p:
     side of the board, px from its edge, px down) rides as data; fridge_js
     places the rest in the gutters beside the board, and lets me drag. ""
     when there's none. Kept as last drawn while what it's drawn from (the
@@ -130,14 +126,12 @@ def _fridge_notes(items, people, cfg, gone=None):
         note = f'<div class="fq">&ldquo;{_html.escape(x["n"])}&rdquo;</div>' if x.get("n") else ""
         at = f' data-s="{x["p"][0]}" data-x="{x["p"][1]}" data-y="{x["p"][2]}"' if x.get("p") else ""
         art = _doodle_art(x["d"], x["a"], _t("{name}’s drawing", name=x["name"]))  # fridge.clean checked it
-        # 3.9.10 (Sam: "everyone's polaroids are now showing their pip as green even if they use a different
-        # color"): the Pip is theirs as it is now, so it wears the colour they have now, as it wears what they
+        # 3.9.10: the Pip is theirs as it is now, so it wears the colour they have now, as it wears what they
         # have on now; the drawing keeps the ink it was made in. One that came with no colour takes theirs
         now = e.get("accent") if isinstance(e, dict) and e.get("accent") in ACCENTS else ""
         fa, tape = accent_pair(x["a"] or now)
         pa, pd = accent_pair(now or x["a"])
-        # the tape is their Pip's colour too (SC, after 3.9.12: "the tape on the polaroids should match that user's pip
-        # color also"): it was the drawing's ink, so someone who changed colour had a Pip in one and tape in another
+        # the tape is their Pip's colour too: it was the drawing's ink, so someone who changed colour had a Pip in one and tape in another
         notes.append(f'<div class="fz" data-k="{k}"{at} style="--fa:{fa};--fd:{tape};--pa:{pa};--pd:{pd};--ft:{_tape(pd)}" title="{_t("Drag it anywhere")}">'
                      f'<div class="fp">{art}</div>{note}<div class="fw">{pip}<b>{name}</b>{f" · {when}" if when else ""}</div>'
                      f'<a class="fx" href="#" title="{_t("Take it down")}" aria-label="{_t("Take {name}’s down", name=name)}" '

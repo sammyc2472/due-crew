@@ -94,7 +94,7 @@ def clean_emoji(text):
     return out if out and emoji_fits(out) else ""
 
 
-# 3.9.2 (Sam's pick): the emoji below U+2190 a picker gives: © ® ‼ ⁉ ™ ℹ (keycaps start with a digit,
+# 3.9.2: the emoji below U+2190 a picker gives: © ® ‼ ⁉ ™ ℹ (keycaps start with a digit,
 # which the Worker refuses); board.py's oneEmoji and native_emoji.first_emoji take the same
 EMOJI_LOW = (0xA9, 0xAE, 0x203C, 0x2049, 0x2122, 0x2139)
 
@@ -154,8 +154,7 @@ DOODLE_POINTS = 2000
 DOODLE_STROKES = 200
 SIGN_MAX = 24  # UTF-16 units, as the Worker counts
 # A stroke's pen: bit 0 thick; pen >> 1 its colour: 0 the sender's accent, 1
-# black, 2 on these accents in this order (Sam: "make all of our colors
-# available"). Stored doodles name them by place: only ever add at the end.
+# black, 2 on these accents in this order. Stored doodles name them by place: only ever add at the end.
 DOODLE_INKS = ("green", "blue", "purple", "teal", "amber", "rose")
 DOODLE_PEN_MAX = 2 * (len(DOODLE_INKS) + 1) + 1  # 15, validate.ts DOODLE_PEN_MAX
 

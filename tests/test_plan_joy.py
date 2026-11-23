@@ -1,4 +1,4 @@
-"""3.9.6, the plan joys (Sam's picks, the "Joy on the plan card" mock). A
+"""3.9.6, the plan joys. A
 set done pops on the path and Pip hops to it; halfway, three-quarters and
 the last set are a line each with Share and ×; the finish line is a show
 over the Decks screen (show.js's DCShow.finish), then a line with Share and

@@ -179,7 +179,7 @@ const Work = (() => {
   return { spread, map, over };
 })();
 
-/** 3.9.2 (Sam's pick R3-A): the reviews a plan's dates bring, a day, by
+/** 3.9.2: the reviews a plan's dates bring, a day, by
  *  week: each day's new cards (Work's, the work a day asks) on a typical
  *  card's next six weeks (the share of cards seen k days after they start:
  *  simulated learners on FSRS's defaults at 90%, ahead.GENERIC's cards; the
@@ -1778,7 +1778,7 @@ async function builder(id, face = null, got = null) {
         till > last ? h("button", { class: "ghost", onclick: () => { u.due = till; mark(); draw(); } }, `Give it till ${pretty(till)}`) : null));
   }
 
-  /** 3.9.2 (Sam's pick R3-A): what following the plan asks later, in reviews:
+  /** 3.9.2: what following the plan asks later, in reviews:
    *  its busiest week, then each week's, a typical card's (Reviews). */
   function reviewsNote() {
     const all = Reviews.weeks(workMap());
@@ -3016,9 +3016,9 @@ async function builder(id, face = null, got = null) {
         people()));
   }
 
-  /** 3.9.2 (Sam's pick C3-A): next year's class gets this plan: a copy of
+  /** 3.9.2: next year's class gets this plan: a copy of
    *  my own with every date 52 weeks on, so each keeps its weekday, named
-   *  "… (next year)" (Sam's pick), not "(copy)". */
+   *  "… (next year)", not "(copy)". */
   function nextYear() {
     const firstOf = (d) => [...(d.units || []).map((u) => u.opens), ...(d.events || []).map((e) => e.day)].filter(Boolean).sort()[0];
     // "… (next year)" within a plan name's 60: an earlier "(next year)" or "(copy)" off, cut at a word (3.9.2's QoL pass)
@@ -3110,7 +3110,7 @@ async function builder(id, face = null, got = null) {
       : view === "list" && author ? h("div", {}, sideDay ? null : dayPanel(), listView())
       : sideDay ? calendar()
       : h("div", { class: `calwrap${picked ? " has-day" : ""}` }, calendar(), dayPanel());
-    // 3.8.1 (Sam's pick): first steps, while the plan as saved has no dates: the step to do now bold, done ones ticked
+    // 3.8.1: first steps, while the plan as saved has no dates: the step to do now bold, done ones ticked
     const firstSteps = author && view !== "print" && !(plan.doc.units || []).length ? (() => {
       const steps = [["Tick what to cover", cover.size > 0 || doc.units.length > 0],
         [pace.mode === "placed" ? "Drag tags onto days" : fillLabel, doc.units.length > 0],
@@ -3267,7 +3267,7 @@ async function builder(id, face = null, got = null) {
     if (pr.failed) { progressData = null; return h("p", { class: "muted" }, "Couldn't load it. Open the tab again."); }
     byOpens();
     // 3.9.5: an author on the team counts toward the three (inSquad); the counts are the followers',
-    // and from two besides me (others, Sam)
+    // and from two besides me (others, the maintainer)
     const inSquad = pr.inSquad ?? pr.sharing;
     const others = pr.others ?? pr.sharing;
     if (inSquad < 3) {

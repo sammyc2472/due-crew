@@ -1,4 +1,4 @@
-// 3.9.0, the motion audit (Sam: "everything should be smooth!"): every scenario in
+// 3.9.0, the motion audit: every scenario in
 // tools/motion_preview.html played with its animations held still and stepped through
 // by hand, then the last frame of the motion set against the page once every animation
 // has finished and cleaned up. A motion that ends anywhere but where the page settles

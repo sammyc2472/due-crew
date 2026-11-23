@@ -1,4 +1,4 @@
-"""3.9.0: how a cheer lands (Sam's picks, "Cheers, everywhere"): a show over
+"""3.9.0: how a cheer lands: a show over
 the whole Decks screen, a different one each time. Pure: no aqt.
 
 The bag: every show plays once before any plays again, and never the same
@@ -9,12 +9,12 @@ show.js draws them; board.flurry_js starts one when cheers land.
 
 import random
 
-# the twelve Sam kept, in the mock's order
+# the twelve the maintainer kept, in the mock's order
 SHOWS = ("cannon", "pinata", "fireworks", "gift", "bubbles", "wave",
          "balloons", "rocket", "stamp", "disco", "hat", "snow")
 BAG_KEY = "cheer_bag"  # [the shows left in this bag, ..., the last one played]
 
-# 3.9.6, the finish line (Sam's pick): a plan's last set's last card seen, a
+# 3.9.6, the finish line: a plan's last set's last card seen, a
 # show of its own in the cheers' style (show.js's DCShow.finish, started by
 # board.finish_js), once a plan (plans.json). Not in the bag: it's no cheer.
 FINISH_SECONDS = 7  # the show

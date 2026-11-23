@@ -252,8 +252,7 @@ def live_told():
 
 
 def auto_live(c, last_ms, day="", now=None):
-    """3.9.10 (Sam: "get rid of I'm studying and just have it automatically
-    pushed when someone has synced reviews within the last hour"): my dot for
+    """3.9.10: my dot for
     LIVE_MINUTES after my last review, set as a sync is made ready, so it
     rides my week as the button's hour did. It never shortens a room's or a
     fifteen's hour; switched off (or paused, or just showing up) the hour
@@ -355,7 +354,7 @@ def reviewer_menu(reviewer, menu):
     # 3.9.11: my own hook on this card (hooks.py), on any card
     from . import hooks
     hk = menu.addAction(_t("Due Crew: your tip…") if hooks.get(card.note().guid) else _t("Due Crew: add a tip…"))
-    from . import cards  # never by the folder's name: AnkiWeb installs it as 2035408484 (SC's crash, 15 Nov)
+    from . import cards  # never by the folder's name: AnkiWeb installs it as 2035408484
     hk.triggered.connect(lambda: cards.hook_edit(card))
     # 3.7.3: a card in a plan whose team I'm on can go to the team too
     from . import team_flow

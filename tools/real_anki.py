@@ -430,7 +430,7 @@ def check(path):
        lc.id in got and back.type == 0 and back.queue == 0 and back.lapses == 0
        and "leech" not in [t.lower() for t in back.note().tags] and col.undo_status().undo == "Due Crew: recover leeches",
        f"{len(got)} recovered, undo {col.undo_status().undo!r}")
-    # 3.9.3 (Sam's pick A): by the deck's own leech count, read from its options on Anki's engine: Tag Only at 5,
+    # 3.9.3: by the deck's own leech count, read from its options on Anki's engine: Tag Only at 5,
     # a card Anki kept in my reviews at 6 lapses is a leech now (8 was Recover's line); taken once asked, one undo step
     sdid = col.decks.id_for_name("Step Deck")
     conf = col.decks.config_dict_for_deck_id(sdid)
@@ -678,7 +678,7 @@ def check(path):
         col.undo()
         ok("held back: Edit › Undo shuts them again", all(col.get_card(c).queue == -1 for c in shut))
         # 3.8.1, Study this date: a Due Crew deck of the date's cards, Anki rescheduling them; Anki's own one
-        # undo step; its Study screen on it. 3.9.5 (Sam's FSRS rule): its new cards and the ones due today, in
+        # undo step; its Study screen on it. 3.9.5: its new cards and the ones due today, in
         # the deck's order, never reviews ahead of their date
         r0 = sorted(P.DeckIndex(col, did).match(rdates[0], None, "Step Deck"))
         ahead = [c for c in r0 if col.get_card(c).queue == 0][:8]
@@ -1214,7 +1214,7 @@ def check_bars(tmp):
 
 
 def check_opens(path):
-    """3.9.5, Browse's Due column (Sam's pick: "Thu 5 Nov · Heme 2"): Anki's
+    """3.9.5, Browse's Due column: Anki's
     own rows for its own columns, a plan's dates ahead on the big deck, the
     suspended cards they open saying the day and the plan, and how long
     working the days out takes."""

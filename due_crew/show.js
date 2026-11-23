@@ -1,4 +1,4 @@
-/* 3.9.0: how a cheer lands (Sam's picks, "Cheers, everywhere"): a show over
+/* 3.9.0: how a cheer lands: a show over
    the whole Decks screen, a different one each time (shows.py keeps the bag).
    board.flurry_js starts one: DCShow.play(kind, D), with
    D = {senders: [{name, emoji, note, a: [light, dark], hello, jump, cheer, idle}],
@@ -150,7 +150,7 @@
     });
     return 1000 + list.length * 750 + 3200;
   };
-  SHOW.pinata = function (list) {  // a whack a cheer; the last one breaks it, with no word (Sam)
+  SHOW.pinata = function (list) {  // a whack a cheer; the last one breaks it, with no word
     var cx = W() / 2, top = Math.min(110, H() * 0.16);
     var hang = svgEl('<svg width="120" height="' + (top + 90) + '" style="overflow:visible"><line x1="60" y1="0" x2="60" y2="' + top + '" stroke="#8a7a5a" stroke-width="2.5"/>' +
       '<g transform="translate(60 ' + (top + 46) + ') scale(1.45)"><polygon points="0,-36 9,-12 34,-11 14,4 21,29 0,15 -21,29 -14,4 -34,-11 -9,-12" fill="#f2b33d" stroke="#d9822b" stroke-width="2"/>' +
@@ -182,7 +182,7 @@
     });
     return 1000 + list.length * 850 + 3600;
   };
-  SHOW.fireworks = function (list) {  // the screen dims; each bursts in the sender's emoji and colour (no name in the middle: Sam)
+  SHOW.fireworks = function (list) {  // the screen dims; each bursts in the sender's emoji and colour (no name in the middle: the maintainer)
     var shots = list.length === 1 ? [list[0], list[0], list[0]] : list.concat([list[0], list[list.length - 1]]);
     dim(0.6, 900 + shots.length * 820 + 1600);
     shots.forEach(function (s, i) {
@@ -437,7 +437,7 @@
     }
   }
 
-  // ---- 3.9.6, the finish line (Sam's pick): a plan's last set's last card seen. Not one of the twelve
+  // ---- 3.9.6, the finish line: a plan's last set's last card seen. Not one of the twelve
   // (it's no cheer): the dimmed screen, the plan's path filling as Pip hops along it, the tape broken, a grad
   // cap landing on Pip, confetti; the banner says it and stays a little past (board.finish_js starts it:
   // D = {name, sub, n, share, a, pip: {hop, jump, still, cap} or null, ms, linger, bg, ink, line, accent,

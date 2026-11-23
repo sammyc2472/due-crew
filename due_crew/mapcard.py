@@ -1,6 +1,5 @@
 """3.8.0, "What I know": the topic map as a picture card and as text, to
-share by hand (Sam: "is there a way to make a bento shareable"; "is there
-a text-based version"). Pure: the card's layout and words, the text, and
+share by hand. Pure: the card's layout and words, the text, and
 last week's map for the change; ui/map_card_dialog.py paints and copies.
 
 Insights are mine alone and never sent (CLAUDE.md), so the card is made

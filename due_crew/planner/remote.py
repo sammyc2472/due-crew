@@ -100,7 +100,7 @@ def _refused(data, waits=False):
 
 
 def _said_no(data):
-    """3.9.9: a save the server refused, counted for Sam as save:<its error>
+    """3.9.9: a save the server refused, counted for the maintainer as save:<its error>
     when the window has words for it (save:other when it hasn't)."""
     _errs.count(_errs.save_code((data or {}).get("error"), SAVE_CODES))
 

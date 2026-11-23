@@ -19,7 +19,7 @@ invocation_logs = false
 API_VERSION = "1"
 MIN_CLIENT = "3.1.0"
 MAIL_FROM = "Due Crew <codes@duecrew.com>"
-# Where an answer to a feedback reply goes (its Reply-To): Sam's mailbox.
+# Where an answer to a feedback reply goes (its Reply-To): the maintainer's mailbox.
 FEEDBACK_REPLY_TO = "sam@duecrew.com"
 # Where a copy of each feedback is mailed as it arrives (3.10.1). Unset: it waits on the admin page only.
 FEEDBACK_TO = "sam@duecrew.com"

@@ -116,7 +116,7 @@ PARTY_JS = r"""
 
 
 def party_html(v):
-    """3.9.5 round three, You › Pip Party (Sam's): the games up top, the one
+    """3.9.5 round three, You › Pip Party: the games up top, the one
     the TV opens on lit; what to play on, picked on the map (Insights' own
     tiles, the tag tree or the decks) or found by name; which of their
     cards; the picks at the foot; Host. Once the TV's open, its code and

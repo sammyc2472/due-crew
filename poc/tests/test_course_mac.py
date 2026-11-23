@@ -268,7 +268,7 @@ XCODE_LICENSE = ("You have not agreed to the Xcode license agreements. Please ru
 
 
 class SetupTests(unittest.TestCase):
-    """Sam's first try (19 Oct): Build stopped on Apple's Xcode license, four
+    """the maintainer's first try (19 Oct): Build stopped on Apple's Xcode license, four
     times over. It says so once, in a few words, and on macOS 27 nothing
     needs building at all."""
 

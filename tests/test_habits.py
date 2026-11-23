@@ -1,7 +1,7 @@
 """3.9.5, How you study (due_crew/habits.py, habits_flow.py): the findings on
 synthetic logs (a planted effect is found and passes; a log with none
 doesn't, over several seeds), the board's line and view, Slow but right (a
-finding with See them since Sam's FSRS rule), the Fifteen at 35, and each
+finding with See them since the maintainer's FSRS rule), the Fifteen at 35, and each
 new duecrew: command through the add-on's own handler. Standard library only.
 
 Run: python3 tests/test_habits.py
@@ -256,7 +256,7 @@ def test_board():
           'title="Next review 3 weeks or more away">38<small>matured this week</small>' in v
           and v.count("matured</title>") == 8 and "This week: 38 matured</title>" in v
           and "duecrew:inshabits:7:see" in v)
-    check("…Slow but right (3.9.5, Sam: \"this doesn't make much sense\"): this week's slow ones, the raw rates "
+    check("…Slow but right: this week's slow ones, the raw rates "
           "as two bars, quick and slow, missed next time, the range in their titles, See them (a finding, not a deck)",
           ">46<small>right, but slow, this week</small>" in v and ">quick</text>" in v and ">slow</text>" in v
           and '<div class="hs-cap">missed next time</div>' in v and ">13%</text>" in v and ">22%</text>" in v
@@ -366,7 +366,7 @@ def test_flow():
         bv = F.board_view()
         check("…and the view: the finding, this week's slow ones, closed", bv["speed"] and bv["slow"] == n and bv["open"] is False)
         F.see_slow()
-        check("See them (3.9.5, Sam's FSRS rule: a finding, not a deck): the slow ones in the browser, no deck built",
+        check("See them: the slow ones in the browser, no deck built",
               rig.browsed == [live] and rig.built == [] and "slow_studied" not in rig.pc, rig.browsed)
         rig.browsed.clear()
         F._mine()["res"]["speed"]["pass"] = False

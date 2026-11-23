@@ -2,7 +2,7 @@
 plan's shape in one line, what each week asks (new cards a day, the
 reviews it brings), the dates that need a look, a follower's today. No
 suggestions of what goes on a date: the author puts every card there
-(Sam's call, round five). Pure: no Anki, no Qt."""
+. Pure: no Anki, no Qt."""
 
 import datetime
 

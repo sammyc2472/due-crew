@@ -450,7 +450,7 @@ def window():
 def test_the_window_finds():
     face, ops, _closed = window()
     v = face.view()
-    check("round 2 (Sam: the how-to \"should pop up on the main decks screen\"): the window opens on its box, the "
+    check("round 2: the window opens on its box, the "
           "how-to the Decks screen's; the filters row always there, every filter off",
           not v["intro"] and v["howto"] is None and [f["k"] for f in v["filters"]] == list(M.ROW)
           and not any(f["on"] for f in v["filters"]), v["filters"])
@@ -466,7 +466,7 @@ def test_the_window_finds():
     tp = v["topics"][0]
     check("round 3: one row a typed topic, its tags' cards once each, its tree open", tp["name"] == "Heart Failure"
           and tp["on"] and tp["n"] == 27 and tp["ntags"] == 3 and tp["open"] and tp["in"] is None, tp)
-    check("round 3 (Sam: \"the tag tree to go all the way to the last tag\"): each tag under where it's from, "
+    check("round 3: each tag under where it's from, "
           "the one with most cards first, its path to its end",
           [(g["res"], g["n"], [t["path"] for t in g["tags"]]) for g in tp["tree"]]
           == [("Videos", 16, ["Cardio \u203a Heart Failure"]), ("Path", 7, ["Cardio \u203a Heart Failure"]),
@@ -551,10 +551,7 @@ def test_the_window_does():
 
 
 def test_what_it_found_and_the_tiles():
-    """Round 3 (Sam: "giving the user enough information about what has been
-    found so that they can take the appropriate action"; four tiles: "Study
-    now, Schedule ahead, Make a new filtered deck", and "make unsuspend a core
-    button in the bottom pills")."""
+    """Round 3."""
     check("my pace from my log: a new card's seconds, a review's, the middle of my days",
           M.pace_from(60000 * 10, 20, 8000 * 40, 40, [30, 50, 0, 40, 90]) == {"new_s": 30.0, "rev_s": 8.0, "day_min": 50, "known": True})
     check("too little to go on: the usual guess, not said as mine",
@@ -605,7 +602,7 @@ def test_what_it_found_and_the_tiles():
     check("a filter alone: Study now takes every one but a leech, so no Study all; none suspended, Unsuspend has none",
           f["all"] and f["study"] == f["due"] + f["notdue"] + f["new"] == f["n"] - f["leech"] and t["all"] == 0 and t["uns"] == 0, (f, t))
     js = open(os.path.join(REPO, "due_crew", "magicpage", "magic.js")).read()
-    check("the page: the four tiles, in Sam's words", all(w in js for w in ("Study now", "Schedule ahead", "Make a new filtered deck", "Unsuspend")))
+    check("the page: the four tiles, in our words", all(w in js for w in ("Study now", "Schedule ahead", "Make a new filtered deck", "Unsuspend")))
     check("the page: Study all N sends study with all", "'Study all ' + n(T.all), 'study', { all: true }" in js)
 
 
@@ -654,7 +651,7 @@ def test_put_on_days():
 
 
 def test_days_from_the_words_v399():
-    """3.9.9 (Sam: "spread things out across a period of time"): a period in
+    """3.9.9: a period in
     the words was no topic's and the box found nothing ("cardio friday": no
     such tag). Now the days are read off the words and picked in Schedule
     ahead. TODAY is Wed 4 Nov 2026."""
@@ -727,8 +724,7 @@ def test_days_from_the_words_v399():
 
 
 def test_schedule_ahead_spreads_open_cards_v399():
-    """3.9.9 (Sam: unsuspended cards due on one day, put on the next few,
-    stayed put): a plan's date only opens what's suspended, so cards open
+    """3.9.9: a plan's date only opens what's suspended, so cards open
     already never moved. Schedule ahead now holds a later day's new cards
     back and moves its due reviews, in one step that goes back with Undo;
     the picker says so before the press."""
@@ -828,7 +824,7 @@ def test_browse_and_the_page():
     missing = sorted(c for c in sent if not hasattr(MF.Search, "c_" + c) and not (c == "size" and 'a["cmd"] == "size"' in win))
     css = open(os.path.join(REPO, "due_crew", "magicpage", "magic.css")).read()
     rule = re.search(r"body \.dcm select\.b \{[^}]*\}", css)
-    check("round 2 (Sam: \"not clear that this is a drop down\"): a dropdown in the buttons' look keeps its arrow "
+    check("round 2: a dropdown in the buttons' look keeps its arrow "
           "(.b's background would take it)", rule and "background-image" in rule.group(0) and "!important" in rule.group(0), rule)
     check("every command the page sends has a handler (size, the window's own: its height)",
           not missing and len(sent) > 15 and "size" in sent, missing)
@@ -968,8 +964,7 @@ def test_everyday_phrasings_v399():
 
 
 def test_recents_are_short_v3911():
-    """3.9.11 (Sam's screenshot: a pasted list of card ids ran off the window
-    as a Recent): a recent is something to type again, so pasted ids and
+    """3.9.11: a recent is something to type again, so pasted ids and
     anything long aren't kept or shown, and a chip can't outgrow the window."""
     from due_crew import magic_flow as F
     check("recents: a topic is kept; a pasted list of ids, or anything long, isn't (and one an older build kept isn't shown)",
@@ -983,7 +978,7 @@ def test_recents_are_short_v3911():
 
 
 def test_more_magic_v3911():
-    """3.9.11 (Sam, on the mock "Magic Search Sparkle": "build 1, 4, 5, 7"):
+    """3.9.11:
     the answer lands in the box as it's typed; a word no tag or card has
     offers the tag it nearly was; nothing found says what's waiting today;
     Schedule ahead's picked days wear their share. Each moves once, and not
@@ -1047,7 +1042,7 @@ def test_more_magic_v3911():
 
 
 def test_quotes_mean_text_v399():
-    """3.9.9 (Sam: "build quotes mean text"): words in quotes are looked for
+    """3.9.9: words in quotes are looked for
     in the cards themselves, a tag by that name or not; beside a topic, a
     filter or a count they narrow it."""
     r = M.read('"anemia"', TREE, TODAY)
@@ -1129,7 +1124,7 @@ def test_the_window_reads_them_v399():
 
 def test_ways_in():
     from due_crew import board, settings_model, account
-    # 3.9.9 (Sam's pick G2): a field under Anki's deck list, over its "Studied…" line; the You box's head has no link
+    # 3.9.9: a field under Anki's deck list, over its "Studied…" line; the You box's head has no link
     fld = board.magic_field({"accent": "blue"})
     check("the field under the decks: the board's input, the window's magnifier and star, its key, what it says to a screen reader",
           'id="dc-mgf" role="search"' in fld and '<input type="text" aria-label="Magic search: ' in fld and board.MAGIC_KBD in fld
@@ -1142,7 +1137,7 @@ def test_ways_in():
     check("…it moves about twelve seconds, then rests till pointed at; nothing with Reduce motion; no </script> from its words",
           "12000" in fld and "prefers-reduced-motion" in fld and fld.count("</script>") == 1
           and ('placeholder="%s"' % board.MAGIC_PROMPT) in fld)
-    check("…its example stays as it is while the page is up (Sam: cycling through them was confusing and distracting)",
+    check("…its example stays as it is while the page is up",
           "setTimeout(type" not in fld and "function next" not in fld and "mouseenter" not in fld)
     due = None
     on = board._due_html(due, (("plans", "Plans"),), "plans", "", magic=True)
@@ -1175,7 +1170,7 @@ def test_ways_in():
 
 
 def test_and_or_and_both():
-    """Sam: "AND statements and OR statements on tags": "and", "or" and
+    """: "and", "or" and
     commas put another topic beside one (each one's cards); "both … and …",
     AND in capitals (Anki's word) and "with" take only the cards in both."""
     for q in ("anemia or platelets", "anemia OR platelets", "anemia and platelets", "anemia, platelets"):
@@ -1232,11 +1227,10 @@ def test_and_or_and_both():
 
 
 def test_tag_rows_say_their_resource():
-    """Round 2 (Sam, on a topic's tags: "i'm not really able to find the
-    overarching resource which is an important thing")."""
+    """Round 2."""
     row = M.tag_row
     A = " \u203a "
-    check("round 3 (Sam: \"all the way to the last tag\"): its resource, the first #part under its root, and every part after it",
+    check("round 3: its resource, the first #part under its root, and every part after it",
           row("#Big::#QuickRef::04_Pathology::03_Neoplasia::16_Paraneoplastic::01_Skin::*Lesser_Sign")
           == {"res": "Quick Ref", "path": A.join(["Pathology", "Neoplasia", "Paraneoplastic", "Skin", "Lesser Sign"])})
     check("the topic's own name kept at the end", row(R + "#M&M::Cardio::Heart_Failure") == {"res": "M&M", "path": "Cardio" + A + "Heart Failure"})
@@ -1269,8 +1263,7 @@ def test_tag_rows_say_their_resource():
 
 
 def test_the_how_to():
-    """Round 2 (Sam: "the modal introducing for the first time should pop up
-    on the main decks screen"; "awesome and comprehensive and clear")."""
+    """Round 2."""
     from due_crew import board
     h = M.howto("Ctrl+Shift+F")
     check("the how-to: every way to say it, then what it does, then where it lives",
@@ -1352,7 +1345,7 @@ QTAGS = {"#Path::Heme::Anemia": 4, "#Path::Renal::AKI": 3, "#QBank::Step::10234"
 
 
 def test_qids_in_magic_search():
-    """Round 2 (Sam: "this is replacing QBank QID search"): what its window did, here."""
+    """Round 2: what its window did, here."""
     from due_crew.planner import actions
     idx2 = Idx(QTAGS)
     q = {n: idx2.tag_cards(R + "#QBank::Step::" + n) for n in ("10234", "10235", "10236")}
@@ -1489,8 +1482,7 @@ process.stdout.write(JSON.stringify(out));
 
 def test_every_control_pressed():
     """The window's page (magicpage/magic.js) run in node and pressed, as
-    the plan window's is (Sam, 7 Nov: two plan sheets whose yes went
-    nowhere, each with a test that called the command itself): in each
+    the plan window's is: in each
     state the suite gets it into (the how-to, a topic with its tree, the
     days, a plan of mine, a quiz, plan lines, IDs, after Study, Browse's
     cards), every control fired; each message the page sends goes through

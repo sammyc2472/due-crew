@@ -517,7 +517,7 @@ def test_away_flag():
 
 
 def _squad_fixture():
-    """Sam founds orca; Dre, Eve, and Zed exist and aren't members yet."""
+    """the maintainer founds orca; Dre, Eve, and Zed exist and aren't members yet."""
     store = world({"sam": "Sammy", "dre": "Dre", "eve": "Eve", "zed": "Zed"})
     sam = new_client(store, "sam", "Sammy")
     squad = sam.create_squad("  orca  <b> ")
@@ -1140,7 +1140,7 @@ def test_calendar_weeks_and_ledger():
           and len(board.week_labels(span(D(2026, 9, 20)))) == 7)
 
     def crew(labels):
-        """Sam and Dre, every day: 100 each through Sep 13, then Dre does 150."""
+        """the maintainer and Dre, every day: 100 each through Sep 13, then Dre does 150."""
         def day(lb, uid):
             n = 150 if (uid == "dre" and lb >= "2026-09-14") else 100
             return {"studied": True, "reviews": n, "studyTimeMs": 60000}
@@ -1328,8 +1328,7 @@ def test_request_paths_and_errors():
 
 
 def test_studying_dot_by_itself_v3910():
-    """3.9.10 (Sam: "get rid of I'm studying and just have it automatically
-    pushed when someone has synced reviews within the last hour"): my dot
+    """3.9.10: my dot
     for an hour after my last review, set as a sync is made ready and riding
     my week as the button's hour did; Privacy's switch, never for someone
     paused or just showing up; said once at the board's foot; the squad's
@@ -2317,7 +2316,7 @@ def test_together_v210():
     check("ask card: above the bar only while the corner is free, else back to the bar",
           "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj
           and rm.CMD_KEY in fj and "textContent" in fj and fj.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in fj
-          and "bulb.innerHTML" not in fj  # 3.9.0, Sam's "2D": no lightbulb
+          and "bulb.innerHTML" not in fj  # 3.9.0, : no lightbulb
           and "dc-knows-card" in crew_cards.float_js(None) and "dcKnowsOff(true)" in crew_cards.float_js(None)
           and len(crew_cards.float_js(None)) < 400 and len(crew_cards.chip_js(None)) < 300)  # 3.9.1: a remover, not the whole chip
     from due_crew import ui as _ui
@@ -2844,8 +2843,7 @@ def test_not_yet_today_is_unranked():
                         dict(ent("dre", "Dre", {labels[0]: dict(zero)}), live_until="2099-01-01T00:00:00Z"),  # 3.9.12: studying now
                         ent("kai", "Kai", {labels[0]: {"studied": True, "reviews": 10, "studyTimeMs": 60000}})],
             "labels": labels, "tomorrow": "2026-09-28", "pending": []}
-    # 3.9.12 (SC: "if they were here yesterday AND they did some reviews that result in stats then they can be in
-    # the columns, otherwise, to the bottom they go"): in today with nothing counted holds a row only for me or
+    # 3.9.12: in today with nothing counted holds a row only for me or
     # someone studying right now; yesterday's numbers hold one; nothing either day is the bench
     idle = [data["entries"][0], ent("dre", "Dre", {labels[0]: dict(zero)}),
             ent("nia", "Nia", {labels[0]: dict(zero), labels[1]: {"studied": True, "reviews": 30, "studyTimeMs": 60000}}),
@@ -2869,7 +2867,7 @@ def test_not_yet_today_is_unranked():
     check("not yet: dashes, a note with when we last heard, the status, still cheerable; no zeros", "nothing yet as of" in row and "coffee first" in row
           and ">0<" not in row and "0.0%" not in row and "cheerpick:dre" in row)
     kai = page[:page.index(">Kai<")]
-    check("not yet: Kai is above Dre by the order alone; no medals, no places, no dash (3.9.9, Sam: the design mocks' 2)",
+    check("not yet: Kai is above Dre by the order alone; no medals, no places, no dash",
           '<td class="rk"></td>' in kai[kai.rfind("<tr"):]
           and '<td class="rk"></td>' in page[page.rfind("<tr", 0, page.index(">Dre<")):page.index(">Dre<")]
           and not any(m in page for m in ("&#129351;", "&#129352;", "&#129353;")) and re.search(r'class="rk">#\d', page) is None
@@ -3152,8 +3150,7 @@ def check_every_board_click_is_taken():
     due_flow, song_flow, leech_flow, habits_flow, the closet's, Wrapped's,
     Settings' and Pip Party's). A name having a handler isn't enough: a
     plan family's chain that falls through, or values its check refuses,
-    is a control that does nothing (Sam, 7 Nov, in the plan windows: two
-    yeses that sent nothing, each with a test that never pressed it).
+    is a control that does nothing.
     A family's own steps are stood in for, so nothing runs but the choice."""
     import due_crew as dc
     from due_crew import (closet, gamenight_flow, habits_flow, leech_flow, plan_flow, team_flow, due_flow, song_flow, rooms,
@@ -3430,7 +3427,7 @@ def test_room_commands_from_the_card_page_need_the_key():
 
 
 def test_room_card_pops_out_on_the_chips_side_v381():
-    """3.8.1 (Sam): the room's card opened on the right even with the chip on
+    """3.8.1: the room's card opened on the right even with the chip on
     the left. It opens at the chip's end, the chip hides while it's out and
     comes back when it closes (×, a click outside, Tuck, Leave, or the page
     going away), and it moves by its top row, remembered on that side."""

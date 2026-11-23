@@ -1,6 +1,5 @@
-"""3.10.3: Anki's one-letter keys stand down while a box of ours is typed in (Lorry, 23 Nov 2026, Anki 26.09
-on a Mac: "when sending messages to crew members (or most other fields) anki overwrites text and takes it
-as shortcuts (e.g. b for browse)"). The Decks page says when a text box gains and loses the caret
+"""3.10.3: Anki's one-letter keys stand down while a box of ours is typed in (reported on Anki 26.09
+on a Mac: typing a "b" in a message opened Browse). The Decks page says when a text box gains and loses the caret
 (`WATCH_JS`, `duecrew:typing`); meanwhile every enabled shortcut of the main window that is one bare key is
 off, and comes back as it was at the box's blur, at a change of screen, or at the next focus."""
 

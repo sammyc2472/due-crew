@@ -98,11 +98,11 @@ PERIODS = ("today", "week", "decks", "squads")
 # 3.5.0: tabs a person can hide in Settings (per computer); Today always shows
 # 3.8.0: Today and Week are always there; the rest can be hidden in Settings
 HIDEABLE_TABS = (("decks", _later("Decks")), ("squads", _later("Squads")), ("plans", _later("Plans")), ("insights", _later("Insights")),
-                 ("party", _later("Party")))  # 3.9.10: the tab says Party (Sam: "Let's go for party"); the feature is still Pip Party. 3.9.5 (Sam: "make pip party something someone can unshow")
+                 ("party", _later("Party")))  # 3.9.10: the tab says Party; the feature is still Pip Party. 3.9.5
 CREW_VIEWS = (("today", _later("Today")), ("week", _later("Week")), ("decks", _later("Decks")))
 YOU_MORE = (("plans", _later("Plans")), ("insights", _later("Insights")))  # said where they're drawn (draw.you_html)
 PARTY_TAB = ("party", _later("Party"))  # 3.9.5's last round: after Insights, for those it's open to (gamenight_flow.shown)
-BETA_TABS = ()  # a tab named here says Beta (Pip Party did, 3.9.5 to 3.9.10: Sam, "we can take pip party out of beta")
+BETA_TABS = ()  # a tab named here says Beta (Pip Party did, 3.9.5 to 3.9.10: )
 
 
 def _tab_word(k, lb):
@@ -456,8 +456,7 @@ def build_rows(entries, labels, tomorrow, period, cfg):
                 row["studied_today"] = True
                 fresh.append(row)
             elif _showed(yesterday) and cfg.get("show_stale", True) and not e["you"]:
-                # 3.9.12 (SC: "if they were here yesterday AND they did some reviews that result in stats
-                # then they can be in the columns, otherwise, to the bottom they go"): yesterday's numbers
+                # 3.9.12: yesterday's numbers
                 # hold a row, in today with nothing yet or not; a day of nothing doesn't
                 row.update(_day_metrics(yesterday))
                 row.update(_day_flags(today or yesterday, today_lb))
@@ -639,5 +638,5 @@ def _short_day(iso):
     except ValueError:
         return ""
     return _t("{day} {month}", day=d.day, month=_month(d.month))
-# the board's own font (Sam: "consistent with our normal fonts"): a sign is the board's words, bold
+# the board's own font: a sign is the board's words, bold
 BOARD_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"

@@ -228,7 +228,7 @@ def test_card():
            for i in range(150)]
     long = board._plan_card_html(_card(path={"lessons": big, "first": day(0), "end": {"name": "", "day": day(149), "event": False}}))
     mid = board._plan_card_html(_card(path={"lessons": big[:45], "first": day(0), "end": None}))
-    check("card: a long plan folds what's far ahead (3.9.6, Sam's pick A); with no quiz or exam, no diamond and its last day",
+    check("card: a long plan folds what's far ahead; with no quiz or exam, no diamond and its last day",
           'class="ppath fold"' in long and "<span>145 to come</span>" in long and "<span>40 to come</span>" in mid
           and "<em " not in long and f"<span>Ends {board._ins_dname(day(149), long=True)}</span>" in long, long[:600])
     two = board._plans_html({"cards": [_card(), _card(id="p2", name="Micro", title="Micro · Kim’s plan", behind=None,
@@ -239,8 +239,7 @@ def test_card():
 
 
 def test_long_path_folds_v396():
-    """3.9.6 (Sam: "if a plan is long, then this kinda seems overwhelming";
-    his pick A, past 16 sets): a long path shows one by one what needs me
+    """3.9.6: a long path shows one by one what needs me
     (every set behind, the two before today's, today's, the next four, and a
     set a joy plays on) and folds each run of the rest, done, to come or
     skipped, into one piece with its count under it; a click on a fold opens
@@ -605,8 +604,7 @@ def test_behind_sheet_glue():
 
 
 def test_cards_i_suspend_are_set_aside_v396():
-    """3.9.6 (Sam: "if i've chosen to suspend something after the plan opens
-    it, don't want it to make me behind"): a new card I suspend on a date that
+    """3.9.6: a new card I suspend on a date that
     opened here is set aside: not left, not behind, in none of its numbers,
     nor in the day's Left. One the plan holds (Hold back) still counts; a
     date all suspended again (Edit › Undo) is closed, not set aside; a date
@@ -716,9 +714,7 @@ def test_follow_and_new_commands():
 
 
 def test_catching_up_v3910():
-    """3.9.10, catching up (Sam, 12 Nov: "once someone is behind a certain
-    amount, we automatically pause… the options should be study or ignore",
-    "I don't want the dates moved", "trust the user to understand our UI"):
+    """3.9.10, catching up:
     three days behind, or one a week old, and a new day waits in line
     instead of opening; each day owed is a row with Study and Ignore; the
     list clear, the plan opens its days again. The plan's dates never move."""
@@ -744,7 +740,7 @@ def test_catching_up_v3910():
           and "duecrew:planlinestudy:p1:l2" in part and "duecrew:planskip:p1:l4" in part and "duecrew:planlineoff:p1" in part
           and "31 left" in part and "20 new" in part and "12 new &middot; waiting" in part and "Inflammation &lt;b&gt;" in part
           and "Behind&hellip;" not in h and h.index('class="pln"') < h.index('class="pwk'), part[:400])
-    check("card: no words explaining it (Sam: trust the user)", "carries on" not in h and "instead of" not in h and "land in" not in h)
+    check("card: no words explaining it", "carries on" not in h and "instead of" not in h and "land in" not in h)
 
     # the engine
     conn = sqlite3.connect(":memory:")
@@ -825,7 +821,7 @@ def test_catching_up_v3910():
 
 
 def test_own_pace_matches_v3910():
-    """3.9.10 (Sam: the own-pace card should "match"): what I opened and
+    """3.9.10: what I opened and
     haven't finished is the same list, Study or Ignore on each; Up next
     stays; nothing measures me against the plan's dates any more."""
     ow = {"mode": "ready", "open": [{"uid": "l2", "name": "2 · Inflammation <b>", "left": 31}, {"uid": "l3", "name": "3 · Neoplasia", "left": 84}],

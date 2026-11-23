@@ -246,7 +246,7 @@ describe("the admin's pool", () => {
     expect(stats).toMatchObject({ players: 2, squads: 1 });
     expect(stats.squares[0].people).toBe(2);
     expect(stats.squares[1].people).toBe(1);
-    // two active: a share of two is both of them, so Sam alone does only the
+    // two active: a share of two is both of them, so the maintainer alone does only the
     // squares that need one person; square 0 has both, so it's done whatever it needs
     const done = card.squares.map((sq, i) => i === 0 || sq.need === 1 ? 1 : 0);
     expect(stats.squares.map((x: any) => x.squads)).toEqual(done);

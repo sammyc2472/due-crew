@@ -209,7 +209,7 @@ def _a_bar(context):
     return name in ("TopToolbar", "Toolbar") or name.endswith("BottomBar")
 
 
-# 3.9.1 (Sam: "when cheering, the full background doesn't grey out"): while
+# 3.9.1: while
 # a window is open over the board (the Cheer window, a profile card, a
 # sheet), the top bar and the bottom bar, pages of their own, wear the
 # board's backdrop too, and a tap on either is Esc on the board, as a tap on

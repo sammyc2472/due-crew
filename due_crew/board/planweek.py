@@ -29,7 +29,7 @@ def _day_name(d):
 
 
 def _week_html(card, pid):
-    """This week (or the one ‹ › moved to). Round five, Sam's pick A: seven
+    """This week (or the one ‹ › moved to). Round five, the maintainer's pick A: seven
     small days, each its bar and what's left (amber when it's behind), a
     quiz's name under its day; the names are in a day's details, which open
     under the week on its click with every date it holds, whole (its
@@ -184,8 +184,7 @@ def _why_shut(pid, uid, why):
 
 
 def _day_study(pid, d):
-    """3.9.6 (Sam: "study all for the day ... not just for today for past
-    days too ... when you've clicked on one of the days"): the day's details
+    """3.9.6: the day's details
     have one Study, in their head: a Due Crew deck of what the day asks now,
     its sets' new cards not seen yet and theirs due today (today: every set
     of the plan's due today too), never a review ahead. On a day with a set
@@ -229,13 +228,12 @@ def _topic_a(pid, uids, name, i):
 
 
 def _topic_go(pid, uids, name, i):
-    """3.9.5 (Sam: "for the filtered decks opening from a plan especially need
-    that option to browse or make the filtered deck"): a plan's topic on
+    """3.9.5: a plan's topic on
     Today: its name shows its two ways beside it, Study (its new cards and
     the ones due today, a deck of its own) and Browse."""
     e = _html.escape
     tid = "dc-tp-" + _re.sub(r"[^A-Za-z0-9]", "", f"{pid}-{uids}") + f"-{int(i)}"
-    # 3.9.5 (Sam: "they should underline and show that they are being selected"): the name stays
+    # 3.9.5: the name stays
     # underlined while its two ways show; the one clicked stays marked
     pick = "this.parentNode.querySelectorAll('a').forEach(function(y){y.classList.remove('on')});this.classList.add('on');"
     return (f'<a class="tp dc-tpn" href="#" onclick="var x=document.getElementById(\'{tid}\');'

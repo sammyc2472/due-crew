@@ -114,7 +114,7 @@ aqt.qt, aqt.utils, aqt.theme = qt, utils, theme
 
 from due_crew.backend import api  # noqa: E402
 
-# ---- a signed-in Sam with a crew, a knock, and two squads ----
+# ---- a signed-in the maintainer with a crew, a knock, and two squads ----
 TODAY = datetime.date.today().isoformat()
 
 for uid, name in (("sam", "Sammy"), ("igk", "igk"), ("ameya", "Ameya"), ("adina", "Adina"),
@@ -552,7 +552,7 @@ def main(out):
             raise RuntimeError(f"follow: today's lesson didn't reach on_followed {took!r}")
         dlg.close()
         STORE.follows.pop((l_pid, "sam"), None)
-        STORE.plans.pop(l_pid, None)  # the renders after this one count igk's and Sam's plans
+        STORE.plans.pop(l_pid, None)  # the renders after this one count igk's and the maintainer's plans
         # 3.8.0: at my own pace: the late-start question goes, the box under it shows, the line says so
         dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=code, today=today.isoformat(), swap_prompt=lambda sw, n: True)
         settle()
@@ -618,7 +618,7 @@ def main(out):
         if not dlg.get_deck.isHidden():
             raise RuntimeError("follow: a plan with no link, or a deck here, says nothing of it")
         dlg.close()
-        # 3.6.5, P6: Send feedback to Sam
+        # 3.6.5, P6: Send feedback to the maintainer
         from due_crew.ui.feedback_dialog import FeedbackDialog
         dlg = FeedbackDialog(None, CLIENT, "3.6.5")
         dlg.box.setPlainText("The Plans tab is great but I wish I could see next week without the arrows.")

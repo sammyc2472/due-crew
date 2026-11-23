@@ -1,7 +1,7 @@
 """The scrapbook, in the board's place: a year page, then months of keepsakes.
 
 A part of the board (due_crew/board/, 3.9.10): see its __init__. It took
-Wrapped's place (Sam: "let's have it replace wrapped"): the year's line and
+Wrapped's place: the year's line and
 numbers open each year's page, and the year picture card is its Share."""
 
 import html as _html
@@ -171,7 +171,7 @@ def _keepsake(x, people, pip, my_look):
 
 
 def _scatter(x):
-    """3.9.12 (SC: a month's drawings "spread around that month", scattered like a real scrapbook's page): how one
+    """3.9.12: how one
     keepsake lies, from its own key so it lies the same at every draw: a tilt, a nudge, how wide, which side of its
     column. Never over another's words: the nudge is smaller than the gap between them."""
     h = int(_scrap.key(x), 16)

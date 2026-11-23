@@ -252,8 +252,7 @@ body .dcp .b.bad:disabled, body .dcp .b.bad:disabled:hover { color: #c62828; }
 .dcp .calp .cd.on, .dcp .calp .cd.on:hover { background: var(--dc-accent); color: var(--dc-accent-ink); font-weight: 700; }
 .dcp .calp .cf { display: flex; justify-content: flex-end; margin-top: 6px; }
 
-/* 3.9.6, after the first click test (Sam: "some of the colors don't pop / adequately show hierarchies /
-   buttons / areas of text input especially inside the more grey areas"). Three layers, each its own:
+/* 3.9.6, after the first click test. Three layers, each its own:
    the window white; its panels the well, edged; anything typed in or picked white with a real edge
    wherever it sits (a well box on a well panel was no box at all); buttons white with a firmer edge, a
    tint on hover; the panels' labels a step darker than small print. */

@@ -146,8 +146,7 @@ POP_JS = r"""
 """
 
 
-# 3.9.1 (Sam: "the modal for status update is still native, make sure all
-# modals are in our style"): a question before a step, one line, or one of a
+# 3.9.1: a question before a step, one line, or one of a
 # few, on the Decks screen in the Cheer window's look (sheets.py asks; Qt
 # answers off the board). view: {id, title, text (plain; its line breaks
 # kept), yes, no, danger (a step that can't be taken back: the button in the
@@ -369,8 +368,7 @@ def sheet_js(view):
     return POP_JS + SHEET_JS.replace("__VIEW__", _json.dumps(data).replace("</", "<\\/"))
 
 
-# 3.9.7, round 2 (Sam: "the modal introducing for the first time should pop up
-# on the main decks screen"): Magic search's how-to, once a person (the account's
+# 3.9.7, round 2: Magic search's how-to, once a person (the account's
 # magic_seen), over the Decks screen in the sheets' look. Its words are
 # magic.HOWTO's, the window's ? the same; a try opens the window with it.
 # It waits for the board to be clear (no window, no show over it) and for the

@@ -289,7 +289,7 @@ def _squads_html(view, cfg, crew_by=None):
             rank = ""
             note += ' <span class="la faded">&#10003;</span>'  # showed up: counted, not ranked (3.9.10: in the name's line)
         else:
-            rank = ""  # 3.9.9 (Sam: "squads should definitely lose those places"): the order says it, as on Crew
+            rank = ""  # 3.9.9: the order says it, as on Crew
         if show_up:
             body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
                      f'<td class="nm">{link}{note}</td>'

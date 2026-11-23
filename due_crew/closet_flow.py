@@ -11,7 +11,7 @@ finds out what you've done:
   with nothing left due, cards you added, bingo lines.
 
 3.8.22: the tallies keep a year too ("years": {"2026": {...}}), for your
-Wrapped (Sam: start counting now): Fifteens and the hours they began,
+Wrapped: Fifteens and the hours they began,
 rooms, cheers sent and got, crew days, bingo lines, and the days each thing
 Pip has on was worn. Six years at most; nothing of it is sent.
 
@@ -285,8 +285,7 @@ def keep_doodles(cheers, entries, uid=None):
 
 def clear_fridge():
     """Signed out: the drawings are that account's, so they're off the screen (fridge() shows them to their owner
-    alone) and wait where they hung for it to sign in again. 3.9.12 (SC: "does the scrapbook automatically take
-    things off the decks screen? because it did that for me"): 3.9.10 moved them all into the scrapbook here, their
+    alone) and wait where they hung for it to sign in again. 3.9.12: 3.9.10 moved them all into the scrapbook here, their
     places lost, and a sign-in that ran out did it to people who never chose to sign out. A different account
     signing in sends them to their owner's scrapbook (_make_way). One with no owner on file can't be kept for
     anyone: it goes, as before."""

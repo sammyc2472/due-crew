@@ -465,7 +465,7 @@ def _today_deck(col):
 def notes():
     _pc, st = _day_state()
     n = len(st.get("recovered") or [])
-    # 3.9.3 (Sam): one card is "it": "Recovered 1 leech as a new card · See it"
+    # 3.9.3: one card is "it": "Recovered 1 leech as a new card · See it"
     text = _t("Recovered {n} leeches as new cards", n=f"{n:,}") if n != 1 else _t("Recovered 1 leech as a new card")
     return [{"key": "recovered", "text": text, "go": _t("See them") if n != 1 else _t("See it")}] \
         if n and "recovered" not in (st.get("dismissed") or []) else []
@@ -581,7 +581,7 @@ def leech_sets(rows, limits, out=()):
     note id, lapses, queue, its home deck)] of notes tagged leech whose
     card lapsed. A suspended one always; one Anki kept in my reviews (Tag
     Only) at its deck's leech count (limits: {deck id: (leech count,
-    action)}, leech_flow._limits; 3.9.3, Sam's pick A: one meaning of a
+    action)}, leech_flow._limits; 3.9.3, the maintainer's pick A: one meaning of a
     leech, as Insights' Leeches counts them), or at 8 lapses (Recover's
     line until 3.9.3); extra: the ones only the deck's count takes. None I
     left out (Leeches' Leave it out). Pure."""
@@ -662,7 +662,7 @@ def _left_out():
 def morning(c):
     """Once per Anki day, at the refresh: recover leeches when asked. Only on
     the Decks screen: mid-review its undo step would sit on my last answer
-    (as the plans' morning waits for Decks). 3.9.3 (Sam's pick A): by each
+    (as the plans' morning waits for Decks). 3.9.3: by each
     deck's own leech count. The first morning that would take leeches
     Recover's old line (8 lapses) left in my reviews, it takes what it
     always took and asks once about the rest (this profile's plans.json,
@@ -772,7 +772,7 @@ def after_refresh():
 
 
 def exam_gone(c):
-    """3.9.5 (Sam: "when an exam date passes let's remove it"): the Anki day
+    """3.9.5: the Anki day
     after my exam, its date comes off as × takes it (settings_model's
     setexam: kept as my last exam, so the next one's scope starts after
     it); the crew stops seeing it with the next sync. True when it went."""

@@ -5,7 +5,7 @@ answer dropped when the profile or the account changed since
 (app.generation). Nothing typed is sent or kept but the last few finds,
 on this computer (cfg "magic_recent").
 
-What it does with the cards, Due Crew's own steps (Sam's picks):
+What it does with the cards, Due Crew's own steps:
 - Study now: a Due Crew filtered deck of them (New and due, or All of
   them), suspended ones opened first (never a leech), one undo step; it
   stays till it's studied through (a card goes home once done) and an
@@ -606,7 +606,7 @@ class Ops:
         return out
 
     def spread(self, shares):
-        """Schedule ahead on cards that are open already (Sam, 10 Nov: unsuspended
+        """Schedule ahead on cards that are open already (the maintainer, 10 Nov: unsuspended
         cards due on one day, put on the next few, stayed where they were: a date
         only opens what's suspended). shares: [(days from today, [new], [rev])].
         A later day's new cards are held back (suspended: its date opens them that
@@ -674,7 +674,7 @@ class Ops:
 
     def note_recent(self, text):
         t = " ".join(str(text or "").split())
-        # 3.9.11 (Sam's screenshot: a pasted list of card ids ran off the window as a Recent): a recent is something
+        # 3.9.11: a recent is something
         # to type again, so pasted ids and anything long aren't kept (they were, cut at 200 characters, mid-id)
         if not t or "\n" in str(text) or not _recent_ok(t):
             return
@@ -803,7 +803,7 @@ class Search:
                     self.r = again
         self.flip, self.tag_off, self.seg_off = set(), set(), set()
         self.filters, self.filters_set = [dict(f) for f in self.r["filters"]], False
-        # Sam: "seeing the tag tree is really important": the first topic's tree open, the rest a tap away
+        # : the first topic's tree open, the rest a tap away
         first = next((g["seg"] for g in self.r["groups"] if g["on"]), None)
         self.open_segs = {first} if first is not None else set()
         self.how = "all" if (self.r["kind"] in ("ids", "search") or self.filters or self.cids_in) else "nd"
@@ -830,7 +830,7 @@ class Search:
         last = (today + datetime.timedelta(days=DAYS - 1)).isoformat()
         days = [d for d in sp["days"] if today.isoformat() <= d <= last]
         more = len(days) < len(sp["days"])
-        if more and not sp.get("per"):  # longer than the picker shows: the fill-in's stretch (Sam: "add the fill in option")
+        if more and not sp.get("per"):  # longer than the picker shows: the fill-in's stretch
             self.c_fill(to=sp["days"][-1], first=sp["days"][0])
             self.mode, self._spread_on = "days", True
             return
@@ -876,7 +876,7 @@ class Search:
         return M.ticked_tags(self.r, self.offs(), self.tag_off)
 
     def joined_cards(self, deck_q):
-        """Sam: "AND statements and OR statements on tags": each term's topics'
+        """: each term's topics'
         cards in all of them ("both heart failure and pharm"), the terms'
         together ("…, or renal"). A topic no tag says is its words in the
         cards' text; one whose chips are all off, none (nothing is in both)."""
@@ -1018,7 +1018,7 @@ class Search:
 
     def qids_view(self):
         """What the QBank QIDs window said (3.9.3 to 3.9.6; Magic search has it
-        since 3.9.7, round 2, Sam: "this is replacing QBank QID search"): how
+        since 3.9.7, round 2, ): how
         many are questions, the bank when two are close (or I picked one), and
         Their topics (3.9.5): the map's parts they're in, each with a Study of
         what I missed there. None unless it's QIDs."""
@@ -1117,12 +1117,10 @@ class Search:
             v["plantext"] = self.plantext_view()
         return v
 
-    # -- round 3 (Sam: "giving the user enough information about what has been found so that they can take the
-    # appropriate action"): one row a typed topic and its tree, what was found, four tiles --
+    # -- round 3: one row a typed topic and its tree, what was found, four tiles --
 
     def topics_view(self):
-        """One row a typed topic: its ticked names as one (Sam: "combine things
-        with similar names so long as the tag goes all the way to the end"),
+        """One row a typed topic: its ticked names as one,
         their cards, the near names as Also under it, and its tree when open:
         each tag to its last part, under where it's from, a resource's cards
         once each. [{seg, name, on, can, n, ntags, open, join, also, tree}]."""
@@ -1209,8 +1207,7 @@ class Search:
         return f
 
     def tiles_view(self, f):
-        """Study now, Schedule ahead, Make a new filtered deck, Unsuspend (Sam's
-        four), the one that fits filled: Schedule ahead when it's more than my
+        """Study now, Schedule ahead, Make a new filtered deck, Unsuspend, the one that fits filled: Schedule ahead when it's more than my
         usual day, else Study now (Unsuspend when only that's left to do)."""
         if not f:
             return None
@@ -1235,7 +1232,7 @@ class Search:
         return M.howto(board.MAGIC_KBD, self._tries.get(self.did))
 
     def none_view(self, cids):
-        """3.9.11 (Sam's picks 4 and 5 on the mock "Magic Search Sparkle"):
+        """3.9.11:
         words that found no tag and no card aren't a dead end. mean: the
         tags' words they nearly are, each the box's text with that word put
         right, what it's called and its cards ("Platelets?", 14); waiting:

@@ -156,7 +156,7 @@ class FollowDialog(QDialog):
         self.best_hint = role(QLabel(_t("best match of your decks")), "note")
         drow.addWidget(self.best_hint)
         root.addLayout(drow)
-        # 3.10.2 (SC): a plan's deck is shared with my crew, said here before Follow
+        # 3.10.2: a plan's deck is shared with my crew, said here before Follow
         self.share_note = note(QLabel(_t("Your crew sees this deck while you’re on the plan: your progress and the cards you know. Crew › Decks turns it off.")))
         self.share_note.setWordWrap(True)
         root.addWidget(self.share_note)

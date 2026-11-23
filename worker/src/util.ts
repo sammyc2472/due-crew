@@ -13,7 +13,7 @@ export interface Env {
   EMAIL?: { send(message: { to: string; from: string | { name: string; email: string }; subject: string; text: string; replyTo?: string }): Promise<unknown> };
   /** Where an answer to a feedback reply goes (its Reply-To): the admin's own mailbox. Unset: none. */
   FEEDBACK_REPLY_TO?: string;
-  FEEDBACK_TO?: string;  // 3.10.1: where a copy of each feedback is mailed (Sam's mailbox); unset: the admin page only
+  FEEDBACK_TO?: string;  // 3.10.1: where a copy of each feedback is mailed; unset: the admin page only
   /** Where reports go (POST /reports). Unset: the log counts them, and they go nowhere. */
   REPORT_TO?: string;
   /** 3.2: comma-separated uids that may read GET /admin/stats. */

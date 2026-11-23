@@ -70,7 +70,7 @@ def _you_insights(ins):
     did = int(ins.get("did") or decks[0]["did"])
     on = ' class="on"'
     cur = next((d for d in decks if int(d["did"]) == did), decks[0])
-    # 3.8.0 (Sam): the deck's name always shows: one deck, its name; more, the picker
+    # 3.8.0: the deck's name always shows: one deck, its name; more, the picker
     pick = (f'<b class="ideck" title="{e(str(cur.get("full") or cur["name"]))}">{e(str(cur["name"]))}</b>'
             if len(decks) < 2 else '<div class="dc-sw">' + "".join(
                 f'<a{on if int(d["did"]) == did else ""} href="#" title="{e(str(d.get("full") or d["name"]))}" '
@@ -87,7 +87,7 @@ def _you_insights(ins):
             else _t("Add exam date"))
     off = (f' <a class="q" href="#" title="{_t("Take your exam date off")}" aria-label="{_t("Take your exam date off")}" '
            f'onclick="{_pycmd("setexam:off")}">&times;</a>' if x else "")
-    # 3.9.5 (Sam: "removing an exam date and then clicking add exam date makes anki quit"): the day is
+    # 3.9.5: the day is
     # picked in a Qt calendar (exampick), not the page's own date picker, which the board's redraw on its
     # change could pull out from under itself
     ctx = (f'<span class="iexam" title="{_t("Your exam date. Your crew sees it for the two weeks before.")}">'
@@ -268,8 +268,7 @@ def _habits_html(did, h):
                       lo=_hs_pts(sp["lo"]), hi=_hs_pts(sp["hi"]))
         k = int(h.get("slow") or 0)
         go = f'<a href="#" class="go" onclick="{_pycmd(f"inshabits:{did}:slow")}">{_t("See them")}</a>' if k > 0 else ""
-        # 3.9.5 (Sam, of "20% of slow right answers missed next time · 14% otherwise": "this doesn't make
-        # much sense"): the number is this week's slow ones, the bars say why
+        # 3.9.5: the number is this week's slow ones, the bars say why
         tiles += (f'<div><div class="big">{k:,}<small>{_t("right, but slow, this week")}</small></div>'
                   f'{_hs_two_svg(quick, slow, said)}<div class="hs-cap">{_t("missed next time")}</div>{go}</div>')
     if isinstance(sit, dict):
@@ -389,7 +388,7 @@ def _ahead_weeks(xs):
 
 
 def _ins_ahead(did, a, deck_name=""):
-    """3.9.2 (Sam's picks: Your week becomes Reviews ahead): the chart of
+    """3.9.2: the chart of
     the next six weeks and its line. 3.9.10: nothing under it (the ways to
     pick from and Do it went); a stop of new cards that's already running
     keeps its chart, what it does, and Turn new cards back on.
@@ -433,7 +432,7 @@ def _ins_ahead(did, a, deck_name=""):
                              1 if one else 2, n=_ins_r(n), day=till, of=_ins_r(ph))
         return " " + _tn("{n} new card waits till {day}.", "{n} new cards wait till {day}.", 1 if one else 2, n=_ins_r(n), day=till)
 
-    # 3.9.10 (Sam: "just keep the graph and eliminate the call to action"): the one chart, the way it is now.
+    # 3.9.10: the one chart, the way it is now.
     # The ways to pick from and Do it went; a stop that's running keeps its line and its way back
     blocks, acts = "", ""
     for w in ways:
@@ -515,7 +514,7 @@ def _ins_leech_row(did, c):
         tip_ = f' title="{title}"' if title else ""
         return f'<a class="{cls}" href="#"{tip_} onclick="{_pycmd(f"insleech:{did}:{a}:{cid}")}">{label}</a>'
     tip, knows = c.get("tip") or [], c.get("knows") or []
-    # 3.9.10 (Sam: Insights is "a data only zone", nothing here adjusts a card): a crewmate's tip or
+    # 3.9.10: a crewmate's tip or
     # who has it down stay (they change no card); Bring back, Learn it fresh, Leave it out and Edit went
     if tip:
         main = act("tip", _t("{name}&rsquo;s tip", name=e(tip[0]["name"])), "sl-bt tip")
@@ -534,7 +533,7 @@ LEECH_SHOW = 12  # cards a group lists; the rest are in Browse
 
 
 def _ins_leeches(did, L, deck_name=""):
-    """3.9.2 (Sam's picks: leeches, one button per card, sorted by danger):
+    """3.9.2:
     in Insights' place, Insights › Leeches with the way back; the counts,
     Bring all back and Browse; the cards Anki stopped showing, then the
     ones a miss from it, then the ones Anki tagged and kept showing (Tag
@@ -570,7 +569,7 @@ def _ins_leeches(did, L, deck_name=""):
 
 
 def _ins_scope(aim):
-    """3.9.2 (Sam's pick C1-A): what my exam covers, said once: since my
+    """3.9.2: what my exam covers, said once: since my
     last exam (the default, when it was in the last 10 weeks), since a day
     I picked, or the whole deck; Change picks a day (the date picker),
     and the other way back is a link."""
@@ -603,7 +602,7 @@ def _insights_html(did, v):
     if isinstance(v.get("leech"), dict):
         return _ins_leeches(did, v["leech"], v.get("deck_name"))  # 3.9.2: the leeches view, in Insights' place
     out = ""
-    # 3.9.5 (Sam: "this line is extra because QIDs is in the header"): no QBank QIDs line here; the head has it
+    # 3.9.5: no QBank QIDs line here; the head has it
     r = v.get("right") or {}
     now, before = r.get("now") or [0, 0], r.get("before") or [0, 0]
     if now[1] >= 50:
@@ -643,7 +642,7 @@ def _insights_html(did, v):
                 f'<div class="t" title="{whose}">'
                 + _t("{cards} Anki won&rsquo;t show you before {day}", cards=cards, day=when) + '</div>'
                 f'{_ins_scope(aim) if mine else ""}'
-                # 3.9.5 (Sam's FSRS rule): Study only before a date, my exam or a plan's event
+                # 3.9.5: Study only before a date, my exam or a plan's event
                 + (f'<a class="bt" href="#" title="{_t("A filtered deck of them, the most missed first")}" '
                    f'onclick="{_pycmd(f"insstudy:{did}:h")}">{_t("Study {n} early", n=f"{len(hero):,}")}</a>'
                    if aim.get("name") else "") + '</div>')
@@ -656,7 +655,7 @@ def _insights_html(did, v):
     if int(v.get("behind") or 0) and v.get("pid"):
         out += '<div class="iline">' + _t("{n} new cards behind", n=f'{int(v["behind"]):,}') + '</div>'  # (3.9.10: said; You › Plans has what to do)
     rows = v.get("rows") or []
-    dated = bool((v.get("aim") or {}).get("name"))  # 3.9.5 (Sam's FSRS rule): a Study only before a date
+    dated = bool((v.get("aim") or {}).get("name"))  # 3.9.5: a Study only before a date
     if rows:
         # 3.9.2 (the students: "not right yet" and "forgot" read alike): Anki's own Stats' words
         out += (f'<div class="isec"><div class="ik">{_t("Not sticking yet")}<span>&nbsp;&middot; {_t("last 2 weeks")}</span>'
@@ -708,7 +707,7 @@ def _insights_html(did, v):
              else _tn("{n} leech still in your reviews", "{n} leeches still in your reviews", kept, n=b(kept))) if kept else "",
             (_t("{n} one miss away", n=b(near)) if lee or kept  # alone, it says of what
              else _tn("{n} card one miss from a leech", "{n} cards one miss from a leech", near, n=b(near))) if near else "") if x)
-        one = lee + near + kept == 1  # 3.9.3 (Sam): one card is "it"
+        one = lee + near + kept == 1  # 3.9.3: one card is "it"
         out += f'<div class="iline">{said} &middot; <a href="#" onclick="{_pycmd(f"insleeches:{did}")}">{_t("See it") if one else _t("See them")}</a></div>'
     if not out:
         return f'<div class="tq0">{_t("Insights fill in after a week of reviews.")}</div>'

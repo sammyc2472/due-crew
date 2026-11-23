@@ -76,8 +76,7 @@ def _on_js(handled, message, context):
         app.board_eval("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
         return (True, None)
     if message.startswith("duecrew:knows") or message.split(":")[1:2] == ["hookadd"]:
-        # 3.2: the chip in the reviewer's bottom bar, or its card above it. 3.9.12 (SC: "the add a hook
-        # for last time button isn't working"): hookadd is the chip's too, and wasn't named here, so
+        # 3.2: the chip in the reviewer's bottom bar, or its card above it. 3.9.12: hookadd is the chip's too, and wasn't named here, so
         # Add a hook and a hook's Edit reached nothing since 3.9.11
         try:
             parts = message.split(":")
@@ -103,7 +102,7 @@ def _on_js(handled, message, context):
     run = _board_cmd(cmd, parts)
     if run is None:
         print(f"due crew: unknown command {message!r}")
-        # 3.9.9: for Sam, a name of the table's with values that didn't pass, or cmd:unknown (a
+        # 3.9.9: for the maintainer, a name of the table's with values that didn't pass, or cmd:unknown (a
         # name it hasn't can come from a card's script: never said)
         errs.count(errs.cmd_code(cmd, BOARD_CMDS))
     else:

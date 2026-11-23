@@ -61,7 +61,7 @@ def _play_cheers():
         drew = dict(drew, ni=with_notes.index(drew) if drew in with_notes else -1)
     doodle = board.doodle_landing(drew, _state["entries"], c)
     show = None
-    if pips and not (doodle and doodle.get("pip")):  # 3.9.0: a show over the whole Decks screen, a different one each time (Sam)
+    if pips and not (doodle and doodle.get("pip")):  # 3.9.0: a show over the whole Decks screen, a different one each time
         show, bag = shows.next_show(c.get(shows.BAG_KEY))
         save_cfg(dict(c, **{shows.BAG_KEY: bag}))
     app.board_eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season, pips=pips, show=show, doodle=doodle))
@@ -79,7 +79,7 @@ def cheer_allowed(emoji):
 
 
 def _cheer_menu(to_uid):
-    """The Cheer window. 3.9.1 (Sam): on the Decks screen in the board's own
+    """The Cheer window. 3.9.1: on the Decks screen in the board's own
     look (board.cheer_overlay_js), not a Qt window; its Send comes back as
     duecrew:cheersend (send_from_window)."""
     entry = next((e for e in (_state["entries"] or [])

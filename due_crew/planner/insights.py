@@ -1,11 +1,9 @@
-"""Round five's Insights tab (docs/planner.md; Sam: "workload, content, the
-amount of the deck relative to the whole"): what a plan asks and holds,
+"""Round five's Insights tab (docs/planner.md; ): what a plan asks and holds,
 worked out. Workload: each week's new cards a study day and the reviews
 they bring a day (a typical card's, view.week_asks), from the plan's
 first week to its end. The deck: how many of its cards the plan holds,
 and of each part of it, the deck split as the board's topic map splits
-it (Sam: "the same organization problem we had for the bento", a first
-cut by # and ^ parts showed odd resources), the part the plan is mostly
+it, the part the plan is mostly
 in split again. What's in it: what each quiz or exam tests,
 the biggest dates, cards on two dates, leeches. Pure: the plan doc and a
 DeckIndex's cards, no Anki, no Qt; names and counts only."""

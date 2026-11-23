@@ -333,7 +333,7 @@ def test_floor_view():
         v = SF.floor_view(ents, c)
         check("my song on the decks; Pip off says so", v["me"] == SONG and v["pip"] is False)
         check("no board (signed out): no floor", SF.floor_view(None, c) is None)
-        # 3.9.12 (Sam: "disappear after 3 days"): a song is on the floor the day it's picked and the two after
+        # 3.9.12: a song is on the floor the day it's picked and the two after
         check("a song's days: 0 the day it's picked; alive through day 2, gone on day 3; no day, a bad day: gone",
               songs.age(SONG, "2026-11-02") == 0 and songs.alive(SONG, "2026-11-04") and not songs.alive(SONG, "2026-11-05")
               and not songs.alive(dict(SONG, at=""), "2026-11-02") and not songs.alive({k: v for k, v in SONG.items() if k != "at"}, "2026-11-02")

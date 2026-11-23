@@ -1,5 +1,4 @@
-"""Your plans, as an HTML window in the board's look (Sam's pick after
-"Plans end to end": the plan maker as a page, beside your decks). Its
+"""Your plans, as an HTML window in the board's look. Its
 logic is core.PlanCore's, the same the Qt window (window.py) runs; its
 clicks and view are webface's; its page is webpage's (page/plan.html,
 .css, .js, inlined). This is the Qt shell: a dialog, Anki's web view,
@@ -57,8 +56,7 @@ class PlanWeb(QDialog, WebFace):
         QApplication.clipboard().setText(text)
 
     def to_calendar(self, name, text):
-        """Add to my calendar (Sam's pick: straight to the calendar, no save
-        window, which on a Mac is the system's own, in Liquid Glass): the
+        """Add to my calendar: the
         file in Downloads (the same name each time: no pile of copies), then
         opened with the computer's calendar app, which asks which calendar
         to add it to. A one-time import: a later change to the plan isn't in

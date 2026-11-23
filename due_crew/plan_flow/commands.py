@@ -27,7 +27,7 @@ from .joys import joy_share, joy_x
 # ---- board commands ----
 
 def exam_answer(pid, mine):
-    """3.9.9 (Sam's pick B): the card's question about a plan's exam,
+    """3.9.9: the card's question about a plan's exam,
     answered. Make it mine sets my exam to it (Settings' own setexam: the
     one before is kept as my last, as ever) and remembers which plan it came
     from, so a move asks again; Not now only remembers it was asked. Either
