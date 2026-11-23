@@ -8,6 +8,7 @@ from .. import ahead_flow
 from .. import app
 from .. import cards as crew_cards
 from .. import due_flow
+from .. import keys
 from .. import plan_flow
 from .. import rooms
 from .. import together
@@ -75,6 +76,7 @@ if hasattr(gui_hooks, "reviewer_will_init_answer_buttons"):
     gui_hooks.reviewer_will_init_answer_buttons.append(two_buttons.will_init_buttons)  # 3.9.1: Again and Good
 gui_hooks.state_did_change.append(rooms.on_state)
 gui_hooks.state_did_change.append(due_flow.on_state)  # 3.8.0: Study today's walk
+gui_hooks.state_will_change.append(lambda new, old: keys.typing(False))  # 3.10.3: a screen left mid-typing gives Anki its keys back
 gui_hooks.state_shortcuts_will_change.append(due_flow.walk_keys)  # and Escape stops it
 if hasattr(gui_hooks, "top_toolbar_did_redraw"):  # Anki 2.1.54+
     gui_hooks.top_toolbar_did_redraw.append(rooms.on_toolbar)

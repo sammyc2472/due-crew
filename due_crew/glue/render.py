@@ -13,6 +13,7 @@ from .. import due_flow
 from .. import errs
 from .. import errs_flow
 from .. import gamenight_flow
+from .. import keys
 from .. import magic_flow
 from .. import onigiri
 from .. import plan_flow
@@ -97,6 +98,7 @@ def _on_render(deck_browser, content):
     _state["hook_drew"] = True  # 3.10.2: the page asked for the board (a dashboard in the Decks screen's place doesn't)
     app.on_decks_render()
     content.stats += board.key_js()  # 3.9.1: the page's own scripts add the board's key to what they send
+    content.stats += "<script>" + keys.WATCH_JS + "</script>"  # 3.10.3: says when a box of ours is typed in (Anki's letter keys wait)
     try:
         c = cfg()
         if _state.get("settings_tab"):
