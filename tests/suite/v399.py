@@ -1489,9 +1489,8 @@ def test_beside_a_dashboard_v3102():
 
 
 def test_the_fifteens_sound_v3103():
-    """3.10.3 (KV, 19 Nov 2026: "could we please get the white noise back? ... one button for a timer &
-    focusing noise"; SC: "an option on the drop down caret on Fifteen"): Fire and Brown noise, picked from
-    the arrow beside Fifteen?, played by the top bar's page while a session runs."""
+    """3.10.3: Fire and Brown noise, picked from the arrow beside Fifteen?, played by the top bar's page
+    while a session runs."""
     from due_crew import focus_sound as fs
     conf = json.load(open(os.path.join(REPO, "due_crew", "config.json")))
     check("off unless picked; this computer's; a pick that isn't one of ours is off",
@@ -1518,7 +1517,7 @@ def test_the_fifteens_sound_v3103():
 
 
 def test_typing_and_tools_menu_v3103():
-    """3.10.3 (Lorry, 23 Nov 2026, Anki 26.09 on a Mac): typing in a box of ours set off Anki's letter keys
+    """3.10.3 (reported on Anki 26.09, a Mac): typing in a box of ours set off Anki's letter keys
     (b: Browse), and Tools › Pip's closet opened it out of sight under a long deck list."""
     from due_crew import keys
 

@@ -4,11 +4,7 @@ Python-native plan work inside Anki: Your plans (the duecrew.com builder,
 in Anki) and New plan, in their own package (QBank QIDs was one too, till 3.9.7's Magic search took it in),
 `due_crew/planner/`. Built in labs (round three's mocks, "Resource tags
 and a Python-native plan window", the design-spec artifact), for everyone
-signed in since 3.9.3, and rebuilt in round five (Sam's picks on the
-"Simpler Plan Builder" page: one screen to build a plan, a date changed
-where it's shown, the plan's shape on one line, one way to start,
-changes waiting to be sent, a paste box, Plan · Insights · Settings for
-authors and followers, no Pip in the plan windows), then made plain and
+signed in since 3.9.3, and rebuilt in round five, then made plain and
 quick (no AI look; one way to each thing; keys, Find, Month's drag,
 Latest first). Nothing
 suggests what goes on a date (Sam's call, after the picks: plain rules
@@ -78,7 +74,7 @@ Plans, Make a plan, Plan the way there) goes through `flow.open_plans` /
   `later`…). `web.PlanWeb` is the thin Qt shell: a dialog, Anki's web
   view and its bridge (`set_bridge_command`: only this window's page
   reaches it, never a card's script), the clipboard.
-- **Python owns the state; the page draws it.** `webface.view()` is the
+- **Python owns the state; the page draws it.** `webface.view` is the
   whole view as JSON (`webmodel`'s pure builders: the head, the Plan
   tab's weeks and strips, a set's, quiz's or review day's panel, the
   deck beside it; `webtabs` for Insights and Settings; `webnew` for New
@@ -89,9 +85,7 @@ Plans, Make a plan, Plan the way there) goes through `flow.open_plans` /
   month shown) stays in the page. Questions are sheets in the page (a
   yes resends with `sure`); a few heavier dialogs open as Qt over it
   (the text, History, Add a search, Spread, review days).
-- **The Plan tab's bar** (3.9.6, Sam: "the earliest first / today /
-  expand all / those filters ... are confusing in with the other
-  stuff") says three things, left to right: how you look (List · Week ·
+- **The Plan tab's bar** says three things, left to right: how you look (List · Week ·
   Month), what to show (Find; **N need a look**, amber, only when
   something does: it shows just those, again for all), what to do
   (**Add**, the one filled button). Getting around lives in the view it
@@ -163,7 +157,7 @@ against a stub API.
 
 ## Your plans
 
-Round five (Sam's picks on the "Simpler Plan Builder" page, all A): one
+Round five: one
 window, my plans picked on top (the ones I write first, then the ones I
 follow), **Undo** (a button with its menu) and **New plan…** beside it.
 Three tabs whoever I am: **Plan · Insights · Settings** (an author's
@@ -272,9 +266,7 @@ row): ↑ ↓ the date before or after, Alt+← → a day earlier or later, Ente
 or F2 its name (a double-click too), Delete takes it off (asked first).
 A box keeps its own keys (Ctrl+Z in a box undoes the typing).
 
-**No AI look, and one way to each thing** (Sam, after the site mock: "a
-few of our UI elements are AI hallmarks; we are going for extreme
-functionality"): no accent stripe on the picked row or today, no tinted
+**No AI look, and one way to each thing**: no accent stripe on the picked row or today, no tinted
 banners (the shape, today, behind, the deck's target, the send bar and
 the code are plain lines), no chips (a date's sources are a line in the
 list and a list in the panel), no ◆, no "+ A …" links, no capitals for
@@ -303,8 +295,7 @@ kept. Followers keep every card that opened; a change never shuts one.
 ### Insights (authors and followers)
 
 `insights_tab.py`, its numbers `insights.py`'s (pure), between Plan and
-Settings (Sam, before the click-test: "an insights tab on workload /
-content / amount of the deck relative to the whole"). Worked out when
+Settings. Worked out when
 it's looked at (PlanWindow._tab_changed), not at every change; never
 sent; a follower's on my dates.
 
@@ -321,9 +312,7 @@ sent; a follower's on my dates.
 - **How much of the deck**: "1,284 of Big Step 1's 12,480 cards (10%)"
   and the deck as one bar, the plan's part filled (a follower's: what
   I've seen, then what's to go, a key beside it). Then the deck split as
-  the board's topic map splits it (Sam: "the same organization problem
-  we had for the bento"; a first cut by the tags' # and ^ parts showed
-  odd resources): `team.subjects_by` over every card in the deck,
+  the board's topic map splits it: `team.subjects_by` over every card in the deck,
   suspended too (the plan is of the whole deck), the cut that tells them
   apart best, a topic over a rating, a bank's ids and Anki's own tags
   never, its subdecks a way too (`insights.split`, team_flow._map's
@@ -343,9 +332,7 @@ sent; a follower's on my dates.
 ### Settings (authors)
 
 `settings_tab.py`'s `SettingsTab`, the builder's Settings, everything
-about the plan as a whole in one place (Sam, round five: "rename sharing
-to settings and move as much of the overall settings stuff there as we
-can"):
+about the plan as a whole in one place:
 
 - **The plan**: Name and One line; its dates and pace (`shape.py`'s
   `Shape`, rows of the form where the Change… window was): Starts (every
@@ -443,7 +430,7 @@ ticked tag comes with it. Read from the deck index on the main thread.
 
 ## QBank QIDs
 
-3.9.7 (Magic search's round 2, Sam: "this is replacing QBank QID search"):
+3.9.7 (Magic search's round 2, ):
 its window, chip and menu item went; Magic search reads the paste
 (`magic_flow.Search.qids_view`, on `qids.py`, which stays) and says all of
 what follows, Their topics and the bank's pick among it. A paste with words
@@ -451,8 +438,7 @@ around its numbers is QIDs when two or more of them, and a third, are the
 deck's questions. What follows is how it worked as its own window.
 
 (Missed questions until 3.9.3; Question IDs in labs.) After a practice
-block: paste its QIDs, missed or not (3.9.4, Sam: "Just paste QBank QIDs
-here"), any way the bank copies them. Study now is the window's button in
+block: paste its QIDs, missed or not, any way the bank copies them. Study now is the window's button in
 the accent. Every run of 3 to 9 digits is a number; only the ones the deck has
 as a question count (a tag whose last part is that number, under a bank's
 #part), so a date or a score pasted with them is said as "isn't a question
@@ -485,9 +471,7 @@ common: what's not sticking is Insights' to say, from my answers).
   rescheduling by my answers (Again is a lapse, Good an early review),
   each card going back to its own deck once done, and the morning clears
   the deck once it's empty. One undo step (`actions.study`), then Anki's
-  Study screen on it. Nothing moves a due date (3.9.3, Sam: Bring back's
-  "over the next 3 days" went; a card I know comes back when Study now
-  asks it).
+  Study screen on it. Nothing moves a due date.
 - The deck list is top decks (question tags are deck-wide), starting on
   the one my plan runs on; a bank I pick holds for this paste and deck
   only.
@@ -615,7 +599,7 @@ under the plan like any change (`draft.py`). `ai.py`, pure.
 - **An answer** (`ai.answer_ops`): only ops the registry knows, with
   only their own fields, each checked and tried in order on a copy, as
   the ones before it leave the plan; 200 at most (`ops.OPS_MAX`). What
-  won't go on is said, never applied. `ai.vocabulary()` is every op, its
+  won't go on is said, never applied. `ai.vocabulary` is every op, its
   fields and an example (the suite checks it against `ops.REG`); Split
   by its tags is Your plans' own, never offered to an AI.
 - **Runners** (`ai.runner_for`): Off; Claude's stand-in (labs; its rules,

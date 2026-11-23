@@ -123,8 +123,8 @@ SHOWN = ("Settings…", "Pip’s closet…", "Scrapbook…")  # the Tools entrie
 
 
 def _then_show(fn):
-    """3.10.3 (Lorry, 23 Nov: Tools › Pip's closet "doesn't really navigate there", under a deck list longer
-    than the window): what opens in the board's place from the Tools menu is brought into view."""
+    """3.10.3: what opens in the board's place from the Tools menu is brought into view (under a deck list
+    longer than the window it opened out of sight)."""
     def go():
         fn()
         from aqt.qt import QTimer
