@@ -1551,3 +1551,43 @@ def test_typing_and_tools_menu_v3103():
     check("Tools › Settings, Pip's closet and Scrapbook bring what they open into view",
           'SHOWN = ("Settings…", "Pip’s closet…", "Scrapbook…")' in src and "if label in SHOWN:\n            fn = _then_show(fn)" in src
           and "app.board_eval(onigiri.SHOW_JS)" in src)
+
+
+def test_streak_across_a_clock_change_v3104():
+    """3.10.4 (feedback, 25 Nov 2026: a streak of over 300 days read as 170-something): past days were cut
+    in 86400-second blocks back from today's rollover, so every day on the far side of a clock change had
+    bounds an hour off; a day studied only in that hour read as a day missed, and the streak ended there
+    the next time it was counted from the log."""
+    import sqlite3
+    import time as _time
+    from due_crew.stats.streak import StreakTracker
+    from due_crew.stats.queries import StatsQueries
+    import fakes
+    was = os.environ.get("TZ")
+    os.environ["TZ"] = "America/New_York"
+    _time.tzset()
+    try:
+        today = datetime.date(2026, 11, 25)
+        early = datetime.date(2026, 6, 10)  # in summer time; the clocks went back on 1 Nov
+        conn = sqlite3.connect(":memory:")
+        fakes.make_collection(conn)
+        for i in range(0, 301):
+            d = today - datetime.timedelta(days=i)
+            at = datetime.datetime.combine(d, datetime.time(4, 30) if d == early else datetime.time(12))
+            fakes.add_review(conn, int(_time.mktime(at.timetuple())) * 1000)
+        cutoff = int(_time.mktime(datetime.datetime(2026, 11, 26, 4, 0).timetuple()))
+        q = StatsQueries(fakes.FakeCol(conn, cutoff))
+        ago = (today - early).days
+        check("a day studied only in the hour after rollover, before a clock change, is still that day",
+              q.reviews_for_day(ago) == 1 and q.reviews_for_day(ago + 1) == 1 and ago in q.studied_days_ago(None)
+              and q.studied_days_ago(64) == set(range(0, 64)))
+        check("so the streak runs through it", StreakTracker(q, tempfile.mkdtemp()).current() == 301,
+              StreakTracker(q, tempfile.mkdtemp()).current())
+        check("today's own bounds are Anki's, to the second", q.day_bounds_ms(0)[1] == cutoff * 1000
+              and q.day_bounds_ms(0)[0] == (cutoff - 86400) * 1000)
+    finally:
+        if was is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = was
+        _time.tzset()
