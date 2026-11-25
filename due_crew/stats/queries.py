@@ -4,6 +4,7 @@ Set Due Date write ease-0 revlog rows and must not inflate reviews or
 streaks."""
 
 import datetime
+import time
 
 
 _FRESH = {"key": None, "days": 0, "rows": {}}  # new_cards_by_day's widest window lately read
@@ -41,9 +42,16 @@ class StatsQueries:
     def _cutoff_s(self):
         return int(self.col.sched.day_cutoff)
 
+    def _day_end_s(self, days_ago=0):
+        """When the Anki day `days_ago` back ended, by the clock on the wall that day: the cutoff's own
+        hour on that date. 3.10.4: counted back in dates, not 86400s, so the days on the far side of a
+        clock change keep the bounds they had (they were an hour off, and a day studied only in that hour
+        read as a day missed: a long streak cut short weeks after the clocks changed)."""
+        cut = datetime.datetime.fromtimestamp(self._cutoff_s()) - datetime.timedelta(days=days_ago)
+        return int(time.mktime(cut.timetuple()))
+
     def day_bounds_ms(self, days_ago=0):
-        end = (self._cutoff_s() - days_ago * 86400) * 1000
-        return end - 86400000, end
+        return self._day_end_s(days_ago + 1) * 1000, self._day_end_s(days_ago) * 1000
 
     def day_label(self, days_ago=0):
         """The Anki day `days_ago` before today, as a date: the day before
@@ -90,13 +98,21 @@ class StatsQueries:
         """Set of days-ago ints (0 = today) that have at least one answer.
         One query; `max_days` bounds it to an index range scan so per-sync
         callers stay cheap on huge collections."""
-        cutoff = self._cutoff_s()
-        start_ms = 0 if max_days is None else (cutoff - max_days * 86400) * 1000
+        cut = datetime.datetime.fromtimestamp(self._cutoff_s())
+        today = (cut - datetime.timedelta(days=1)).date()
+        start_ms = 0 if max_days is None else self._day_end_s(max_days) * 1000
+        # 3.10.4: each answer's own Anki day, by that day's clock (SQLite's localtime knows the clock changes)
         rows = self.col.db.list(
-            "SELECT DISTINCT CAST((? - id / 1000) / 86400 AS INTEGER) "
+            "SELECT DISTINCT date(id / 1000 - ?, 'unixepoch', 'localtime') "
             "FROM revlog WHERE ease > 0 AND id >= ? AND id < ?",
-            cutoff - 1, start_ms, cutoff * 1000)
-        return set(rows or [])
+            cut.hour * 3600 + cut.minute * 60 + cut.second, start_ms, self._cutoff_s() * 1000)
+        out = set()
+        for lb in rows or []:
+            try:
+                out.add((today - datetime.date.fromisoformat(str(lb))).days)
+            except (TypeError, ValueError):
+                continue
+        return out
 
     def daily_totals(self, days, skip=0):
         """{day_label: (answers, time_ms, correct, graded)} for the last
